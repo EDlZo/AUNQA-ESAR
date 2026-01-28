@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ทดสอบการดาวน์โหลดไฟล์</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .file-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .download-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .download-btn:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>ทดสอบการดาวน์โหลดไฟล์</h1>
+    
+    <div id="fileList">
+        <h2>ไฟล์ในโฟลเดอร์ uploads:</h2>
+        <div id="files"></div>
+    </div>
+
+    <div id="status"></div>
+
+    <script>
+        // ไฟล์ที่รู้จักในโฟลเดอร์ uploads
+        const knownFiles = [
+            '19b163d328d6d6a6328258e082a00f76',
+            '0b010cce8cb1e94bf499fb1e339843b3',
+            '8b6589c594ed50dd7939b965a0f1685b'
+        ];
+
+        function showStatus(message, type = 'success') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+
+        function downloadFile(filename) {
+            showStatus('กำลังดาวน์โหลด...', 'success');
+            
+            fetch(`http://localhost:3001/api/download/${filename}`)
+                .then(response => {
+                    if (response.ok) {
+                        return response.blob();
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                    showStatus(`ดาวน์โหลดไฟล์ ${filename} สำเร็จ!`, 'success');
+                })
+                .catch(error => {
+                    console.error('Download error:', error);
+                    showStatus(`ไม่สามารถดาวน์โหลดไฟล์ได้: ${error.message}`, 'error');
+                });
+        }
+
+        function checkFileExists(filename) {
+            return fetch(`http://localhost:3001/api/check-file/${filename}`)
+                .then(response => response.json())
+                .then(data => data.exists)
+                .catch(() => false);
+        }
+
+        async function loadFiles() {
+            const filesDiv = document.getElementById('files');
+            
+            for (const filename of knownFiles) {
+                const exists = await checkFileExists(filename);
+                const fileDiv = document.createElement('div');
+                fileDiv.className = 'file-item';
+                
+                fileDiv.innerHTML = `
+                    <strong>ไฟล์:</strong> ${filename}<br>
+                    <strong>สถานะ:</strong> ${exists ? '✅ มีอยู่' : '❌ ไม่พบ'}<br>
+                    ${exists ? `<button class="download-btn" onclick="downloadFile('${filename}')">ดาวน์โหลด</button>` : ''}
+                `;
+                
+                filesDiv.appendChild(fileDiv);
+            }
+        }
+
+        // โหลดไฟล์เมื่อหน้าเว็บโหลดเสร็จ
+        window.onload = loadFiles;
+    </script>
+</body>
+</html> 
