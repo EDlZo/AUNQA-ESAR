@@ -252,10 +252,12 @@ export default function App() {
         rolePermissions={rolePermissions}
       />
 
-      <HeroSection 
-        onGoResults={() => setActiveTab('results')}
-        onGoProcess={() => setActiveTab('process')}
-      />
+      {activeTab === 'about' && (
+        <HeroSection 
+          onGoResults={() => setActiveTab('results')}
+          onGoProcess={() => setActiveTab('process')}
+        />
+      )}
 
       <main className="container mx-auto px-4 py-8">
         <TabContent />
