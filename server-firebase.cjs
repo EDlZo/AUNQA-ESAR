@@ -5,19 +5,35 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Load environment variables
+require('dotenv').config();
+
 // Firebase Admin SDK
 const admin = require('firebase-admin');
 
-// Initialize Firebase Admin with service account key
-const serviceAccount = require('./firebase-service-account.json');
-
+// Initialize Firebase Admin with environment variables
 if (!admin.apps.length) {
   try {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      storageBucket: 'aunqa-esar.appspot.com'
-    });
-    console.log('✅ Firebase Admin initialized successfully');
+    // Try to use environment variables first
+    if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+        }),
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET
+      });
+      console.log('✅ Firebase Admin initialized with environment variables');
+    } else {
+      // Fallback to service account file
+      const serviceAccount = require('./firebase-service-account.json');
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'aunqa-esar.appspot.com'
+      });
+      console.log('✅ Firebase Admin initialized with service account file');
+    }
   } catch (error) {
     console.error('❌ Firebase Admin initialization failed:', error);
   }
