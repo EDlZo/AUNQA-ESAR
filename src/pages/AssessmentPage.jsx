@@ -1,9 +1,10 @@
 // src/pages/AssessmentPage.jsx
 import React, { useState, useEffect } from 'react';
+import { GraduationCap, Target, ClipboardList } from 'lucide-react';
 import ProgramSelection from '../components/ProgramSelection';
 import AssessmentTable from '../components/AssessmentTable';
 
-export default function AssessmentPage() {
+export default function AssessmentPage({ currentUser, setActiveTab, assessmentMode = 'evaluation' }) {
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [showComponents, setShowComponents] = useState(false);
   const [components, setComponents] = useState([]);
@@ -80,7 +81,7 @@ export default function AssessmentPage() {
     setComponents([]);
     setIndicators({});
     setShowComponents(true); // โชว์ส่วนองค์ประกอบทันที (อ่านอย่างเดียว)
-    try { localStorage.setItem('selectedProgramContext', JSON.stringify(program)); } catch {}
+    try { localStorage.setItem('selectedProgramContext', JSON.stringify(program)); } catch { }
   };
 
   const handleComponentSelect = (component) => {
@@ -88,26 +89,38 @@ export default function AssessmentPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">ผลการดำเนินการ</h1>
-        <p className="text-gray-600">บันทึกผลการดำเนินงานตามตัวบ่งชี้คุณภาพการศึกษา</p>
-      </div>
 
-  {/* การเลือกโปรแกรม - แสดงเฉพาะเมื่อยังไม่เริ่มประเมิน */}
-  {!selectedProgram && (
-    <div className="mb-8">
-      <ProgramSelection 
-        mode="assess"
-        storageKey="assessmentProgramSelection"
-        buttonText="ผลการดำเนินการ"
-        onComplete={handleProgramSelect} 
-      />
-    </div>
-  )}
+    <div className="container mx-auto px-4">
+      {/* การเลือกโปรแกรม - แสดงเฉพาะเมื่อยังไม่เริ่มประเมิน */}
+      {!selectedProgram && (
+        <div className="max-w-4xl mx-auto py-12">
+          <div className="text-center mb-8">
+            {assessmentMode === 'criteria' ? (
+              <Target className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+            ) : (
+              <ClipboardList className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+            )}
+            <h1 className="text-3xl font-bold text-gray-900">
+              {assessmentMode === 'criteria' ? 'กำหนดค่าเป้าหมาย' : 'ผลการดำเนินการ'}
+            </h1>
+            <p className="text-gray-600 mt-2">
+              {assessmentMode === 'criteria'
+                ? 'กรุณาเลือกสาขาที่ต้องการกำหนดค่าเป้าหมาย'
+                : 'กรุณาเลือกสาขาที่ต้องการบันทึกผลการดำเนินงาน'}
+            </p>
+          </div>
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+            <ProgramSelection
+              mode="assess"
+              storageKey="assessmentProgramSelection"
+              buttonText="ผลการดำเนินการ"
+              onComplete={handleProgramSelect}
+            />
+          </div>
+        </div>
+      )}
 
       {/* ตัดปุ่มเริ่มประเมินออก และแสดงรายการองค์ประกอบอัตโนมัติแบบอ่านอย่างเดียว */}
-
       {selectedProgram && showComponents && (
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
@@ -121,7 +134,7 @@ export default function AssessmentPage() {
               เปลี่ยนสาขา
             </button>
           </div>
-          
+
           {loading ? (
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -157,7 +170,7 @@ export default function AssessmentPage() {
                               </div>
                             </td>
                             <td className="px-4 py-4 text-center">
-                              <button 
+                              <button
                                 className="inline-flex items-center px-2 py-1 border border-gray-300 text-xs font-medium rounded text-gray-600 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-400 transition-colors"
                                 onClick={() => handleComponentSelect(component)}
                               >
@@ -181,7 +194,7 @@ export default function AssessmentPage() {
                   selectedComponent={selectedComponent}
                   indicators={indicators}
                   selectedProgram={selectedProgram}
-                  mode="evaluation" // เพิ่ม mode เพื่อแยกโหมดการประเมิน
+                  mode={assessmentMode}
                   onBack={() => setSelectedComponent(null)}
                 />
               )}
@@ -190,5 +203,6 @@ export default function AssessmentPage() {
         </div>
       )}
     </div>
+
   );
 }

@@ -1,9 +1,9 @@
-// src/pages/CommitteeEvaluationPage.jsx
 import React, { useState, useEffect } from 'react';
+import { GraduationCap, ClipboardCheck } from 'lucide-react';
 import ProgramSelection from '../components/ProgramSelection.jsx';
 // import CommitteeEvaluationModal from '../components/CommitteeEvaluationModal.jsx';
 
-export default function CommitteeEvaluationPage() {
+export default function CommitteeEvaluationPage({ currentUser }) {
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [components, setComponents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -69,7 +69,7 @@ export default function CommitteeEvaluationPage() {
 
   const fetchComponents = async () => {
     if (!selectedProgram) return;
-    
+
     setLoading(true);
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
@@ -88,7 +88,7 @@ export default function CommitteeEvaluationPage() {
 
   const fetchAllIndicators = async () => {
     if (!selectedProgram) return;
-    
+
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram.majorName || selectedProgram.major_name;
@@ -104,18 +104,18 @@ export default function CommitteeEvaluationPage() {
 
   const fetchEvaluationData = async () => {
     if (!selectedProgram) return;
-    
+
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram.majorName || selectedProgram.major_name;
-      
+
       // โหลดข้อมูล evaluations_actual
       const actualResponse = await fetch(`http://localhost:3001/api/evaluations-actual/history?session_id=${sessionId}&major_name=${major}`);
       if (actualResponse.ok) {
         const actualData = await actualResponse.json();
         setRows(Array.isArray(actualData) ? actualData : []);
       }
-      
+
       // โหลดข้อมูลเกณฑ์ (target, score)
       const criteriaResponse = await fetch(`http://localhost:3001/api/evaluations/history?session_id=${sessionId}&major_name=${major}`);
       if (criteriaResponse.ok) {
@@ -126,17 +126,17 @@ export default function CommitteeEvaluationPage() {
         });
         setCriteriaMap(map);
       }
-      
+
       // โหลดข้อมูลกรรมการประเมิน
       const committeeResponse = await fetch(`http://localhost:3001/api/committee-evaluations?session_id=${sessionId}&major_name=${major}`);
       if (committeeResponse.ok) {
         const committeeData = await committeeResponse.json();
         const map = {};
         (Array.isArray(committeeData) ? committeeData : []).forEach(r => {
-          map[String(r.indicator_id)] = { 
-            committee_score: r.committee_score || '', 
-            strengths: r.strengths || '', 
-            improvements: r.improvements || '' 
+          map[String(r.indicator_id)] = {
+            committee_score: r.committee_score || '',
+            strengths: r.strengths || '',
+            improvements: r.improvements || ''
           };
         });
         setCommitteeMap(map);
@@ -225,7 +225,7 @@ export default function CommitteeEvaluationPage() {
     const ind = evaluatingIndicator;
     const latest = rows
       .filter(r => String(r.indicator_id) === String(ind.id))
-      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
     const crit = criteriaMap[String(ind.id)] || {};
     const committee = committeeMap[String(ind.id)] || {};
 
@@ -237,13 +237,13 @@ export default function CommitteeEvaluationPage() {
         try {
           const files = JSON.parse(latest.evidence_files_json);
           if (Array.isArray(files)) evidenceFiles.push(...files);
-        } catch {}
+        } catch { }
       }
       if (latest?.evidence_file && !evidenceFiles.includes(latest.evidence_file)) {
         evidenceFiles.push(latest.evidence_file);
       }
       if (latest?.evidence_meta_json) {
-        try { evidenceMeta = JSON.parse(latest.evidence_meta_json) || {}; } catch {}
+        try { evidenceMeta = JSON.parse(latest.evidence_meta_json) || {}; } catch { }
       }
       if (evidenceFiles.length === 0) {
         return (
@@ -295,7 +295,7 @@ export default function CommitteeEvaluationPage() {
               <div className="text-sm text-gray-500">รายละเอียด</div>
               <div className="font-semibold">{ind.sequence} : {ind.indicator_name}</div>
             </div>
-            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={()=>{ setEvaluatingIndicator(null); }}>กลับ</button>
+            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={() => { setEvaluatingIndicator(null); }}>กลับ</button>
           </div>
           <div className="p-6 space-y-6">
             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-900">
@@ -335,24 +335,44 @@ export default function CommitteeEvaluationPage() {
               </div>
             </div>
 
-            <div className="border-2 border-orange-300 rounded p-3 space-y-4">
-              <div>
-                <div className="font-medium">คะแนนประเมิน (กรรมการ)</div>
-                <input type="number" inputMode="decimal" value={editorScore} onChange={e=>setEditorScore(e.target.value)} className="mt-1 w-full border rounded px-3 py-2" placeholder="กรอกคะแนนกรรมการ" />
+            {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
+              <div className="border-2 border-blue-300 rounded p-3 space-y-4">
+                <div>
+                  <div className="font-medium">คะแนนประเมิน (กรรมการ)</div>
+                  <input type="number" inputMode="decimal" value={editorScore} onChange={e => setEditorScore(e.target.value)} className="mt-1 w-full border rounded px-3 py-2" placeholder="กรอกคะแนนกรรมการ" />
+                </div>
+                <div>
+                  <div className="font-medium">Strengths (จุดแข็ง)</div>
+                  <textarea value={editorStrengths} onChange={e => setEditorStrengths(e.target.value)} className="mt-1 w-full border rounded px-3 py-2" rows={4} placeholder="พิมพ์จุดแข็ง" />
+                </div>
+                <div>
+                  <div className="font-medium">Areas for Improvement (เรื่องที่พัฒนา/ปรับปรุงได้)</div>
+                  <textarea value={editorImprovements} onChange={e => setEditorImprovements(e.target.value)} className="mt-1 w-full border rounded px-3 py-2" rows={4} placeholder="พิมพ์ข้อที่ควรพัฒนา" />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={() => setEvaluatingIndicator(null)}>ยกเลิก</button>
+                  <button className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700" onClick={handleSaveCommittee}>บันทึก</button>
+                </div>
               </div>
-              <div>
-                <div className="font-medium">Strengths (จุดแข็ง)</div>
-                <textarea value={editorStrengths} onChange={e=>setEditorStrengths(e.target.value)} className="mt-1 w-full border rounded px-3 py-2" rows={4} placeholder="พิมพ์จุดแข็ง" />
+            ) : (
+              <div className="border-2 border-gray-300 rounded p-3 space-y-4 bg-gray-50">
+                <div>
+                  <div className="font-medium">คะแนนประเมิน (กรรมการ)</div>
+                  <div className="mt-1 w-full bg-white border rounded px-3 py-2 text-gray-700">{committee.committee_score || '-'}</div>
+                </div>
+                <div>
+                  <div className="font-medium">Strengths (จุดแข็ง)</div>
+                  <div className="mt-1 w-full bg-white border rounded px-3 py-2 text-gray-700 min-h-[60px] whitespace-pre-wrap">{committee.strengths || '-'}</div>
+                </div>
+                <div>
+                  <div className="font-medium">Areas for Improvement (เรื่องที่พัฒนา/ปรับปรุงได้)</div>
+                  <div className="mt-1 w-full bg-white border rounded px-3 py-2 text-gray-700 min-h-[60px] whitespace-pre-wrap">{committee.improvements || '-'}</div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded" onClick={() => setEvaluatingIndicator(null)}>ปิด</button>
+                </div>
               </div>
-              <div>
-                <div className="font-medium">Areas for Improvement (เรื่องที่พัฒนา/ปรับปรุงได้)</div>
-                <textarea value={editorImprovements} onChange={e=>setEditorImprovements(e.target.value)} className="mt-1 w-full border rounded px-3 py-2" rows={4} placeholder="พิมพ์ข้อที่ควรพัฒนา" />
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={()=> setEvaluatingIndicator(null)}>ยกเลิก</button>
-                <button className="px-4 py-1.5 text-sm bg-orange-600 text-white rounded hover:bg-orange-700" onClick={handleSaveCommittee}>บันทึก</button>
-              </div>
-            </div>
+            )}
 
             {/* ส่วนแสดงหลักฐานอ้างอิง */}
             <div className="border-2 border-purple-300 rounded p-3">
@@ -369,17 +389,20 @@ export default function CommitteeEvaluationPage() {
   // หากยังไม่ได้เลือกสาขา ให้แสดงหน้าเลือกสาขา
   if (!selectedProgram) {
     return (
-      <div className="max-w-6xl mx-auto py-8">
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">สรุปผลการประเมิน</h2>
-          <p className="text-gray-600 mt-1">กรุณาเลือกสาขาที่ต้องการประเมิน</p>
+      <div className="max-w-4xl mx-auto py-12">
+        <div className="text-center mb-8">
+          <ClipboardCheck className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-gray-900">สรุปผลการประเมิน</h1>
+          <p className="text-gray-600 mt-2">กรุณาเลือกสาขาที่ต้องการประเมิน</p>
         </div>
-        <ProgramSelection
-          onComplete={(s) => { 
-            setSelectedProgram(s); 
-            try { localStorage.setItem('selectedProgramContext', JSON.stringify(s)); } catch {}
-          }}
-        />
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+          <ProgramSelection
+            onComplete={(s) => {
+              setSelectedProgram(s);
+              try { localStorage.setItem('selectedProgramContext', JSON.stringify(s)); } catch { }
+            }}
+          />
+        </div>
       </div>
     );
   }
@@ -406,13 +429,12 @@ export default function CommitteeEvaluationPage() {
 
       {/* Flash Message */}
       {flash.message && (
-        <div className={`mb-4 rounded-md px-4 py-2 border ${
-          flash.type === 'success' 
-            ? 'bg-green-50 border-green-200 text-green-800' 
-            : 'bg-red-50 border-red-200 text-red-800'
-        }`}>
+        <div className={`mb-4 rounded-md px-4 py-2 border ${flash.type === 'success'
+          ? 'bg-green-50 border-green-200 text-green-800'
+          : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
           {flash.message}
-          <button 
+          <button
             className={`${flash.type === 'success' ? 'text-green-700' : 'text-red-700'} float-right`}
             onClick={() => setFlash({ message: '', type: 'success' })}
           >
@@ -423,41 +445,41 @@ export default function CommitteeEvaluationPage() {
 
       {/* ตารางองค์ประกอบหลัก */}
       <div className="overflow-x-auto bg-white rounded-lg shadow mb-8">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">องค์ประกอบที่</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ชื่อองค์ประกอบ</th>
-                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">แสดง</th>
-                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">จำนวน</th>
-                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">ตัวบ่งชี้</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {loading ? (
-                <tr><td colSpan={5} className="text-center py-6">กำลังโหลด...</td></tr>
-              ) : components.length === 0 ? (
-                <tr><td colSpan={5} className="text-center py-6 text-gray-400">ยังไม่มีองค์ประกอบ</td></tr>
-              ) : (
-                components.map((c) => (
-                  <tr key={c.id}>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-7 h-7 bg-red-500 text-white rounded-full text-sm font-bold">{c.component_id || '-'}</span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">{c.quality_name}</td>
-                    <td className="px-4 py-3 text-center">
-                      <button className="inline-flex items-center px-3 py-1.5 text-xs rounded bg-blue-100 text-black" onClick={() => handleViewIndicators(c)}>แสดง</button>
-                    </td>
-                    <td className="px-4 py-3 text-center">{componentIndicatorsCount[c.id] ?? '-'}</td>
-                    <td className="px-4 py-3 text-center">
-                      <button className="inline-flex items-center px-3 py-1.5 text-xs rounded border" onClick={() => handleViewIndicators(c)}>ตัวบ่งชี้</button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">องค์ประกอบที่</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ชื่อองค์ประกอบ</th>
+              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">แสดง</th>
+              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">จำนวน</th>
+              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">ตัวบ่งชี้</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {loading ? (
+              <tr><td colSpan={5} className="text-center py-6">กำลังโหลด...</td></tr>
+            ) : components.length === 0 ? (
+              <tr><td colSpan={5} className="text-center py-6 text-gray-400">ยังไม่มีองค์ประกอบ</td></tr>
+            ) : (
+              components.map((c) => (
+                <tr key={c.id}>
+                  <td className="px-4 py-3 text-center">
+                    <span className="inline-flex items-center justify-center w-7 h-7 bg-red-500 text-white rounded-full text-sm font-bold">{c.component_id || '-'}</span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-900">{c.quality_name}</td>
+                  <td className="px-4 py-3 text-center">
+                    <button className="inline-flex items-center px-3 py-1.5 text-xs rounded bg-blue-100 text-black" onClick={() => handleViewIndicators(c)}>แสดง</button>
+                  </td>
+                  <td className="px-4 py-3 text-center">{componentIndicatorsCount[c.id] ?? '-'}</td>
+                  <td className="px-4 py-3 text-center">
+                    <button className="inline-flex items-center px-3 py-1.5 text-xs rounded border" onClick={() => handleViewIndicators(c)}>ตัวบ่งชี้</button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
       {/* รายการตัวบ่งชี้ขององค์ประกอบที่เลือก */}
       {viewComponent && (
@@ -467,7 +489,7 @@ export default function CommitteeEvaluationPage() {
               <div className="text-sm text-gray-500">ตัวบ่งชี้ขององค์ประกอบ</div>
               <div className="font-semibold">{viewComponent.quality_name}</div>
             </div>
-            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={()=>{setViewComponent(null); setViewIndicators([]);}}>ปิด</button>
+            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={() => { setViewComponent(null); setViewIndicators([]); }}>ปิด</button>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -493,52 +515,61 @@ export default function CommitteeEvaluationPage() {
                     // แสดงเฉพาะตัวบ่งชี้ที่มีผลการดำเนินการแล้ว (อิงจากหน้าผลการดำเนินการ)
                     .filter((ind) => rows.some(r => String(r.indicator_id) === String(ind.id)))
                     .map((ind) => (
-                    <tr key={ind.id}>
-                      <td className="px-4 py-3 text-center text-sm">
-                        {String(ind.sequence).includes('.') ? (
-                          <span>{ind.sequence}</span>
-                        ) : (
-                          <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-sm font-bold">
-                            {ind.sequence}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-left">
-                        <div className={(String(ind.sequence).includes('.') ? 'font-normal' : 'font-bold') + ' text-gray-900 text-left'}>
-                          {ind.indicator_name}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {criteriaMap[String(ind.id)]?.target_value || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {criteriaMap[String(ind.id)]?.score || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {(() => {
-                          const actual = rows.find(r => String(r.indicator_id) === String(ind.id));
-                          return actual ? `${actual.operation_score ?? '-'}` : '-';
-                        })()}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {(() => {
-                          const actual = rows.find(r => String(r.indicator_id) === String(ind.id));
-                          return actual ? `${actual.goal_achievement ?? '-'}` : '-';
-                        })()}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {committeeMap[String(ind.id)]?.committee_score || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => setEvaluatingIndicator(ind)}
-                          className="inline-flex items-center px-3 py-1.5 text-xs rounded bg-orange-600 text-white hover:bg-orange-700"
-                        >
-                          ประเมินผล
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                      <tr key={ind.id}>
+                        <td className="px-4 py-3 text-center text-sm">
+                          {String(ind.sequence).includes('.') ? (
+                            <span>{ind.sequence}</span>
+                          ) : (
+                            <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-sm font-bold">
+                              {ind.sequence}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-left">
+                          <div className={(String(ind.sequence).includes('.') ? 'font-normal' : 'font-bold') + ' text-gray-900 text-left'}>
+                            {ind.indicator_name}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {criteriaMap[String(ind.id)]?.target_value || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {criteriaMap[String(ind.id)]?.score || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {(() => {
+                            const actual = rows.find(r => String(r.indicator_id) === String(ind.id));
+                            return actual ? `${actual.operation_score ?? '-'}` : '-';
+                          })()}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {(() => {
+                            const actual = rows.find(r => String(r.indicator_id) === String(ind.id));
+                            return actual ? `${actual.goal_achievement ?? '-'}` : '-';
+                          })()}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {committeeMap[String(ind.id)]?.committee_score || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
+                            <button
+                              onClick={() => setEvaluatingIndicator(ind)}
+                              className="inline-flex items-center px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+                            >
+                              ประเมินผล
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setEvaluatingIndicator(ind)}
+                              className="inline-flex items-center px-3 py-1.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            >
+                              ดูรายละเอียด
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))
                 )}
               </tbody>
             </table>

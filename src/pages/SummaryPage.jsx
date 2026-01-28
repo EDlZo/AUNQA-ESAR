@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { FileText, GraduationCap, BarChart3 } from 'lucide-react';
 import ProgramSelection from '../components/ProgramSelection';
 
 export default function SummaryPage({ currentUser }) {
@@ -48,18 +49,18 @@ export default function SummaryPage({ currentUser }) {
         });
         setCriteriaMap(map);
       })
-      .catch(()=> setCriteriaMap({}));
-    
+      .catch(() => setCriteriaMap({}));
+
     // ดึงข้อมูลคะแนนกรรมการ
     fetch(`http://localhost:3001/api/committee-evaluations?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
       .then(res => res.ok ? res.json() : [])
       .then(list => {
         const map = {};
         (Array.isArray(list) ? list : []).forEach(r => {
-          map[String(r.indicator_id)] = { 
-            committee_score: r.committee_score || '', 
-            strengths: r.strengths || '', 
-            improvements: r.improvements || '' 
+          map[String(r.indicator_id)] = {
+            committee_score: r.committee_score || '',
+            strengths: r.strengths || '',
+            improvements: r.improvements || ''
           };
         });
         setCommitteeMap(map);
@@ -83,7 +84,7 @@ export default function SummaryPage({ currentUser }) {
             const d = await res.json();
             map[id] = d;
           }
-        } catch {}
+        } catch { }
       }
       setIndicatorMap(map);
     })();
@@ -125,7 +126,7 @@ export default function SummaryPage({ currentUser }) {
     setDetailIndicator(indicator);
     // หา evaluation ล่าสุดของตัวบ่งชี้นี้จาก rows
     const list = rows.filter(r => String(r.indicator_id) === String(indicator.id))
-      .sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     setDetailEvaluation(list[0] || null);
   };
 
@@ -140,7 +141,7 @@ export default function SummaryPage({ currentUser }) {
               <div className="text-sm text-gray-500">รายละเอียด</div>
               <div className="font-semibold">{detailIndicator.sequence} : {detailIndicator.indicator_name}</div>
             </div>
-            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={()=>{setDetailIndicator(null); setDetailEvaluation(null);}}>กลับ</button>
+            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={() => { setDetailIndicator(null); setDetailEvaluation(null); }}>กลับ</button>
           </div>
           <div className="p-6 space-y-6">
             <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-900">
@@ -178,7 +179,7 @@ export default function SummaryPage({ currentUser }) {
             {(() => {
               const committee = committeeMap[String(detailIndicator.id)] || {};
               return (
-                <div className="border-2 border-orange-300 rounded p-3 space-y-4">
+                <div className="border-2 border-blue-300 rounded p-3 space-y-4">
                   <div>
                     <div className="font-medium">คะแนนประเมิน (กรรมการ)</div>
                     <div className="text-sm">{committee.committee_score ?? '-'}</div>
@@ -206,7 +207,7 @@ export default function SummaryPage({ currentUser }) {
                 </div>
               );
             })()}
-            
+
             {/* ส่วนแสดงหลักฐานอ้างอิง */}
             <div className="border-2 border-purple-300 rounded p-3">
               <div className="font-medium mb-3">รายการหลักฐานอ้างอิง</div>
@@ -214,14 +215,14 @@ export default function SummaryPage({ currentUser }) {
                 // ดึงข้อมูลหลักฐานจาก detailEvaluation
                 const evidenceFiles = [];
                 let evidenceMeta = {};
-                
+
                 if (detailEvaluation?.evidence_files_json) {
                   try {
                     const files = JSON.parse(detailEvaluation.evidence_files_json);
                     if (Array.isArray(files)) {
                       evidenceFiles.push(...files);
                     }
-                  } catch {}
+                  } catch { }
                 }
                 if (detailEvaluation?.evidence_file && !evidenceFiles.includes(detailEvaluation.evidence_file)) {
                   evidenceFiles.push(detailEvaluation.evidence_file);
@@ -231,7 +232,7 @@ export default function SummaryPage({ currentUser }) {
                 if (detailEvaluation?.evidence_meta_json) {
                   try {
                     evidenceMeta = JSON.parse(detailEvaluation.evidence_meta_json) || {};
-                  } catch {}
+                  } catch { }
                 }
 
                 if (evidenceFiles.length === 0) {
@@ -261,7 +262,7 @@ export default function SummaryPage({ currentUser }) {
                           const fileMeta = evidenceMeta[filename] || {};
                           const evidenceNumber = fileMeta.number || `${index + 1}`;
                           const evidenceName = fileMeta.name || detailEvaluation?.evidence_name || filename;
-                          
+
                           return (
                             <tr key={index} className="hover:bg-gray-50">
                               <td className="px-4 py-3 text-sm text-gray-900 font-medium text-center bg-gray-50 w-20">
@@ -273,20 +274,20 @@ export default function SummaryPage({ currentUser }) {
                               <td className="px-4 py-3 text-sm text-gray-900 text-right">
                                 {filename.startsWith('url_') ? (
                                   // URL หลักฐาน - เปิดลิงก์โดยตรง
-                                  <a 
-                                    href={fileMeta.url || detailEvaluation?.evidence_url || '#'} 
-                                    target="_blank" 
-                                    rel="noreferrer" 
+                                  <a
+                                    href={fileMeta.url || detailEvaluation?.evidence_url || '#'}
+                                    target="_blank"
+                                    rel="noreferrer"
                                     className="text-green-600 hover:text-green-800 underline cursor-pointer"
                                   >
                                     URL: เปิดลิงก์
                                   </a>
                                 ) : (
                                   // ไฟล์เอกสาร - เปิดผ่าน /api/view/
-                                  <a 
-                                    href={`http://localhost:3001/api/view/${encodeURIComponent(filename)}`} 
-                                    target="_blank" 
-                                    rel="noreferrer" 
+                                  <a
+                                    href={`http://localhost:3001/api/view/${encodeURIComponent(filename)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
                                     className="text-blue-600 hover:text-blue-800 underline cursor-pointer"
                                   >
                                     ไฟล์: เปิดไฟล์
@@ -302,7 +303,7 @@ export default function SummaryPage({ currentUser }) {
                 );
               })()}
             </div>
-            
+
             <div className="text-xs text-gray-500">บันทึกล่าสุด: {detailEvaluation ? new Date(detailEvaluation.created_at).toLocaleString('th-TH') : '-'}</div>
           </div>
         </div>
@@ -313,20 +314,23 @@ export default function SummaryPage({ currentUser }) {
   // หากยังไม่ได้เลือกสาขา ให้แสดงหน้าเลือกสาขา
   if (!selectedProgram) {
     return (
-      <div className="max-w-6xl mx-auto py-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">สรุปผลการดำเนินการคุณภาพการศึกษา</h1>
-          <p className="text-gray-600 mt-1">กรุณาเลือกสาขาที่ต้องการดูสรุปผล</p>
+      <div className="max-w-4xl mx-auto py-12">
+        <div className="text-center mb-8">
+          <BarChart3 className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-gray-900">สรุปผลการดำเนินการคุณภาพการศึกษา</h1>
+          <p className="text-gray-600 mt-2">กรุณาเลือกสาขาที่ต้องการดูสรุปผล</p>
         </div>
-        <ProgramSelection
-          mode="assess"
-          storageKey="summaryProgramSelection"
-          buttonText="เลือกสาขา"
-          onComplete={(s) => { 
-            setSelectedProgram(s); 
-            try { localStorage.setItem('selectedProgramContext', JSON.stringify(s)); } catch {}
-          }}
-        />
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+          <ProgramSelection
+            mode="assess"
+            storageKey="summaryProgramSelection"
+            buttonText="เลือกสาขา"
+            onComplete={(s) => {
+              setSelectedProgram(s);
+              try { localStorage.setItem('selectedProgramContext', JSON.stringify(s)); } catch { }
+            }}
+          />
+        </div>
       </div>
     );
   }
@@ -355,7 +359,7 @@ export default function SummaryPage({ currentUser }) {
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ชื่อองค์ประกอบ</th>
               <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">แสดง</th>
               <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">จำนวน</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">ตัวบ่งชี้</th>
+              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">ตัวบ่งชี้</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -392,7 +396,7 @@ export default function SummaryPage({ currentUser }) {
               <div className="text-sm text-gray-500">ตัวบ่งชี้ขององค์ประกอบ</div>
               <div className="font-semibold">{viewComponent.quality_name}</div>
             </div>
-            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={()=>{setViewComponent(null); setViewIndicators([]);}}>ปิด</button>
+            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={() => { setViewComponent(null); setViewIndicators([]); }}>ปิด</button>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -445,13 +449,13 @@ export default function SummaryPage({ currentUser }) {
               </tbody>
             </table>
           </div>
-          
+
         </div>
       )}
 
       {/* ลบ modal; ใช้หน้าเต็มด้านบนแทน */}
 
-      
+
     </div>
   );
 }

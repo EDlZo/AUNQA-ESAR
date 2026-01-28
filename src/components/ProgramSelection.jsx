@@ -14,12 +14,12 @@ const DEFAULT_MAJORS_BY_FACULTY = {
   'คณะวิศวกรรมศาสตร์': [
     'วิศวกรรมคอมพิวเตอร์',
     'วิศวกรรมคอมพิวเตอร์ปัญญาประดิษฐ์ (AI)',
-    
+
   ],
 };
 
-export default function ProgramSelection({ 
-  storageKey = 'programSelectionV2', 
+export default function ProgramSelection({
+  storageKey = 'programSelectionV2',
   onComplete,
   mode = 'manage', // 'manage' หรือ 'assess'
   buttonText = null // text สำหรับปุ่ม (ถ้าไม่ระบุจะใช้ default ตาม mode)
@@ -53,7 +53,7 @@ export default function ProgramSelection({
         setSelectedFacultyId(parsed.selectedFacultyId || '');
         setSelectedMajorId(parsed.selectedMajorId || '');
       }
-    } catch {}
+    } catch { }
   }, [storageKey]);
 
   // Save
@@ -66,7 +66,7 @@ export default function ProgramSelection({
         selectedFacultyId,
         selectedMajorId,
       }));
-    } catch {}
+    } catch { }
   }, [step, selectedLevel, faculties, selectedFacultyId, selectedMajorId, storageKey]);
 
   const selectedFaculty = useMemo(
@@ -88,7 +88,7 @@ export default function ProgramSelection({
   // กำหนด text ของปุ่มตาม mode
   const getButtonText = () => {
     if (buttonText) return buttonText;
-    
+
     switch (mode) {
       case 'assess':
         return 'ประเมินผล';
@@ -132,6 +132,7 @@ export default function ProgramSelection({
     <div className="space-y-8">
       {/* Breadcrumbs */}
       <div className="text-sm text-gray-600 flex items-center gap-2">
+
         <button className="hover:underline" onClick={resetToLevel}>เลือกระดับ</button>
         {step !== 'level' && <span>/</span>}
         {step !== 'level' && (
@@ -228,11 +229,10 @@ export default function ProgramSelection({
         </div>
         <div className="mt-4">
           <button
-            className={`px-4 py-2 rounded-lg text-sm ${
-              selectedLevel === 'programs' && selectedFacultyId && selectedMajorId
+            className={`px-4 py-2 rounded-lg text-sm ${selectedLevel === 'programs' && selectedFacultyId && selectedMajorId
                 ? 'bg-blue-600 text-white hover:bg-blue-700'
                 : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            }`}
+              }`}
             disabled={!(selectedLevel === 'programs' && selectedFacultyId && selectedMajorId)}
             onClick={() => {
               console.log('🔥 ProgramSelection button clicked');
@@ -243,7 +243,7 @@ export default function ProgramSelection({
                 facultyName: selectedFaculty?.name,
                 majorName: majorsForSelectedFaculty.find(m => m.id === selectedMajorId)?.name,
               });
-              
+
               if (onComplete) {
                 console.log('✅ Calling onComplete...');
                 onComplete({

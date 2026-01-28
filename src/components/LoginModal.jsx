@@ -4,16 +4,16 @@ import React, { useState } from 'react';
 export default function LoginModal({ onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('external_evaluator');
+  const [role, setRole] = useState('reporter');
   const [error, setError] = useState('');
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
-    
+
     try {
       console.log('Attempting login with:', { username, password, role });
-      
+
       // เรียก API เพื่อตรวจสอบการเข้าสู่ระบบ
       const response = await fetch('http://localhost:3001/api/login', {
         method: 'POST',
@@ -34,18 +34,19 @@ export default function LoginModal({ onLogin }) {
       if (response.ok && data.success) {
         // แปลง role_id เป็น role string
         const roleMapping = {
-          1: 'admin',
-          2: 'staff', 
-          3: 'evaluator',
-          4: 'external_evaluator',
-          5: 'dev'
+          1: 'system_admin',
+          2: 'sar_manager',
+          3: 'reporter',
+          4: 'evaluator',
+          5: 'external_evaluator',
+          6: 'executive'
         };
-        
+
         const userData = {
           ...data.user,
           role: roleMapping[data.user.role_id] || 'unknown'
         };
-        
+
         console.log('Login successful, user data:', userData);
         onLogin(userData);
       } else {
@@ -68,11 +69,12 @@ export default function LoginModal({ onLogin }) {
           <input className="w-full p-4 mb-6 border rounded-xl text-lg" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" required />
           <label className="block text-xl mb-4">บทบาท</label>
           <select className="w-full p-4 mb-8 border rounded-xl text-lg" value={role} onChange={e => setRole(e.target.value)} required>
-            <option value="admin">Admin</option>
-            <option value="staff">Staff</option>
+            <option value="system_admin">System Admin</option>
+            <option value="sar_manager">SAR Manager</option>
+            <option value="reporter">Reporter</option>
             <option value="evaluator">Evaluator</option>
             <option value="external_evaluator">External Evaluator</option>
-            <option value="dev">Developer</option>
+            <option value="executive">Executive</option>
           </select>
           <button type="submit" className="w-full py-4 text-2xl bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition">เข้าสู่ระบบ</button>
         </form>

@@ -9,7 +9,7 @@ export class PDFGenerator {
       unit: 'mm',
       format: 'a4'
     });
-    
+
     // ตั้งค่าฟอนต์ภาษาไทย
     this.pageWidth = this.doc.internal.pageSize.getWidth();
     this.pageHeight = this.doc.internal.pageSize.getHeight();
@@ -32,27 +32,27 @@ export class PDFGenerator {
     this.doc.setFontSize(16);
     this.doc.setFont('helvetica', 'bold');
     this.doc.text('มหาวิทยาลัยเทคโนโลยีราชมงคลศรีวิชัย', this.pageWidth / 2, 30, { align: 'center' });
-    
+
     this.doc.setFontSize(12);
     this.doc.setFont('helvetica', 'normal');
     this.doc.text('Rajamangala University of Technology Srivijaya', this.pageWidth / 2, 38, { align: 'center' });
-    
+
     // เส้นคั่น
     this.doc.setDrawColor(59, 130, 246);
     this.doc.setLineWidth(0.5);
     this.doc.line(this.margin, 45, this.pageWidth - this.margin, 45);
-    
+
     // หัวเรื่องรายงาน
     this.doc.setFontSize(18);
     this.doc.setFont('helvetica', 'bold');
     this.doc.text(title, this.pageWidth / 2, 60, { align: 'center' });
-    
+
     if (subtitle) {
       this.doc.setFontSize(14);
       this.doc.setFont('helvetica', 'normal');
       this.doc.text(subtitle, this.pageWidth / 2, 68, { align: 'center' });
     }
-    
+
     this.currentY = 80;
   }
 
@@ -80,7 +80,7 @@ export class PDFGenerator {
       this.doc.text(String(value), this.margin + 40, y);
       y += 8;
     });
-    
+
     this.currentY = y + 10;
   }
 
@@ -174,7 +174,7 @@ export class PDFGenerator {
   // เพิ่มท้ายกระดาษ
   addFooter() {
     const footerY = this.pageHeight - 30;
-    
+
     // เส้นคั่น
     this.doc.setDrawColor(200, 200, 200);
     this.doc.setLineWidth(0.3);
@@ -259,7 +259,7 @@ export class PDFGenerator {
   // สร้างรายงานสรุปแบบกราฟ
   generateSummaryReport(summaryData) {
     this.addHeader('รายงานสรุปการประเมิน', 'ภาพรวมผลการประเมินคุณภาพ');
-    
+
     // เพิ่มข้อมูลสรุป
     const summaryInfo = [
       ['จำนวนรายงานทั้งหมด:', summaryData.totalReports || '0'],
@@ -330,7 +330,7 @@ export class PDFGenerator {
     const colors = [
       [59, 130, 246],   // blue
       [16, 185, 129],   // green
-      [251, 146, 60],   // orange
+      [96, 165, 250],   // light blue (replaced orange)
       [239, 68, 68],    // red
       [139, 92, 246],   // purple
       [236, 72, 153]    // pink

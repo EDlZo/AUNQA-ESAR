@@ -22,7 +22,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   fileFilter: function (req, file, cb) {
     if (file.mimetype === 'application/pdf' || file.mimetype.startsWith('image/')) {
@@ -42,7 +42,7 @@ app.use(express.json());
 
 // Debug: log every request method and path to trace 404s
 app.use((req, res, next) => {
-  try { console.log(`[REQ] ${req.method} ${req.path}`); } catch {}
+  try { console.log(`[REQ] ${req.method} ${req.path}`); } catch { }
   next();
 });
 
@@ -57,30 +57,34 @@ app.get('/api/ping', (req, res) => {
 // ================= LOGIN =================
 app.post('/api/login', (req, res) => {
   const { username, password, role } = req.body;
-  
+
   const roleMapping = {
-    'admin': 1,
-    'staff': 2,
-    'evaluator': 3,
-    'external_evaluator': 4,
-    'dev': 5
+    'system_admin': 1,
+    'sar_manager': 2,
+    'reporter': 3,
+    'evaluator': 4,
+    'external_evaluator': 5,
+    'executive': 6
   };
-  
+
   const roleId = roleMapping[role];
   if (!roleId) {
     return res.status(400).json({ success: false, message: 'บทบาทไม่ถูกต้อง' });
   }
-  
+
   db.query(
     'SELECT user_id, name, email, role_id FROM users WHERE email = ? AND password = ? AND role_id = ?',
     [username, password, roleId],
     (err, results) => {
       if (err) return res.status(500).json({ success: false, message: 'เกิดข้อผิดพลาดในฐานข้อมูล' });
-      
+
+      console.log('Login Query Params:', [username, password, roleId]);
       if (results.length === 0) {
+        console.log('Login Failed: No match found');
         return res.status(401).json({ success: false, message: 'ชื่อผู้ใช้ รหัสผ่าน หรือ Role ไม่ถูกต้อง' });
       }
-      
+
+      console.log('Login Success for user:', results[0].email);
       res.json({ success: true, user: results[0] });
     }
   );
@@ -202,7 +206,7 @@ function ensureQualityTable(tableName) {
       component_id INT NULL,
       quality_name VARCHAR(255) NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-    () => {}
+    () => { }
   );
 }
 
@@ -237,14 +241,14 @@ app.get('/api/quality-components', async (req, res) => {
   try {
     const { session_id, major_name } = req.query;
     console.log('📊 GET /api/quality-components called with:', { session_id, major_name });
-    
+
     let table = QUALITY_TABLE_MAP[major_name] || null;
     if (!table) table = await resolveQualityTableBySession(session_id);
     if (!table) {
       console.log('❌ No table found for:', major_name);
       return res.json([]);
     }
-    
+
     console.log('📋 Using table:', table);
     const [rows] = await db.promise().query(`SELECT * FROM ${table} ORDER BY id DESC`);
     console.log('✅ Components found:', rows.length);
@@ -340,7 +344,7 @@ function ensureIndicatorTable(tableName) {
       indicator_name TEXT NOT NULL,
       data_source TEXT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-    () => {}
+    () => { }
   );
 }
 
@@ -445,7 +449,7 @@ app.get('/api/indicator-detail', async (req, res) => {
 app.get('/api/check-file/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(__dirname, 'uploads', filename);
-  
+
   if (fs.existsSync(filePath)) {
     res.json({ exists: true, filename: filename });
   } else {
@@ -456,7 +460,7 @@ app.get('/api/check-file/:filename', (req, res) => {
 app.get('/api/download/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(__dirname, 'uploads', filename);
-  
+
   if (fs.existsSync(filePath)) {
     res.download(filePath, filename, (err) => {
       if (err) res.status(500).json({ error: 'ไม่สามารถดาวน์โหลดไฟล์ได้' });
@@ -479,7 +483,7 @@ db.query(
     evaluator_id INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  () => {}
+  () => { }
 );
 
 // Create session
@@ -511,7 +515,7 @@ app.get('/api/assessment-sessions/:id', async (req, res) => {
 app.get('/api/view/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(__dirname, 'uploads', filename);
-  
+
   if (fs.existsSync(filePath)) {
     const ext = path.extname(filename).toLowerCase();
     if (ext === '.pdf') {
@@ -530,16 +534,16 @@ app.get('/api/view/:filename', (req, res) => {
 // GET evaluations
 app.get('/api/evaluations', async (req, res) => {
   const { evaluator_id, program_id, year, component_id, session_id, major_name } = req.query;
-  
+
   // เลือกตารางตาม major_name
   let tableName = 'evaluations'; // default
   if (major_name && MAJOR_TABLE_MAP[major_name]) {
     tableName = MAJOR_TABLE_MAP[major_name];
   }
-  
+
   let sql;
   const params = [];
-  
+
   if (component_id) {
     // หาข้อมูลการประเมินผ่าน indicators table เมื่อมี component_id
     sql = `SELECT e.*, i.component_id 
@@ -547,29 +551,29 @@ app.get('/api/evaluations', async (req, res) => {
            LEFT JOIN indicators i ON e.indicator_id = i.id 
            WHERE i.component_id = ?`;
     params.push(component_id);
-    
+
     if (evaluator_id) { sql += ' AND e.evaluator_id=?'; params.push(evaluator_id); }
     if (program_id) { sql += ' AND e.program_id=?'; params.push(program_id); }
     if (year) { sql += ' AND e.year=?'; params.push(year); }
     if (session_id) { sql += ' AND e.session_id=?'; params.push(session_id); }
-    
+
     sql += ' ORDER BY e.created_at DESC';
   } else {
     // ดึงข้อมูลการประเมินโดยตรงเมื่อไม่มี component_id filter
     sql = `SELECT * FROM ${tableName} WHERE 1=1`;
-    
+
     if (evaluator_id) { sql += ' AND evaluator_id=?'; params.push(evaluator_id); }
     if (program_id) { sql += ' AND program_id=?'; params.push(program_id); }
     if (year) { sql += ' AND year=?'; params.push(year); }
     if (session_id) { sql += ' AND session_id=?'; params.push(session_id); }
-    
+
     sql += ' ORDER BY created_at DESC';
   }
-  
+
   console.log('Evaluations API - SQL:', sql);
   console.log('Evaluations API - Params:', params);
   console.log('Evaluations API - Table:', tableName);
-  
+
   try {
     const [rows] = await db.promise().query(sql, params);
     console.log('Evaluations API - Results:', rows.length, 'rows');
@@ -611,13 +615,13 @@ function ensureEvaluationTable(tableName) {
       status VARCHAR(50) DEFAULT 'submitted',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-    () => {}
+    () => { }
   );
 
   // เพิ่มคอลัมน์ target_value ถ้ายังไม่มี (สำหรับตารางที่มีอยู่แล้ว)
   db.query(
     `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS target_value TEXT NULL AFTER score`,
-    () => {}
+    () => { }
   );
 }
 
@@ -722,7 +726,7 @@ function ensureActualEvaluationTable(tableName) {
       major_name VARCHAR(255) NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-    () => {}
+    () => { }
   );
   // Backfill additional columns if table already exists (compat with MySQL versions)
   function addColumnIfMissing(columnName, columnDDL) {
@@ -732,7 +736,7 @@ function ensureActualEvaluationTable(tableName) {
       (err, rows) => {
         if (err) return; // silent
         if (!rows || rows.length === 0) {
-          db.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnDDL}`, () => {});
+          db.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnDDL}`, () => { });
         }
       }
     );
@@ -752,7 +756,7 @@ async function resolveActualTable(sessionId, majorName) {
     try {
       const [rows] = await db.promise().query('SELECT major_name FROM assessment_sessions WHERE id = ? LIMIT 1', [sessionId]);
       if (rows && rows.length > 0) name = rows[0].major_name || null;
-    } catch {}
+    } catch { }
   }
   const table = name && MAJOR_ACTUAL_TABLE_MAP[name] ? MAJOR_ACTUAL_TABLE_MAP[name] : null;
   if (table) ensureActualEvaluationTable(table);
@@ -795,7 +799,7 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
           previousFiles = [prev.evidence_file];
         }
       }
-    } catch {}
+    } catch { }
 
     // Decide files to store: optionally keep existing
     const mergeExisting = String(keep_existing || '').toLowerCase() === 'true' || keep_existing === '1';
@@ -807,21 +811,21 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
     let numbers = [];
     let names = [];
     let urls = [];
-    try { if (typeof req.body.evidence_numbers === 'string') numbers = JSON.parse(req.body.evidence_numbers); } catch {}
-    try { if (typeof req.body.evidence_names === 'string') names = JSON.parse(req.body.evidence_names); } catch {}
-    try { if (typeof req.body.evidence_urls === 'string') urls = JSON.parse(req.body.evidence_urls); } catch {}
-    
+    try { if (typeof req.body.evidence_numbers === 'string') numbers = JSON.parse(req.body.evidence_numbers); } catch { }
+    try { if (typeof req.body.evidence_names === 'string') names = JSON.parse(req.body.evidence_names); } catch { }
+    try { if (typeof req.body.evidence_urls === 'string') urls = JSON.parse(req.body.evidence_urls); } catch { }
+
     const newMeta = {};
-    
+
     // สำหรับไฟล์ที่อัปโหลด: ใช้ชื่อไฟล์เป็น key
     files.forEach((fname, i) => {
-      newMeta[fname] = { 
-        number: numbers[i] || null, 
+      newMeta[fname] = {
+        number: numbers[i] || null,
         name: names[i] || null,
         url: urls[i] || null
       };
     });
-    
+
     // สำหรับ URL-only (ไม่มีไฟล์): ใช้ url_ prefix เป็น key
     // กรณีที่ length ของ metadata arrays มากกว่า files = มี URL-only entries
     const urlOnlyCount = Math.max(numbers.length, names.length, urls.length) - files.length;
@@ -837,7 +841,7 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
         finalFiles.push(urlKey);
       }
     }
-    
+
     // Merge previous meta if keeping
     let mergedMeta = newMeta;
     if (mergeExisting) {
@@ -850,7 +854,7 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
           const prevMeta = JSON.parse(prevMetaRows[0].evidence_meta_json) || {};
           mergedMeta = { ...prevMeta, ...newMeta };
         }
-      } catch {}
+      } catch { }
     }
 
     // Build INSERT dynamically based on existing columns to avoid schema mismatch
@@ -914,8 +918,8 @@ app.post('/api/evaluations-actual/append-files', upload.array('evidence_files', 
       // เมทาดาตาเริ่มต้น
       let numbers = [];
       let names = [];
-      try { if (typeof req.body.evidence_numbers === 'string') numbers = JSON.parse(req.body.evidence_numbers); } catch {}
-      try { if (typeof req.body.evidence_names === 'string') names = JSON.parse(req.body.evidence_names); } catch {}
+      try { if (typeof req.body.evidence_numbers === 'string') numbers = JSON.parse(req.body.evidence_numbers); } catch { }
+      try { if (typeof req.body.evidence_names === 'string') names = JSON.parse(req.body.evidence_names); } catch { }
       const metaInit = {};
       newFilesUploaded.forEach((fname, i) => { metaInit[fname] = { number: numbers[i] || null, name: names[i] || null }; });
       const [ins] = await db.promise().query(
@@ -924,11 +928,11 @@ app.post('/api/evaluations-actual/append-files', upload.array('evidence_files', 
       );
       current = { evaluation_id: ins.insertId, evidence_file: primaryFile, evidence_files_json: JSON.stringify(newFilesUploaded) };
     }
-    
+
     // จากนี้ไปคือกรณีมีแถวอยู่แล้ว (หรือเพิ่งสร้างใหม่ด้านบน)
     const existing = [];
     if (current.evidence_files_json) {
-      try { existing.push(...JSON.parse(current.evidence_files_json)); } catch {}
+      try { existing.push(...JSON.parse(current.evidence_files_json)); } catch { }
     } else if (current.evidence_file) {
       existing.push(current.evidence_file);
     }
@@ -939,8 +943,8 @@ app.post('/api/evaluations-actual/append-files', upload.array('evidence_files', 
     // Merge metadata
     let numbers = [];
     let names = [];
-    try { if (typeof req.body.evidence_numbers === 'string') numbers = JSON.parse(req.body.evidence_numbers); } catch {}
-    try { if (typeof req.body.evidence_names === 'string') names = JSON.parse(req.body.evidence_names); } catch {}
+    try { if (typeof req.body.evidence_numbers === 'string') numbers = JSON.parse(req.body.evidence_numbers); } catch { }
+    try { if (typeof req.body.evidence_names === 'string') names = JSON.parse(req.body.evidence_names); } catch { }
     const newMeta = {};
     newFiles.forEach((fname, i) => { newMeta[fname] = { number: numbers[i] || null, name: names[i] || null }; });
     let meta = {};
@@ -950,7 +954,7 @@ app.post('/api/evaluations-actual/append-files', upload.array('evidence_files', 
         [current.evaluation_id]
       );
       if (prev && prev.length > 0 && prev[0].evidence_meta_json) meta = JSON.parse(prev[0].evidence_meta_json) || {};
-    } catch {}
+    } catch { }
     meta = { ...meta, ...newMeta };
     await db.promise().query(
       `UPDATE ${table} SET evidence_file = ?, evidence_files_json = ?, evidence_meta_json = ? WHERE evaluation_id = ?`,
@@ -986,7 +990,7 @@ app.post('/api/evaluations-actual/remove-file', async (req, res) => {
     const current = rows[0];
     let files = [];
     if (current.evidence_files_json) {
-      try { files = JSON.parse(current.evidence_files_json) || []; } catch {}
+      try { files = JSON.parse(current.evidence_files_json) || []; } catch { }
     } else if (current.evidence_file) {
       files = [current.evidence_file];
     }
@@ -1000,7 +1004,7 @@ app.post('/api/evaluations-actual/remove-file', async (req, res) => {
         [current.evaluation_id]
       );
       if (prev && prev.length > 0 && prev[0].evidence_meta_json) meta = JSON.parse(prev[0].evidence_meta_json) || {};
-    } catch {}
+    } catch { }
     if (meta && meta[filename]) delete meta[filename];
     await db.promise().query(
       `UPDATE ${table} SET evidence_file = ?, evidence_files_json = ?, evidence_meta_json = ? WHERE evaluation_id = ?`,
@@ -1010,7 +1014,7 @@ app.post('/api/evaluations-actual/remove-file', async (req, res) => {
     try {
       const filePath = path.join(__dirname, 'uploads', filename);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    } catch {}
+    } catch { }
     res.json({ success: true, files: updated });
   } catch (err) {
     console.error('Error removing file:', err);
@@ -1039,7 +1043,7 @@ app.get('/api/evaluations-actual/history', async (req, res) => {
       table = MAJOR_ACTUAL_TABLE_MAP[major_name];
     }
     if (!table) return res.json([]);
-    
+
     const [rows] = await db.promise().query(`SELECT * FROM ${table} WHERE session_id = ? ORDER BY created_at DESC`, [session_id || null]);
     res.json(rows);
   } catch (err) {
@@ -1082,7 +1086,7 @@ async function ensureCommitteeTable(tableName) {
       if (!rows || rows.length === 0) {
         await db.promise().query(`ALTER TABLE ${tableName} ADD COLUMN ${ddl}`);
       }
-    } catch {}
+    } catch { }
   };
   await addIfMissing('major_name', 'major_name VARCHAR(255) NULL');
   await addIfMissing('session_id', 'session_id VARCHAR(255) NULL');
@@ -1117,7 +1121,7 @@ const resolveCommitteeTableByMajor = async (majorName) => {
       // optional: keep legacy table for safety; comment next line to preserve
       // await db.promise().query(`DROP TABLE ${legacyName}`);
     }
-  } catch {}
+  } catch { }
 
   return tableName;
 };
@@ -1126,23 +1130,23 @@ const resolveCommitteeTableByMajor = async (majorName) => {
 app.get('/api/committee-evaluations', async (req, res) => {
   try {
     const { indicator_id, major_name, session_id } = req.query;
-    
+
     if (!major_name) {
       return res.status(400).json({ error: 'กรุณาระบุ major_name' });
     }
-    
+
     const tableName = await resolveCommitteeTableByMajor(major_name);
-    
+
     let query = `SELECT * FROM ${tableName} WHERE major_name = ? AND session_id = ?`;
     let params = [major_name, session_id];
-    
+
     if (indicator_id) {
       query += ` AND indicator_id = ?`;
       params.push(indicator_id);
     }
-    
+
     query += ` ORDER BY created_at DESC`;
-    
+
     const [rows] = await db.promise().query(query, params);
     res.json(rows);
   } catch (err) {
@@ -1155,19 +1159,19 @@ app.get('/api/committee-evaluations', async (req, res) => {
 app.post('/api/committee-evaluations', async (req, res) => {
   try {
     const { indicator_id, major_name, session_id, committee_score, strengths, improvements } = req.body;
-    
+
     if (!indicator_id || !major_name || !session_id) {
       return res.status(400).json({ error: 'กรุณาระบุข้อมูลที่จำเป็น' });
     }
-    
+
     const tableName = await resolveCommitteeTableByMajor(major_name);
-    
+
     // Check if evaluation already exists
     const [existing] = await db.promise().query(
       `SELECT id FROM ${tableName} WHERE indicator_id = ? AND major_name = ? AND session_id = ?`,
       [indicator_id, major_name, session_id]
     );
-    
+
     if (existing.length > 0) {
       // Update existing evaluation
       await db.promise().query(
@@ -1181,7 +1185,7 @@ app.post('/api/committee-evaluations', async (req, res) => {
         [indicator_id, major_name, session_id, committee_score, strengths, improvements]
       );
     }
-    
+
     res.json({ success: true, message: 'บันทึกการประเมินกรรมการเรียบร้อย' });
   } catch (err) {
     console.error('Error saving committee evaluation:', err);

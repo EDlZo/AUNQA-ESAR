@@ -693,11 +693,12 @@ CREATE TABLE `roles` (
 --
 
 INSERT INTO `roles` (`role_id`, `role_name`) VALUES
-(1, 'Admin'),
-(2, 'Staff'),
-(3, 'Evaluator'),
-(4, 'External Evaluator'),
-(5, 'Dev');
+(1, 'System Admin'),
+(2, 'SAR Manager'),
+(3, 'Reporter'),
+(4, 'Evaluator'),
+(5, 'External Evaluator'),
+(6, 'Executive');
 
 -- --------------------------------------------------------
 
@@ -849,11 +850,13 @@ CREATE TABLE `users` (
 --
 
 INSERT INTO `users` (`user_id`, `name`, `email`, `role_id`, `department`, `password`) VALUES
-(2, 'Admin', 'admin@example.com', 1, NULL, 'adminpass'),
-(3, 'Staff', 'staff@example.com', 2, NULL, 'staffpass'),
-(4, 'Evaluator Name', 'evaluator@example.com', 3, NULL, 'evaluatorpass'),
-(6, 'External Evaluator', 'external@example.com', 4, NULL, 'externalpass'),
-(7, 'Developer', 'dev@example.com', 5, NULL, 'devpass');
+(1, 'System Admin', 'dev@test.com', 1, NULL, 'adminpass'),
+(2, 'SAR Manager', 'manager@test.com', 2, NULL, 'managerpass'),
+(3, 'Reporter', 'staff@test.com', 3, NULL, 'staffpass'),
+(4, 'Evaluator', 'evaluator@test.com', 4, NULL, 'evaluatorpass'),
+(5, 'External Evaluator', 'external@test.com', 5, NULL, 'externalpass'),
+(6, 'Executive', 'exec@test.com', 6, NULL, 'execpass'),
+(7, 'Alternate Admin', 'admin@example.com', 1, NULL, 'adminpass');
 
 --
 -- Indexes for dumped tables
@@ -1089,7 +1092,7 @@ ALTER TABLE `quality_components_ce_ai`
 -- AUTO_INCREMENT for table `roles`
 --
 ALTER TABLE `roles`
-  MODIFY `role_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `role_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `sub_topic`
@@ -1101,7 +1104,7 @@ ALTER TABLE `sub_topic`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
+  MODIFY `user_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- Constraints for dumped tables
