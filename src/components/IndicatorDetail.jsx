@@ -8,7 +8,7 @@ export default function IndicatorDetail() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch(`http://localhost:3001/api/indicators-by-component/${componentId}`)
+    fetch(`http://localhost:3002/api/indicators-by-component/${componentId}`)
       .then(res => res.json())
       .then(data => setIndicators(data))
       .catch(() => setError('ไม่สามารถโหลดตัวบ่งชี้ได้'));

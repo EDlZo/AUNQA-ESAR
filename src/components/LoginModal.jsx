@@ -1,5 +1,6 @@
 // src/components/LoginModal.jsx
 import React, { useState } from 'react';
+import { API_ENDPOINTS } from '../config/api.js';
 
 export default function LoginModal({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -15,7 +16,7 @@ export default function LoginModal({ onLogin }) {
       console.log('Attempting login with:', { username, password, role });
 
       // เรียก API เพื่อตรวจสอบการเข้าสู่ระบบ
-      const response = await fetch('http://localhost:3001/api/login', {
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

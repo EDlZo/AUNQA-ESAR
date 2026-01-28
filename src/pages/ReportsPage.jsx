@@ -40,7 +40,7 @@ export default function ReportsPage() {
       const evaluationsData = await evaluationsResponse.json();
 
       // ดึงข้อมูลตัวบ่งชี้
-      const indicatorsResponse = await fetch(`/api/quality-components1?${qs}`);
+      const indicatorsResponse = await fetch(`/api/quality-components?${qs}`);
       const indicatorsData = await indicatorsResponse.json();
 
       // สร้างรายงานจากข้อมูลจริง
@@ -225,7 +225,7 @@ export default function ReportsPage() {
 
       console.log('Fetching indicators with params:', qs);
 
-      const indicatorsResponse = await fetch(`/api/quality-components1?${qs}`);
+      const indicatorsResponse = await fetch(`/api/quality-components?${qs}`);
       if (!indicatorsResponse.ok) {
         throw new Error(`HTTP error! status: ${indicatorsResponse.status}`);
       }
@@ -275,7 +275,7 @@ export default function ReportsPage() {
 
       console.log('Fetching indicators with params:', qs);
 
-      const indicatorsResponse = await fetch(`/api/quality-components1?${qs}`);
+      const indicatorsResponse = await fetch(`/api/quality-components?${qs}`);
       if (!indicatorsResponse.ok) {
         throw new Error(`HTTP error! status: ${indicatorsResponse.status}`);
       }

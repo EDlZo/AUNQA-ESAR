@@ -28,8 +28,8 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
 
       // ใช้ endpoint ให้ตรงกับโหมด
       const endpoint = mode === 'evaluation'
-        ? 'http://localhost:3001/api/evaluations-actual/history'
-        : 'http://localhost:3001/api/evaluations/history';
+        ? 'http://localhost:3002/api/evaluations-actual/history'
+        : 'http://localhost:3002/api/evaluations/history';
       let res = await fetch(`${endpoint}?${qs}`);
       if (res.ok) {
         let evaluations = await res.json();
@@ -74,7 +74,7 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram?.majorName || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      let res = await fetch(`http://localhost:3001/api/evaluations/history?${qs}`);
+      let res = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`);
       if (res.ok) {
         let rows = await res.json();
         let list = (Array.isArray(rows) ? rows : []).filter(ev => !sessionId || String(ev.session_id) === String(sessionId));

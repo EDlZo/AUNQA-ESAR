@@ -31,7 +31,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
       if (res.status !== 404) return res;
     } catch {}
     try {
-      const url = path.startsWith('/api') || path.startsWith('/uploads') ? `http://localhost:3001${path}` : path;
+      const url = path.startsWith('/api') || path.startsWith('/uploads') ? `http://localhost:3002${path}` : path;
       return await fetch(url, options);
     } catch (err) {
       throw err;
@@ -54,7 +54,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
       
       // 1) ค้นหาจาก session ปัจจุบันก่อน
-      let res = await fetch(`http://localhost:3001/api/evaluations/history?${qs}`);
+      let res = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`);
       let criteriaEvaluation = null;
       if (res.ok) {
         const evaluations = await res.json();
@@ -66,7 +66,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
       // 2) ถ้ายังไม่พบ ให้ค้นจากทุก session ของสาขานี้ แล้วเลือกอันท้ายสุดของตัวบ่งชี้นี้
       if (!criteriaEvaluation) {
         const qsAll = new URLSearchParams({ major_name: major }).toString();
-        res = await fetch(`http://localhost:3001/api/evaluations?${qsAll}`);
+        res = await fetch(`http://localhost:3002/api/evaluations?${qsAll}`);
         if (res.ok) {
           const rows = await res.json();
           const list = (Array.isArray(rows) ? rows : [])
@@ -527,7 +527,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
                                         </span>
                                       ) : (
                                         <a 
-                                          href={`http://localhost:3001/api/view/${encodeURIComponent(file.filename)}`} 
+                                          href={`http://localhost:3002/api/view/${encodeURIComponent(file.filename)}`} 
                                           target="_blank" 
                                           rel="noreferrer" 
                                           className="text-blue-600 hover:text-blue-800 underline"
@@ -937,7 +937,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
                                       <span className="text-xs text-gray-500 w-8 text-center">{evidenceNumber}</span>
                                       <div className="flex-1">
                                         <div className="font-medium text-gray-900">{evidenceName}</div>
-                                        <a href={`http://localhost:3001/api/view/${encodeURIComponent(fname)}`} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all text-xs block mt-1">
+                                        <a href={`http://localhost:3002/api/view/${encodeURIComponent(fname)}`} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all text-xs block mt-1">
                                           {fname}
                                         </a>
                                       </div>
@@ -950,7 +950,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
                                 <span className="text-xs text-gray-500 w-8 text-center">1</span>
                                 <div className="flex-1">
                                   <div className="font-medium text-gray-900">{evaluation.evidence_name || evaluation.evidence_file}</div>
-                                  <a href={`http://localhost:3001/api/view/${encodeURIComponent(evaluation.evidence_file)}`} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all text-xs block mt-1">
+                                  <a href={`http://localhost:3002/api/view/${encodeURIComponent(evaluation.evidence_file)}`} target="_blank" rel="noreferrer" className="text-blue-600 underline break-all text-xs block mt-1">
                                     {evaluation.evidence_file}
                                   </a>
                                 </div>

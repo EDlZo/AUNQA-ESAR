@@ -20,7 +20,7 @@ async function seedIndicatorsForMainCode(mainCode, componentDbId, ctx) {
   for (let i = 0; i < subitems.length; i++) {
     const it = subitems[i];
     const sequence = `${mainPart}.${it.seq}`;
-    await fetch('http://localhost:3001/api/indicators', {
+    await fetch('http://localhost:3002/api/indicators', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -76,7 +76,7 @@ export default function DefineComponentSection() {
         } catch {}
       }
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      fetch(`http://localhost:3001/api/quality-components1?${qs}`)
+      fetch(`http://localhost:3002/api/quality-components?${qs}`)
         .then(res => res.json())
         .then(data => {
           setItems(data);
@@ -108,7 +108,7 @@ export default function DefineComponentSection() {
     })();
 
     const newItem = { componentId, qualityName, ...ctx };
-    const res = await fetch('http://localhost:3001/api/quality-components1', {
+    const res = await fetch('http://localhost:3002/api/quality-components', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newItem)
@@ -139,7 +139,7 @@ export default function DefineComponentSection() {
       } catch { return ''; }
     })();
 
-    const res = await fetch(`http://localhost:3001/api/quality-components1/${id}?${ctxParams}`, { method: 'DELETE' });
+    const res = await fetch(`http://localhost:3002/api/quality-components/${id}?${ctxParams}`, { method: 'DELETE' });
     if (res.ok) {
       setItems(items.filter(item => item.id !== id));
     } else {
@@ -165,7 +165,7 @@ export default function DefineComponentSection() {
       } catch { return { session_id: '', major_name: '' }; }
     })();
 
-    const res = await fetch(`http://localhost:3001/api/quality-components1/${updatedItem.id}`, {
+    const res = await fetch(`http://localhost:3002/api/quality-components/${updatedItem.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...updatedItem, ...ctx })
@@ -205,13 +205,13 @@ export default function DefineComponentSection() {
       const sel = localStorage.getItem('selectedProgramContext');
       const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      fetch(`http://localhost:3001/api/indicators-by-component/${selectedComponent.id}?${qs}`)
+      fetch(`http://localhost:3002/api/indicators-by-component/${selectedComponent.id}?${qs}`)
         .then(res => res.json())
         .then(async (data) => {
           setIndicators(prev => ({ ...prev, [selectedComponent.id]: data }));
           // ดึงประวัติการประเมินเพื่อทำเครื่องหมายสถานะหลังรีเฟรช
           try {
-            const history = await fetch(`http://localhost:3001/api/evaluations/history?${qs}`).then(r=>r.json());
+            const history = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`).then(r=>r.json());
             const map = {};
             if (Array.isArray(history)) {
               history.forEach(row => {
@@ -263,7 +263,7 @@ const handleAddIndicator = async (e) => {
       const mainSeq = pad2(mainNum); // เช่น "01"
 
       // 1) เพิ่มแถวหัวข้อตัวบ่งชี้หลักเป็นหัวตาราง
-      await fetch('http://localhost:3001/api/indicators', {
+      await fetch('http://localhost:3002/api/indicators', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -282,7 +282,7 @@ const handleAddIndicator = async (e) => {
 
       // 3) รีเฟรชรายการตัวบ่งชี้
       const qsRef = new URLSearchParams({ session_id: ctx.session_id || '', major_name: ctx.major_name || '' }).toString();
-      const refreshed = await fetch(`http://localhost:3001/api/indicators-by-component/${selectedComponent.id}?${qsRef}`).then(r=>r.json()).catch(()=>[]);
+      const refreshed = await fetch(`http://localhost:3002/api/indicators-by-component/${selectedComponent.id}?${qsRef}`).then(r=>r.json()).catch(()=>[]);
       setIndicators(prev => ({ ...prev, [selectedComponent.id]: Array.isArray(refreshed) ? refreshed : [] }));
 
       // reset ฟอร์ม
@@ -296,7 +296,7 @@ const handleAddIndicator = async (e) => {
     }
 
     // เพิ่มตัวบ่งชี้ทั่วไป (ไม่ใช่หัวข้อหลัก)
-    const res = await fetch('http://localhost:3001/api/indicators', {
+    const res = await fetch('http://localhost:3002/api/indicators', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...newIndicator, ...ctx })
@@ -339,7 +339,7 @@ const handleDeleteIndicator = async (indicatorId, componentId) => {
         return new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
       } catch { return ''; }
     })();
-    const res = await fetch(`http://localhost:3001/api/indicators/${indicatorId}?${ctxParams}`, { method: 'DELETE' });
+    const res = await fetch(`http://localhost:3002/api/indicators/${indicatorId}?${ctxParams}`, { method: 'DELETE' });
     if (res.ok) {     
       setIndicators(prev => ({
         ...prev,
@@ -423,10 +423,10 @@ const handleEditIndicator = (indicator) => {
               const sel = localStorage.getItem('selectedProgramContext');
               const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
               const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-              const refreshed = await fetch(`http://localhost:3001/api/indicators-by-component/${selectedComponent.id}?${qs}`).then(r=>r.json()).catch(()=>[]);
+              const refreshed = await fetch(`http://localhost:3002/api/indicators-by-component/${selectedComponent.id}?${qs}`).then(r=>r.json()).catch(()=>[]);
               setIndicators(prev => ({ ...prev, [selectedComponent.id]: Array.isArray(refreshed) ? refreshed : [] }));
               // refresh evaluated map as well
-              const history = await fetch(`http://localhost:3001/api/evaluations/history?${qs}`).then(r=>r.json()).catch(()=>[]);
+              const history = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`).then(r=>r.json()).catch(()=>[]);
               const map = {};
               if (Array.isArray(history)) {
                 history.forEach(row => { if (row.indicator_id && row.session_id == sessionId) map[row.indicator_id] = true; });

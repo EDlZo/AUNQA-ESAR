@@ -16,7 +16,7 @@ export default function FileViewer({ filename, onClose }) {
 
   const isPDF = filename && filename.toLowerCase().endsWith('.pdf');
   const isImage = filename && /\.(jpg|jpeg|png|gif|webp)$/i.test(filename);
-  const fileUrl = filename ? `http://localhost:3001/uploads/${filename}` : null;
+  const fileUrl = filename ? `http://localhost:3002/uploads/${filename}` : null;
 
   // ตรวจสอบว่าไฟล์มีอยู่จริงหรือไม่
   useEffect(() => {
@@ -27,7 +27,7 @@ export default function FileViewer({ filename, onClose }) {
 
   const checkFileExists = async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/check-file/${filename}`);
+      const response = await fetch(`http://localhost:3002/api/check-file/${filename}`);
       if (response.ok) {
         setFileExists(true);
         setLoading(false);
@@ -81,7 +81,7 @@ export default function FileViewer({ filename, onClose }) {
   function downloadFile() {
     if (filename) {
       // ใช้ fetch เพื่อดาวน์โหลดไฟล์
-      fetch(`http://localhost:3001/api/download/${filename}`)
+      fetch(`http://localhost:3002/api/download/${filename}`)
         .then(response => {
           if (response.ok) {
             return response.blob();

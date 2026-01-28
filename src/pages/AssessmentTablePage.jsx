@@ -25,7 +25,7 @@ export default function AssessmentTablePage({ setActiveTab }) {
       try {
         const sessionId = localStorage.getItem('assessment_session_id') || Date.now().toString();
         localStorage.setItem('assessment_session_id', sessionId);
-        const apiUrl = `http://localhost:3001/api/quality-components?session_id=${sessionId}&major_name=${encodeURIComponent(selectedProgram.majorName)}`;
+        const apiUrl = `http://localhost:3002/api/quality-components?session_id=${sessionId}&major_name=${encodeURIComponent(selectedProgram.majorName)}`;
         const res = await fetch(apiUrl);
         if (res.ok) {
           const data = await res.json();
@@ -47,7 +47,7 @@ export default function AssessmentTablePage({ setActiveTab }) {
       if (!selectedProgram) return;
       try {
         const sessionId = localStorage.getItem('assessment_session_id') || '';
-        const res = await fetch(`http://localhost:3001/api/indicators?session_id=${sessionId}&major_name=${encodeURIComponent(selectedProgram.majorName)}`);
+        const res = await fetch(`http://localhost:3002/api/indicators?session_id=${sessionId}&major_name=${encodeURIComponent(selectedProgram.majorName)}`);
         if (res.ok) {
           const data = await res.json();
           const map = {};
@@ -70,7 +70,7 @@ export default function AssessmentTablePage({ setActiveTab }) {
       try {
         const sessionId = localStorage.getItem('assessment_session_id') || '';
         const qs = new URLSearchParams({ session_id: sessionId, major_name: selectedProgram.majorName }).toString();
-        const res = await fetch(`http://localhost:3001/api/evaluations-actual/history?${qs}`);
+        const res = await fetch(`http://localhost:3002/api/evaluations-actual/history?${qs}`);
         let rows = [];
         if (res.ok) {
           rows = await res.json();

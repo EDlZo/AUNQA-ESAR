@@ -41,7 +41,7 @@ export default function IndicatorTable({
     const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
 
     // 1) เพิ่มหัวข้อหลัก (บรรทัดหัว) ก่อน
-    await fetch('http://localhost:3001/api/indicators', {
+    await fetch('http://localhost:3002/api/indicators', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -60,7 +60,7 @@ export default function IndicatorTable({
     const list = AUNQA_SUBITEMS[mainCode] || [];
     for (let i = 0; i < list.length; i++) {
       const it = list[i];
-      await fetch('http://localhost:3001/api/indicators', {
+      await fetch('http://localhost:3002/api/indicators', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -108,7 +108,7 @@ export default function IndicatorTable({
       const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
       
-      let res = await fetch(`http://localhost:3001/api/evaluations/history?${qs}`);
+      let res = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`);
       if (res.ok) {
         let evaluations = await res.json();
         // กรองเฉพาะของ session ปัจจุบัน และสถานะที่ส่งแล้ว
@@ -126,7 +126,7 @@ export default function IndicatorTable({
         // ถ้ายังว่าง ลองดึงผ่าน endpoint component_id เฉพาะ component ปัจจุบัน
         if (evaluatedIds.size === 0 && selectedComponent?.id) {
           const qs2 = new URLSearchParams({ component_id: selectedComponent.id, session_id: sessionId, major_name: major }).toString();
-          const res2 = await fetch(`http://localhost:3001/api/evaluations?${qs2}`);
+          const res2 = await fetch(`http://localhost:3002/api/evaluations?${qs2}`);
           if (res2.ok) {
             const rows = await res2.json();
             evaluatedIds = new Set((Array.isArray(rows) ? rows : []).map(r => String(r.indicator_id)));
@@ -135,7 +135,7 @@ export default function IndicatorTable({
         // ถ้ายังว่าง ให้ fallback legacy id
         if (evaluatedIds.size === 0) {
           const qsLegacy = new URLSearchParams({ session_id: '2147483647', major_name: major }).toString();
-          const resLegacy = await fetch(`http://localhost:3001/api/evaluations/history?${qsLegacy}`);
+          const resLegacy = await fetch(`http://localhost:3002/api/evaluations/history?${qsLegacy}`);
           if (resLegacy.ok) {
             const rows = await resLegacy.json();
             evaluatedIds = new Set((Array.isArray(rows) ? rows : []).map(r => String(r.indicator_id)));
@@ -164,7 +164,7 @@ export default function IndicatorTable({
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
       
       // ลองหาใน session ปัจจุบันก่อน
-      let res = await fetch(`http://localhost:3001/api/evaluations/history?${qs}`);
+      let res = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`);
       if (res.ok) {
         const evaluations = await res.json();
         const evaluation = (Array.isArray(evaluations) ? evaluations : [])
@@ -176,7 +176,7 @@ export default function IndicatorTable({
       // ถ้าไม่พบ ให้ดึงทุก session ใน major เดียวกันผ่าน /api/evaluations
       if (selectedComponent?.id) {
         const qs2 = new URLSearchParams({ component_id: selectedComponent.id, major_name: major }).toString();
-        res = await fetch(`http://localhost:3001/api/evaluations?${qs2}`);
+        res = await fetch(`http://localhost:3002/api/evaluations?${qs2}`);
         if (res.ok) {
           const rows = await res.json();
           const history = (Array.isArray(rows) ? rows : [])
@@ -203,8 +203,8 @@ export default function IndicatorTable({
       const qs2 = new URLSearchParams({ component_id: selectedComponent.id, major_name: major }).toString();
 
       const [res1, res2] = await Promise.all([
-        fetch(`http://localhost:3001/api/evaluations/history?${qs1}`),
-        fetch(`http://localhost:3001/api/evaluations?${qs2}`)
+        fetch(`http://localhost:3002/api/evaluations/history?${qs1}`),
+        fetch(`http://localhost:3002/api/evaluations?${qs2}`)
       ]);
 
       const arr1 = res1.ok ? await res1.json() : [];
@@ -314,7 +314,7 @@ export default function IndicatorTable({
         return;
       }
       // เรียก API เพิ่มตัวบ่งชี้
-      const res = await fetch('http://localhost:3001/api/indicators', {
+      const res = await fetch('http://localhost:3002/api/indicators', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newIndicator)
@@ -372,7 +372,7 @@ export default function IndicatorTable({
     });
 
     try {
-      const res = await fetch('http://localhost:3001/api/evaluations', { method: 'POST', body: formData });
+      const res = await fetch('http://localhost:3002/api/evaluations', { method: 'POST', body: formData });
       const responseText = await res.text();
       console.log('Server response:', responseText);
       

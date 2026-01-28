@@ -24,7 +24,7 @@ export default function AddQualityForm({
       const sel = localStorage.getItem('selectedProgramContext');
       const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      const response = await fetch(`http://localhost:3001/api/quality-components1?${qs}`);
+      const response = await fetch(`http://localhost:3002/api/quality-components?${qs}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

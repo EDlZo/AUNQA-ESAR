@@ -22,7 +22,7 @@ export default function AssessmentForm() {
     const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
     const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
     
-    fetch(`http://localhost:3001/api/indicators/${indicatorId}?${qs}`)
+    fetch(`http://localhost:3002/api/indicators/${indicatorId}?${qs}`)
       .then(res => res.json())
       .then(data => setIndicator(data))
       .catch(() => setIndicator(null));
@@ -51,7 +51,7 @@ export default function AssessmentForm() {
     formData.append('major_name', major);
 
     try {
-      const res = await fetch('http://localhost:3001/api/evaluations', {
+      const res = await fetch('http://localhost:3002/api/evaluations', {
         method: 'POST',
         body: formData
       });

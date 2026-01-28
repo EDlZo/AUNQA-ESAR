@@ -64,15 +64,15 @@ export default function DashboardContent({ user }) {
       const sessionId = localStorage.getItem('assessment_session_id');
 
       // Fetch Components
-      const compRes = await fetch(`http://localhost:3001/api/quality-components?major_name=${encodeURIComponent(majorName)}`);
+      const compRes = await fetch(`http://localhost:3002/api/quality-components?major_name=${encodeURIComponent(majorName)}`);
       const components = await compRes.json();
 
       // Fetch Evaluations
-      const evalRes = await fetch(`http://localhost:3001/api/evaluations/history?major_name=${encodeURIComponent(majorName)}&session_id=${sessionId}`);
+      const evalRes = await fetch(`http://localhost:3002/api/evaluations/history?major_name=${encodeURIComponent(majorName)}&session_id=${sessionId}`);
       const evaluations = await evalRes.json();
 
       // Fetch Committee Evaluations
-      const commRes = await fetch(`http://localhost:3001/api/committee-evaluations?major_name=${encodeURIComponent(majorName)}&session_id=${sessionId}`);
+      const commRes = await fetch(`http://localhost:3002/api/committee-evaluations?major_name=${encodeURIComponent(majorName)}&session_id=${sessionId}`);
       const committeeEvals = await commRes.json();
 
       // Calculate stats
