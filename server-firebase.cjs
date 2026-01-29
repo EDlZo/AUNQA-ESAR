@@ -39,7 +39,7 @@ if (!admin.apps.length) {
       console.log('🔑 Using Firebase environment variables');
       console.log('📧 Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
       console.log('🆔 Project ID:', process.env.FIREBASE_PROJECT_ID);
-      
+
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId: process.env.FIREBASE_PROJECT_ID,
@@ -55,7 +55,7 @@ if (!admin.apps.length) {
       console.log('- FIREBASE_PRIVATE_KEY:', !!process.env.FIREBASE_PRIVATE_KEY);
       console.log('- FIREBASE_CLIENT_EMAIL:', !!process.env.FIREBASE_CLIENT_EMAIL);
       console.log('- FIREBASE_PROJECT_ID:', !!process.env.FIREBASE_PROJECT_ID);
-      
+
       // Fallback to service account file (Only in development)
       if (process.env.NODE_ENV !== 'production' && fs.existsSync('./firebase-service-account.json')) {
         const serviceAccount = require('./firebase-service-account.json');
@@ -94,63 +94,95 @@ const mockData = {
     { id: '1', levelId: '1', facultyId: '1', facultyName: 'คณะวิศวกรรมศาสตร์', majorId: '1', majorName: 'วิศวกรรมคอมพิวเตอร์' },
     { id: '2', levelId: '1', facultyId: '1', facultyName: 'คณะวิศวกรรมศาสตร์', majorId: '2', majorName: 'วิศวกรรมคอมพิวเตอร์ปัญญาประดิษฐ์ (AI)' }
   ],
-  qualityComponents: [
+  quality_components: [
     { id: '1', component_id: '2', quality_name: 'องค์ประกอบที่ 2 : ผลการดำเนินงานตามเกณฑ์ AUN-QA' }
   ],
   indicators: [
     { id: '1', component_id: '1', sequence: '2.1', indicator_name: 'ตัวบ่งชี้ตัวอย่าง', indicator_type: 'ผลลัพธ์', criteria_type: 'เชิงคุณภาพ' }
   ],
   evaluations: [],
-  evaluationsActual: [],
-  committeeEvaluations: [],
-  assessmentSessions: []
+  evaluations_actual: [],
+  committee_evaluations: [],
+  assessment_sessions: []
 };
 
 // Helper function to get mock data or real data
 async function getData(collection, filters = {}) {
+  // Normalize collection name
+  const colMap = {
+    'qualityComponents': 'quality_components',
+    'evaluationsActual': 'evaluations_actual',
+    'committeeEvaluations': 'committee_evaluations',
+    'assessmentSessions': 'assessment_sessions'
+  };
+  const normalizedCollection = colMap[collection] || collection;
+
   if (db) {
     try {
-      let query = db.collection(collection);
-      
+      let query = db.collection(normalizedCollection);
+
       // Apply filters
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {
-          query = query.where(key, '==', value);
+          // Type handling for specific fields
+          let finalValue = value;
+          if (key === 'component_id' && typeof value === 'string' && !isNaN(value)) {
+            finalValue = Number(value);
+          }
+          query = query.where(key, '==', finalValue);
         }
       });
-      
+
       const snapshot = await query.get();
       return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
-      console.error(`Error fetching ${collection}:`, error);
-      return mockData[collection] || [];
+      console.error(`Error fetching ${normalizedCollection}:`, error);
+      return mockData[normalizedCollection] || [];
     }
   } else {
     // Return mock data
-    let data = mockData[collection] || [];
-    
+    let data = mockData[normalizedCollection] || [];
+
     // Apply filters to mock data
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null) {
-        data = data.filter(item => item[key] === value);
+        data = data.filter(item => {
+          // Flexible type comparison for mock data
+          return String(item[key]) === String(value);
+        });
       }
     });
-    
+
     return data;
   }
 }
 
 // Helper function to add data
 async function addData(collection, data) {
+  // Normalize collection name
+  const colMap = {
+    'qualityComponents': 'quality_components',
+    'evaluationsActual': 'evaluations_actual',
+    'committeeEvaluations': 'committee_evaluations',
+    'assessmentSessions': 'assessment_sessions'
+  };
+  const normalizedCollection = colMap[collection] || collection;
+
   if (db) {
     try {
-      const docRef = await db.collection(collection).add({
-        ...data,
+      // Ensure component_id is Number if present
+      const processedData = { ...data };
+      if (processedData.component_id !== undefined && !isNaN(processedData.component_id)) {
+        processedData.component_id = Number(processedData.component_id);
+      }
+
+      const docRef = await db.collection(normalizedCollection).add({
+        ...processedData,
         created_at: admin.firestore.FieldValue.serverTimestamp()
       });
       return { id: docRef.id, success: true };
     } catch (error) {
-      console.error(`Error adding to ${collection}:`, error);
+      console.error(`Error adding to ${normalizedCollection}:`, error);
       return { success: false, error: error.message };
     }
   } else {
@@ -286,14 +318,14 @@ app.get('/api/quality-components', async (req, res) => {
 app.post('/api/quality-components', async (req, res) => {
   try {
     const { quality_name, component_id, session_id, major_name } = req.body;
-    
+
     const result = await addData('qualityComponents', {
       quality_name,
       component_id: parseInt(component_id),
       session_id,
       major_name
     });
-    
+
     if (result.success) {
       res.json({ success: true, id: result.id });
     } else {
@@ -305,6 +337,43 @@ app.post('/api/quality-components', async (req, res) => {
   }
 });
 
+app.delete('/api/quality-components/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!db) return res.json({ success: true }); // Mock success
+
+    await db.collection('quality_components').doc(id).delete();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting quality component:', error);
+    res.status(500).json({ error: 'ไม่สามารถลบองค์ประกอบคุณภาพได้', details: error.message });
+  }
+});
+
+app.patch('/api/quality-components/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
+    delete updateData.id; // Don't include ID in update
+
+    if (!db) return res.json({ success: true }); // Mock success
+
+    // Ensure component_id is Number if present
+    if (updateData.component_id !== undefined && !isNaN(updateData.component_id)) {
+      updateData.component_id = Number(updateData.component_id);
+    }
+
+    await db.collection('quality_components').doc(id).update({
+      ...updateData,
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating quality component:', error);
+    res.status(500).json({ error: 'ไม่สามารถแก้ไของค์ประกอบคุณภาพได้', details: error.message });
+  }
+});
+
 // ================= INDICATORS =================
 app.get('/api/indicators', async (req, res) => {
   try {
@@ -312,8 +381,16 @@ app.get('/api/indicators', async (req, res) => {
     const filters = {};
     if (component_id) filters.component_id = component_id;
     if (major_name) filters.major_name = major_name;
-    
+
     const indicators = await getData('indicators', filters);
+
+    // Sort indicators by sequence numerically (e.g., 2.1 < 2.10)
+    indicators.sort((a, b) => {
+      const seqA = String(a.sequence || '');
+      const seqB = String(b.sequence || '');
+      return seqA.localeCompare(seqB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
     res.json(indicators);
   } catch (error) {
     console.error('Error fetching indicators:', error);
@@ -325,12 +402,19 @@ app.get('/api/indicators-by-component/:componentId', async (req, res) => {
   try {
     const { componentId } = req.params;
     const { session_id, major_name } = req.query;
-    
-    const indicators = await getData('indicators', { 
+
+    const indicators = await getData('indicators', {
       component_id: componentId,
-      major_name 
+      major_name
     });
-    
+
+    // Sort indicators by sequence numerically
+    indicators.sort((a, b) => {
+      const seqA = String(a.sequence || '');
+      const seqB = String(b.sequence || '');
+      return seqA.localeCompare(seqB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
     res.json(indicators);
   } catch (error) {
     console.error('Error fetching indicators by component:', error);
@@ -341,9 +425,9 @@ app.get('/api/indicators-by-component/:componentId', async (req, res) => {
 app.post('/api/indicators', async (req, res) => {
   try {
     const { component_id, sequence, indicator_type, criteria_type, indicator_name, data_source, session_id, major_name } = req.body;
-    
+
     const result = await addData('indicators', {
-      component_id,
+      component_id: parseInt(component_id),
       sequence,
       indicator_type,
       criteria_type,
@@ -352,7 +436,7 @@ app.post('/api/indicators', async (req, res) => {
       session_id,
       major_name
     });
-    
+
     if (result.success) {
       res.json({ success: true, id: result.id });
     } else {
@@ -361,6 +445,19 @@ app.post('/api/indicators', async (req, res) => {
   } catch (error) {
     console.error('Error creating indicator:', error);
     res.status(500).json({ error: 'ไม่สามารถสร้างตัวบ่งชี้ได้', details: error.message });
+  }
+});
+
+app.delete('/api/indicators/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!db) return res.json({ success: true });
+
+    await db.collection('indicators').doc(id).delete();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting indicator:', error);
+    res.status(500).json({ error: 'ไม่สามารถลบตัวบ่งชี้ได้', details: error.message });
   }
 });
 
@@ -381,6 +478,13 @@ app.get('/api/bulk/session-summary', async (req, res) => {
         getData('committeeEvaluations', { session_id, major_name }),
         getData('indicators', { major_name })
       ]);
+
+      // Sort indicators by sequence numerically
+      indicators.sort((a, b) => {
+        const seqA = String(a.sequence || '');
+        const seqB = String(b.sequence || '');
+        return seqA.localeCompare(seqB, undefined, { numeric: true, sensitivity: 'base' });
+      });
 
       return res.json({
         components,
@@ -434,17 +538,17 @@ app.get('/api/bulk/session-summary', async (req, res) => {
 app.post('/api/bulk/indicators', async (req, res) => {
   try {
     const { indicators } = req.body;
-    
+
     if (!Array.isArray(indicators)) {
       return res.status(400).json({ error: 'ข้อมูลตัวบ่งชี้ต้องเป็น array' });
     }
-    
+
     const results = [];
     for (const indicator of indicators) {
       const result = await addData('indicators', indicator);
       results.push(result);
     }
-    
+
     res.json({ success: true, results });
   } catch (error) {
     console.error('Error bulk creating indicators:', error);
@@ -456,7 +560,7 @@ app.post('/api/bulk/indicators', async (req, res) => {
 app.post('/api/assessment-sessions', async (req, res) => {
   try {
     const { level_id, faculty_id, faculty_name, major_id, major_name, evaluator_id } = req.body;
-    
+
     const result = await addData('assessmentSessions', {
       level_id,
       faculty_id,
@@ -465,7 +569,7 @@ app.post('/api/assessment-sessions', async (req, res) => {
       major_name,
       evaluator_id
     });
-    
+
     if (result.success) {
       res.json({ success: true, session_id: result.id });
     } else {
@@ -911,7 +1015,7 @@ app.post('/api/evaluations', upload.single('evidence_file'), async (req, res) =>
     };
 
     const result = await addData('evaluations', evaluationData);
-    
+
     if (result.success) {
       res.json({
         success: true,
@@ -930,12 +1034,12 @@ app.post('/api/evaluations', upload.single('evidence_file'), async (req, res) =>
 app.get('/api/evaluations', async (req, res) => {
   try {
     const { evaluator_id, program_id, year, component_id, session_id, major_name } = req.query;
-    
+
     const filters = {};
     if (session_id) filters.session_id = session_id;
     if (major_name) filters.major_name = major_name;
     if (evaluator_id) filters.evaluator_id = parseInt(evaluator_id);
-    
+
     const evaluations = await getData('evaluations', filters);
     res.json(evaluations);
   } catch (error) {
@@ -947,11 +1051,11 @@ app.get('/api/evaluations', async (req, res) => {
 app.get('/api/evaluations/history', async (req, res) => {
   try {
     const { session_id, major_name } = req.query;
-    
+
     const filters = {};
     if (session_id) filters.session_id = session_id;
     if (major_name) filters.major_name = major_name;
-    
+
     const evaluations = await getData('evaluations', filters);
     res.json(evaluations);
   } catch (error) {
@@ -1005,7 +1109,7 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
     };
 
     const result = await addData('evaluationsActual', evaluationData);
-    
+
     if (result.success) {
       res.json({
         success: true,
@@ -1024,11 +1128,11 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
 app.get('/api/evaluations-actual/history', async (req, res) => {
   try {
     const { session_id, major_name } = req.query;
-    
+
     const filters = {};
     if (session_id) filters.session_id = session_id;
     if (major_name) filters.major_name = major_name;
-    
+
     const evaluations = await getData('evaluationsActual', filters);
     res.json(evaluations);
   } catch (error) {
@@ -1052,7 +1156,7 @@ app.post('/api/committee-evaluations', async (req, res) => {
     };
 
     const result = await addData('committeeEvaluations', evaluationData);
-    
+
     if (result.success) {
       res.json({ success: true, id: result.id });
     } else {

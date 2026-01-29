@@ -50,12 +50,19 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
           setIndicators(indicatorsMap);
           setShowComponents(true);
         } else {
+          console.warn('API response not OK:', res.status, res.statusText);
+          // ใช้ข้อมูลเริ่มต้นเมื่อ API ไม่พร้อมใช้งาน
           setComponents([]);
+          setSessionData({ evaluations: [], evaluationsActual: [] });
+          setIndicators({});
           setShowComponents(true);
         }
       } catch (error) {
         console.error('Error fetching session data:', error);
+        // ใช้ข้อมูลเริ่มต้นเมื่อเกิดข้อผิดพลาด
         setComponents([]);
+        setSessionData({ evaluations: [], evaluationsActual: [] });
+        setIndicators({});
         setShowComponents(true);
       }
       setLoading(false);

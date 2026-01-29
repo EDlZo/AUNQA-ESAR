@@ -41,7 +41,7 @@ export default function IndicatorTable({
     const mainPart = pad2(mainNum);
     const sessionId = localStorage.getItem('assessment_session_id') || '';
     const sel = localStorage.getItem('selectedProgramContext');
-    const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
+    const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
 
     // 1) เพิ่มหัวข้อหลัก (บรรทัดหัว) ก่อน
     await fetch(`${BASE_URL}/api/indicators`, {
@@ -108,7 +108,7 @@ export default function IndicatorTable({
       let sessionId = localStorage.getItem('assessment_session_id') || '';
       const altId = sessionId && sessionId.length > 10 ? String(Math.floor(Number(sessionId) / 1000)) : '';
       const sel = localStorage.getItem('selectedProgramContext');
-      const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
+      const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
 
       let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
@@ -163,7 +163,7 @@ export default function IndicatorTable({
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const sel = localStorage.getItem('selectedProgramContext');
-      const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
+      const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
 
       // ลองหาใน session ปัจจุบันก่อน
@@ -199,7 +199,7 @@ export default function IndicatorTable({
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const sel = localStorage.getItem('selectedProgramContext');
-      const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
+      const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
       if (!selectedComponent?.id) { setEvaluationHistory([]); return; }
 
       const qs1 = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
@@ -282,8 +282,12 @@ export default function IndicatorTable({
         return;
       }
       // ตรวจซ้ำก่อนเพิ่ม (ลำดับหรือชื่อซ้ำ)
-      const dupBySeq = indicatorList.some(ind => String(ind.sequence) === String(indicatorSequence));
-      const dupByName = indicatorList.some(ind => String(ind.indicator_name || '').trim() === String(indicatorName).trim());
+      const dupBySeq = indicatorList.some(ind => String(ind.sequence).trim() === String(indicatorSequence).trim());
+      const dupByName = indicatorList.some(ind => {
+        const nameA = String(ind.indicator_name || ind.indicatorName || '').trim().toLowerCase();
+        const nameB = String(indicatorName).trim().toLowerCase();
+        return nameA === nameB;
+      });
       if (dupBySeq || dupByName) {
         setFlash({ message: 'เพิ่มตัวบ่งชี้นี้ไปแล้ว', type: 'error' });
         return;
@@ -300,46 +304,58 @@ export default function IndicatorTable({
     };
     try {
       if (mainMatch) {
+        // การทำงานเดิม (ยกเลิกการเพิ่มหัวข้อย่อยอัตโนมัติ 8 ข้อตามคำขอผู้ใช้)
+        // เราจะเพิ่มเฉพาะหัวข้อหลักที่ผู้ใช้เลือกเท่านั้น
+
         const mainCode = `AUN.${mainMatch[1]}`;
         const mainPart = pad2(mainMatch[1]);
-        // ตรวจซ้ำหัวข้อหลัก (ดูจาก sequence หัวข้อหลักหรือชื่อหัวข้อหลัก)
-        const existsMain = indicatorList.some(ind => String(ind.sequence) === mainPart || String(ind.indicator_name || '').trim() === String(indicatorName).trim());
+
+        // ตรวจซ้ำหัวข้อหลัก
+        const existsMain = indicatorList.some(ind => {
+          const nameA = String(ind.indicator_name || ind.indicatorName || '').trim().toLowerCase();
+          const nameB = String(indicatorName).trim().toLowerCase();
+          return String(ind.sequence) === mainPart || nameA === nameB;
+        });
+
         if (existsMain) {
-          setSuccessMsg('เพิ่มตัวบ่งชี้นี้ไปแล้ว');
+          setFlash({ message: 'เพิ่มตัวบ่งชี้นี้ไปแล้ว', type: 'error' });
           return;
         }
-        await seedIndicatorsForMainCode(mainCode);
-        // แจ้งให้หน้าพ่อ refresh เฉพาะรายการ โดยไม่ออกจากหน้า
-        if (typeof onAfterBulkAdded === 'function') {
-          try { await onAfterBulkAdded(selectedComponent); } catch { }
+
+        // ส่งให้ component แม่จัดการเพิ่มเฉพาะหัวข้อหลัก
+        if (typeof onAddIndicator === 'function') {
+          await onAddIndicator({
+            indicator_name: indicatorName,
+            sequence: mainPart,
+            indicator_type: indicatorType || 'ผลลัพธ์',
+            criteria_type: criteriaType || 'เชิงคุณภาพ',
+            data_source: dataSource || ''
+          });
+
+          setIndicatorSequence('');
+          setIndicatorName('');
+          setFlash({ message: 'เพิ่มตัวบ่งชี้เรียบร้อย', type: 'success' });
         }
-        setFlash({ message: 'เพิ่มตัวบ่งชี้เรียบร้อย', type: 'success' });
         return;
       }
-      // เรียก API เพิ่มตัวบ่งชี้
-      const res = await fetch(`${BASE_URL}/api/indicators`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newIndicator)
-      });
-      if (res.ok) {
-        setIndicatorSequence('');
-        setIndicatorType('');
-        setCriteriaType('');
-        setIndicatorName('');
-        setDataSource('');
-        setError('');
-        if (typeof onAddIndicator === 'function') {
-          const result = await res.json();
-          onAddIndicator(result.indicator, selectedComponent.id);
+      // เรียก API เพิ่มตัวบ่งชี้ ผ่าน prop onAddIndicator ของ component แม่ (DefineComponentSection)
+      if (typeof onAddIndicator === 'function') {
+        try {
+          await onAddIndicator(newIndicator);
+          // รีเซ็ตฟอร์มหลังจากสำเร็จ (Parent component จะจัดการ Refresh ข้อมูลเอง)
+          setIndicatorSequence('');
+          setIndicatorType('');
+          setCriteriaType('');
+          setIndicatorName('');
+          setDataSource('');
+          setError('');
+          setFlash({ message: 'เพิ่มตัวบ่งชี้เรียบร้อย', type: 'success' });
+        } catch (err) {
+          setError('เกิดข้อผิดพลาดในการบันทึกตัวบ่งชี้');
         }
-        setFlash({ message: 'เพิ่มตัวบ่งชี้เรียบร้อย', type: 'success' });
-      } else {
-        setError('บันทึกตัวบ่งชี้ไม่สำเร็จ');
       }
     } catch (err) {
-      setError('');
-      setFlash({ message: 'เพิ่มตัวบ่งชี้นี้ไปแล้ว', type: 'error' });
+      setError('เกิดข้อผิดพลาดในการบันทึกตัวบ่งชี้');
     }
   };
 
@@ -351,7 +367,7 @@ export default function IndicatorTable({
       try { localStorage.setItem('assessment_session_id', normalizedId); } catch { }
     }
     const sel = localStorage.getItem('selectedProgramContext');
-    const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
+    const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
 
     // เช็คว่าเคยประเมินแล้วหรือไม่
     const existingEvaluation = await fetchIndicatorEvaluation(assessIndicator.id);

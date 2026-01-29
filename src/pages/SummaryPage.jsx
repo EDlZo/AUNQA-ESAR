@@ -36,56 +36,72 @@ export default function SummaryPage({ currentUser }) {
       try {
         const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
         const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
-        if (!res.ok) throw new Error('Failed to fetch summary data');
+        
+        if (res.ok) {
+          const data = await res.json();
+          const {
+            components = [],
+            evaluations = [],
+            evaluations_actual = [],
+            committee_evaluations = [],
+            indicators = []
+          } = data;
 
-        const data = await res.json();
-        const {
-          components = [],
-          evaluations = [],
-          evaluations_actual = [],
-          committee_evaluations = [],
-          indicators = []
-        } = data;
+          setComponents(components);
+          setRows(evaluations_actual);
 
-        setComponents(components);
-        setRows(evaluations_actual);
+          // Map indicators (id -> detail)
+          const indMap = {};
+          indicators.forEach(ind => { indMap[ind.id] = ind; });
+          setIndicatorMap(indMap);
 
-        // Map indicators (id -> detail)
-        const indMap = {};
-        indicators.forEach(ind => { indMap[ind.id] = ind; });
-        setIndicatorMap(indMap);
+          // Map criteria (indicator_id -> target/score)
+          const critMap = {};
+          evaluations.forEach(r => {
+            critMap[String(r.indicator_id)] = { target_value: r.target_value || '', score: r.score || '' };
+          });
+          setCriteriaMap(critMap);
 
-        // Map criteria (indicator_id -> target/score)
-        const critMap = {};
-        evaluations.forEach(r => {
-          critMap[String(r.indicator_id)] = { target_value: r.target_value || '', score: r.score || '' };
-        });
-        setCriteriaMap(critMap);
+          // Map committee (indicator_id -> results)
+          const commMap = {};
+          committee_evaluations.forEach(r => {
+            commMap[String(r.indicator_id)] = {
+              committee_score: r.committee_score || '',
+              strengths: r.strengths || '',
+              improvements: r.improvements || ''
+            };
+          });
+          setCommitteeMap(commMap);
 
-        // Map committee (indicator_id -> results)
-        const commMap = {};
-        committee_evaluations.forEach(r => {
-          commMap[String(r.indicator_id)] = {
-            committee_score: r.committee_score || '',
-            strengths: r.strengths || '',
-            improvements: r.improvements || ''
-          };
-        });
-        setCommitteeMap(commMap);
-
-        // Count main indicators per component
-        const countMap = {};
-        components.forEach(comp => {
-          const mainCount = indicators.filter(ind =>
-            String(ind?.component_id) === String(comp.id) &&
-            !String(ind?.sequence ?? '').includes('.')
-          ).length;
-          countMap[comp.id] = mainCount;
-        });
-        setComponentIndicatorsCount(countMap);
-
+          // Count main indicators per component
+          const countMap = {};
+          components.forEach(comp => {
+            const mainCount = indicators.filter(ind =>
+              String(ind?.component_id) === String(comp.id) &&
+              !String(ind?.sequence ?? '').includes('.')
+            ).length;
+            countMap[comp.id] = mainCount;
+          });
+          setComponentIndicatorsCount(countMap);
+        } else {
+          console.warn('API response not OK:', res.status, res.statusText);
+          // ใช้ข้อมูลเริ่มต้นเมื่อ API ไม่พร้อมใช้งาน
+          setComponents([]);
+          setRows([]);
+          setIndicatorMap({});
+          setCriteriaMap({});
+          setCommitteeMap({});
+          setComponentIndicatorsCount({});
+        }
       } catch (err) {
         console.error('Error fetching comprehensive summary:', err);
+        // ใช้ข้อมูลเริ่มต้นเมื่อเกิดข้อผิดพลาด
+        setComponents([]);
+        setRows([]);
+        setIndicatorMap({});
+        setCriteriaMap({});
+        setCommitteeMap({});
+        setComponentIndicatorsCount({});
       } finally {
         setLoading(false);
       }

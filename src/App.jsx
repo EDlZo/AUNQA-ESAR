@@ -22,6 +22,7 @@ import DashboardContent from './components/DashboardContent';
 import DefineComponentSection from './components/Quality/DefineComponentSection';
 import ProgramSelection from './components/ProgramSelection';
 import AssessmentTablePage from './pages/AssessmentTablePage';
+import ConnectionStatus from './components/ConnectionStatus';
 
 
 export default function App() {
@@ -323,6 +324,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
+      <ConnectionStatus />
       <Header
         isMenuOpen={isMenuOpen}
         setIsMenuOpen={setIsMenuOpen}
