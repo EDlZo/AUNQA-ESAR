@@ -7,6 +7,8 @@ import IndicatorForm from '../IndicatorForm';
 import IndicatorTable from '../IndicatorTable';
 import InstructionsSection from '../InstructionsSection';
 import { AUNQA_SUBITEMS } from '../../templates/aunqa';
+import { BASE_URL } from '../../config/api.js';
+
 
 function pad2(n) {
   try { return String(parseInt(String(n), 10)).padStart(2, '0'); } catch { return '00'; }
@@ -20,7 +22,7 @@ async function seedIndicatorsForMainCode(mainCode, componentDbId, ctx) {
   for (let i = 0; i < subitems.length; i++) {
     const it = subitems[i];
     const sequence = `${mainPart}.${it.seq}`;
-    await fetch('http://localhost:3002/api/indicators', {
+    await fetch(`${BASE_URL}/api/indicators`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -33,7 +35,7 @@ async function seedIndicatorsForMainCode(mainCode, componentDbId, ctx) {
         session_id: ctx.session_id || '',
         major_name: ctx.major_name || ''
       })
-    }).catch(() => {});
+    }).catch(() => { });
   }
 }
 
@@ -73,10 +75,10 @@ export default function DefineComponentSection() {
             facultyName: parsed?.facultyName || '',
             majorName: parsed?.majorName || ''
           });
-        } catch {}
+        } catch { }
       }
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      fetch(`http://localhost:3002/api/quality-components?${qs}`)
+      fetch(`${BASE_URL}/api/quality-components?${qs}`)
         .then(res => res.json())
         .then(data => {
           setItems(data);
@@ -108,7 +110,7 @@ export default function DefineComponentSection() {
     })();
 
     const newItem = { componentId, qualityName, ...ctx };
-    const res = await fetch('http://localhost:3002/api/quality-components', {
+    const res = await fetch(`${BASE_URL}/api/quality-components`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newItem)
@@ -139,7 +141,7 @@ export default function DefineComponentSection() {
       } catch { return ''; }
     })();
 
-    const res = await fetch(`http://localhost:3002/api/quality-components/${id}?${ctxParams}`, { method: 'DELETE' });
+    const res = await fetch(`${BASE_URL}/api/quality-components/${id}?${ctxParams}`, { method: 'DELETE' });
     if (res.ok) {
       setItems(items.filter(item => item.id !== id));
     } else {
@@ -153,41 +155,41 @@ export default function DefineComponentSection() {
   };
 
   const handleSaveEdit = async (updatedItem) => {
-  try {
-    console.log('ส่งข้อมูลแก้ไขไปยัง backend:', updatedItem); // log ข้อมูลที่ส่ง
+    try {
+      console.log('ส่งข้อมูลแก้ไขไปยัง backend:', updatedItem); // log ข้อมูลที่ส่ง
 
-    const ctx = (() => {
-      try {
-        const sessionId = localStorage.getItem('assessment_session_id') || '';
-        const sel = localStorage.getItem('selectedProgramContext');
-        const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
-        return { session_id: sessionId, major_name: major };
-      } catch { return { session_id: '', major_name: '' }; }
-    })();
+      const ctx = (() => {
+        try {
+          const sessionId = localStorage.getItem('assessment_session_id') || '';
+          const sel = localStorage.getItem('selectedProgramContext');
+          const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
+          return { session_id: sessionId, major_name: major };
+        } catch { return { session_id: '', major_name: '' }; }
+      })();
 
-    const res = await fetch(`http://localhost:3002/api/quality-components/${updatedItem.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...updatedItem, ...ctx })
-    });
+      const res = await fetch(`${BASE_URL}/api/quality-components/${updatedItem.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updatedItem, ...ctx })
+      });
 
-    console.log('HTTP response status:', res.status); // log status code
+      console.log('HTTP response status:', res.status); // log status code
 
-    if (res.ok) {
-      const result = await res.json();
-      console.log('ผลลัพธ์จาก backend:', result); // log response body
-      setItems(prev => prev.map(it => it.id === updatedItem.id ? updatedItem : it));
-      setEditItem(null);
-    } else {
-      const errorText = await res.text(); // อ่านข้อความ error จาก server
-      console.error('แก้ไขข้อมูลไม่สำเร็จ:', errorText);
-      setError('แก้ไขข้อมูลไม่สำเร็จ');
+      if (res.ok) {
+        const result = await res.json();
+        console.log('ผลลัพธ์จาก backend:', result); // log response body
+        setItems(prev => prev.map(it => it.id === updatedItem.id ? updatedItem : it));
+        setEditItem(null);
+      } else {
+        const errorText = await res.text(); // อ่านข้อความ error จาก server
+        console.error('แก้ไขข้อมูลไม่สำเร็จ:', errorText);
+        setError('แก้ไขข้อมูลไม่สำเร็จ');
+      }
+    } catch (err) {
+      console.error('เกิดข้อผิดพลาดในการแก้ไขข้อมูล:', err);
+      setError('เกิดข้อผิดพลาดในการแก้ไขข้อมูล');
     }
-  } catch (err) {
-    console.error('เกิดข้อผิดพลาดในการแก้ไขข้อมูล:', err);
-    setError('เกิดข้อผิดพลาดในการแก้ไขข้อมูล');
-  }
-};
+  };
 
 
 
@@ -205,13 +207,13 @@ export default function DefineComponentSection() {
       const sel = localStorage.getItem('selectedProgramContext');
       const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      fetch(`http://localhost:3002/api/indicators-by-component/${selectedComponent.id}?${qs}`)
+      fetch(`${BASE_URL}/api/indicators-by-component/${selectedComponent.id}?${qs}`)
         .then(res => res.json())
         .then(async (data) => {
           setIndicators(prev => ({ ...prev, [selectedComponent.id]: data }));
           // ดึงประวัติการประเมินเพื่อทำเครื่องหมายสถานะหลังรีเฟรช
           try {
-            const history = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`).then(r=>r.json());
+            const history = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`).then(r => r.json());
             const map = {};
             if (Array.isArray(history)) {
               history.forEach(row => {
@@ -221,7 +223,7 @@ export default function DefineComponentSection() {
               });
             }
             setEvaluatedMap(map);
-          } catch {}
+          } catch { }
         })
         .catch(() => {
           setIndicators(prev => ({ ...prev, [selectedComponent.id]: [] }));
@@ -231,138 +233,138 @@ export default function DefineComponentSection() {
     }
   }, [selectedComponent, showIndicatorForm]);
 
-// ฟังก์ชันเพิ่มตัวบ่งชี้
-const handleAddIndicator = async (e) => {
-  e.preventDefault();
-  if (!selectedComponent || !indicatorName) return;
+  // ฟังก์ชันเพิ่มตัวบ่งชี้
+  const handleAddIndicator = async (e) => {
+    e.preventDefault();
+    if (!selectedComponent || !indicatorName) return;
 
-  const newIndicator = {
-    component_id: selectedComponent.id,
-    sequence: indicatorSequence,
-    indicator_type: indicatorType,
-    criteria_type: criteriaType,
-    indicator_name: indicatorName,
-    data_source: dataSource
-  };
+    const newIndicator = {
+      component_id: selectedComponent.id,
+      sequence: indicatorSequence,
+      indicator_type: indicatorType,
+      criteria_type: criteriaType,
+      indicator_name: indicatorName,
+      data_source: dataSource
+    };
 
-  try {
-    const ctx = (() => {
-      try {
-        const sessionId = localStorage.getItem('assessment_session_id') || '';
-        const sel = localStorage.getItem('selectedProgramContext');
-        const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
-        return { session_id: sessionId, major_name: major };
-      } catch { return { session_id: '', major_name: '' }; }
-    })();
+    try {
+      const ctx = (() => {
+        try {
+          const sessionId = localStorage.getItem('assessment_session_id') || '';
+          const sel = localStorage.getItem('selectedProgramContext');
+          const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
+          return { session_id: sessionId, major_name: major };
+        } catch { return { session_id: '', major_name: '' }; }
+      })();
 
-    // ถ้าเป็นการเพิ่ม "หัวข้อตัวบ่งชี้หลัก" เช่น AUN.1 ...
-    const mainMatch = String(indicatorName).match(/^\s*AUN\.(\d+)\b/i);
-    if (mainMatch) {
-      const mainNum = mainMatch[1];
-      const mainCode = `AUN.${mainNum}`;
-      const mainSeq = pad2(mainNum); // เช่น "01"
+      // ถ้าเป็นการเพิ่ม "หัวข้อตัวบ่งชี้หลัก" เช่น AUN.1 ...
+      const mainMatch = String(indicatorName).match(/^\s*AUN\.(\d+)\b/i);
+      if (mainMatch) {
+        const mainNum = mainMatch[1];
+        const mainCode = `AUN.${mainNum}`;
+        const mainSeq = pad2(mainNum); // เช่น "01"
 
-      // 1) เพิ่มแถวหัวข้อตัวบ่งชี้หลักเป็นหัวตาราง
-      await fetch('http://localhost:3002/api/indicators', {
+        // 1) เพิ่มแถวหัวข้อตัวบ่งชี้หลักเป็นหัวตาราง
+        await fetch(`${BASE_URL}/api/indicators`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            component_id: selectedComponent.id,
+            sequence: mainSeq,            // หัวข้อหลักใช้เลขสองหลัก
+            indicator_type: newIndicator.indicator_type || 'ผลลัพธ์',
+            criteria_type: newIndicator.criteria_type || 'เชิงคุณภาพ',
+            indicator_name: indicatorName,
+            data_source: newIndicator.data_source || '',
+            ...ctx
+          })
+        }).catch(() => { });
+
+        // 2) เพิ่มหัวข้อย่อยทั้งหมดตามเทมเพลต
+        await seedIndicatorsForMainCode(mainCode, selectedComponent.id, ctx);
+
+        // 3) รีเฟรชรายการตัวบ่งชี้
+        const qsRef = new URLSearchParams({ session_id: ctx.session_id || '', major_name: ctx.major_name || '' }).toString();
+        const refreshed = await fetch(`${BASE_URL}/api/indicators-by-component/${selectedComponent.id}?${qsRef}`).then(r => r.json()).catch(() => []);
+        setIndicators(prev => ({ ...prev, [selectedComponent.id]: Array.isArray(refreshed) ? refreshed : [] }));
+
+        // reset ฟอร์ม
+        setShowIndicatorForm(false);
+        setIndicatorName('');
+        setIndicatorType('');
+        setCriteriaType('');
+        setDataSource('');
+        setIndicatorSequence('');
+        return;
+      }
+
+      // เพิ่มตัวบ่งชี้ทั่วไป (ไม่ใช่หัวข้อหลัก)
+      const res = await fetch(`${BASE_URL}/api/indicators`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          component_id: selectedComponent.id,
-          sequence: mainSeq,            // หัวข้อหลักใช้เลขสองหลัก
-          indicator_type: newIndicator.indicator_type || 'ผลลัพธ์',
-          criteria_type: newIndicator.criteria_type || 'เชิงคุณภาพ',
-          indicator_name: indicatorName,
-          data_source: newIndicator.data_source || '',
-          ...ctx
-        })
-      }).catch(() => {});
+        body: JSON.stringify({ ...newIndicator, ...ctx })
+      });
 
-      // 2) เพิ่มหัวข้อย่อยทั้งหมดตามเทมเพลต
-      await seedIndicatorsForMainCode(mainCode, selectedComponent.id, ctx);
-
-      // 3) รีเฟรชรายการตัวบ่งชี้
-      const qsRef = new URLSearchParams({ session_id: ctx.session_id || '', major_name: ctx.major_name || '' }).toString();
-      const refreshed = await fetch(`http://localhost:3002/api/indicators-by-component/${selectedComponent.id}?${qsRef}`).then(r=>r.json()).catch(()=>[]);
-      setIndicators(prev => ({ ...prev, [selectedComponent.id]: Array.isArray(refreshed) ? refreshed : [] }));
-
-      // reset ฟอร์ม
-      setShowIndicatorForm(false);
-      setIndicatorName('');
-      setIndicatorType('');
-      setCriteriaType('');
-      setDataSource('');
-      setIndicatorSequence('');
-      return;
+      if (res.ok) {
+        const result = await res.json();
+        setIndicators(prev => ({
+          ...prev,
+          [selectedComponent.id]: [...(prev[selectedComponent.id] || []), {
+            ...newIndicator,
+            id: result.id
+          }]
+        }));
+        // รีเซ็ตฟอร์ม
+        setShowIndicatorForm(false);
+        setIndicatorName('');
+        setIndicatorType('');
+        setCriteriaType('');
+        setDataSource('');
+        setIndicatorSequence('');
+      } else {
+        setError('บันทึกตัวบ่งชี้ไม่สำเร็จ');
+      }
+    } catch (err) {
+      setError('เกิดข้อผิดพลาดในการบันทึกตัวบ่งชี้');
     }
+  };
 
-    // เพิ่มตัวบ่งชี้ทั่วไป (ไม่ใช่หัวข้อหลัก)
-    const res = await fetch('http://localhost:3002/api/indicators', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...newIndicator, ...ctx })
-    });
+  // ฟังก์ชันลบตัวบ่งชี้
+  const handleDeleteIndicator = async (indicatorId, componentId) => {
+    if (!window.confirm('ยืนยันการลบตัวบ่งชี้นี้?')) return;
 
-    if (res.ok) {
-      const result = await res.json();
-      setIndicators(prev => ({
-        ...prev,
-        [selectedComponent.id]: [...(prev[selectedComponent.id] || []), {
-          ...newIndicator,
-          id: result.id
-        }]
-      }));
-      // รีเซ็ตฟอร์ม
-      setShowIndicatorForm(false);
-      setIndicatorName('');
-      setIndicatorType('');
-      setCriteriaType('');
-      setDataSource('');
-      setIndicatorSequence('');
-    } else {
-      setError('บันทึกตัวบ่งชี้ไม่สำเร็จ');
+    try {
+      const ctxParams = (() => {
+        try {
+          const sessionId = localStorage.getItem('assessment_session_id') || '';
+          const sel = localStorage.getItem('selectedProgramContext');
+          const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
+          return new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
+        } catch { return ''; }
+      })();
+      const res = await fetch(`${BASE_URL}/api/indicators/${indicatorId}?${ctxParams}`, { method: 'DELETE' });
+      if (res.ok) {
+        setIndicators(prev => ({
+          ...prev,
+          [componentId]: prev[componentId].filter(ind => ind.id !== indicatorId)
+        }));
+      } else {
+        setError('ลบตัวบ่งชี้ไม่สำเร็จ');
+      }
+    } catch (err) {
+      setError('เกิดข้อผิดพลาดในการลบตัวบ่งชี้');
     }
-  } catch (err) {
-    setError('เกิดข้อผิดพลาดในการบันทึกตัวบ่งชี้');
-  }
-};
+  };
 
-// ฟังก์ชันลบตัวบ่งชี้
-const handleDeleteIndicator = async (indicatorId, componentId) => {
-  if (!window.confirm('ยืนยันการลบตัวบ่งชี้นี้?')) return;
-
-  try {
-    const ctxParams = (() => {
-      try {
-        const sessionId = localStorage.getItem('assessment_session_id') || '';
-        const sel = localStorage.getItem('selectedProgramContext');
-        const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
-        return new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      } catch { return ''; }
-    })();
-    const res = await fetch(`http://localhost:3002/api/indicators/${indicatorId}?${ctxParams}`, { method: 'DELETE' });
-    if (res.ok) {     
-      setIndicators(prev => ({
-        ...prev,
-        [componentId]: prev[componentId].filter(ind => ind.id !== indicatorId)
-      }));
-    } else {
-      setError('ลบตัวบ่งชี้ไม่สำเร็จ');
-    }
-  } catch (err) {
-    setError('เกิดข้อผิดพลาดในการลบตัวบ่งชี้');
-  }
-};
-
-// ฟังก์ชันแก้ไขตัวบ่งชี้ (เปิดฟอร์มแก้ไข)
-const handleEditIndicator = (indicator) => {
-  setSelectedIndicator(indicator);
-  setIndicatorSequence(indicator.sequence);
-  setIndicatorType(indicator.indicator_type);
-  setCriteriaType(indicator.criteria_type);
-  setIndicatorName(indicator.indicator_name);
-  setDataSource(indicator.data_source);
-  setShowIndicatorForm(true);
-};
+  // ฟังก์ชันแก้ไขตัวบ่งชี้ (เปิดฟอร์มแก้ไข)
+  const handleEditIndicator = (indicator) => {
+    setSelectedIndicator(indicator);
+    setIndicatorSequence(indicator.sequence);
+    setIndicatorType(indicator.indicator_type);
+    setCriteriaType(indicator.criteria_type);
+    setIndicatorName(indicator.indicator_name);
+    setDataSource(indicator.data_source);
+    setShowIndicatorForm(true);
+  };
 
   // ฟังก์ชันเปิด/ปิดฟอร์ม
   const openAddForm = () => setShowAddForm(true);
@@ -423,16 +425,16 @@ const handleEditIndicator = (indicator) => {
               const sel = localStorage.getItem('selectedProgramContext');
               const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
               const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-              const refreshed = await fetch(`http://localhost:3002/api/indicators-by-component/${selectedComponent.id}?${qs}`).then(r=>r.json()).catch(()=>[]);
+              const refreshed = await fetch(`${BASE_URL}/api/indicators-by-component/${selectedComponent.id}?${qs}`).then(r => r.json()).catch(() => []);
               setIndicators(prev => ({ ...prev, [selectedComponent.id]: Array.isArray(refreshed) ? refreshed : [] }));
               // refresh evaluated map as well
-              const history = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`).then(r=>r.json()).catch(()=>[]);
+              const history = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`).then(r => r.json()).catch(() => []);
               const map = {};
               if (Array.isArray(history)) {
                 history.forEach(row => { if (row.indicator_id && row.session_id == sessionId) map[row.indicator_id] = true; });
               }
               setEvaluatedMap(map);
-            } catch {}
+            } catch { }
           }}
           onAssessingChange={setIsAssessing}
           evaluatedMap={evaluatedMap}

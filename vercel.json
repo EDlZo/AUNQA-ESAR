@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server-firebase.cjs",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/server-firebase.cjs"
+    },
+    {
+      "src": "/uploads/(.*)",
+      "dest": "/server-firebase.cjs"
+    },
+    {
+      "src": "/(.*\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot))",
+      "dest": "/dist/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/dist/index.html"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "server-firebase.cjs": {
+      "maxDuration": 30
+    }
+  }
+}

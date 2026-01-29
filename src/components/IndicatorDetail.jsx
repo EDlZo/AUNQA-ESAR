@@ -1,6 +1,8 @@
 // src/pages/IndicatorDetail.jsx
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { BASE_URL } from '../config/api.js';
+
 
 export default function IndicatorDetail() {
   const { componentId } = useParams();
@@ -8,7 +10,7 @@ export default function IndicatorDetail() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch(`http://localhost:3002/api/indicators-by-component/${componentId}`)
+    fetch(`${BASE_URL}/api/indicators-by-component/${componentId}`)
       .then(res => res.json())
       .then(data => setIndicators(data))
       .catch(() => setError('ไม่สามารถโหลดตัวบ่งชี้ได้'));

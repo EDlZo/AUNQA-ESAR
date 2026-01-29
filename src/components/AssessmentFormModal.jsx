@@ -1,5 +1,7 @@
 // src/components/AssessmentFormModal.jsx
 import React, { useState, useEffect } from 'react';
+import { BASE_URL } from '../config/api.js';
+
 
 export default function AssessmentFormModal({ indicator, selectedProgram, onComplete, onCancel }) {
   const [targetValue, setTargetValue] = useState('');
@@ -23,8 +25,8 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
       const altId = sessionId && sessionId.length > 10 ? String(Math.floor(Number(sessionId) / 1000)) : '';
       const major = selectedProgram?.majorName || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      
-      let res = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`);
+
+      let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
       if (res.ok) {
         let evaluations = await res.json();
         let list = (Array.isArray(evaluations) ? evaluations : []).filter(ev => !sessionId || String(ev.session_id) === String(sessionId));
@@ -33,12 +35,12 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
           list = (Array.isArray(evaluations) ? evaluations : []).filter(ev => String(ev.session_id) === altId);
           if (list.length > 0) {
             sessionId = altId;
-            try { localStorage.setItem('assessment_session_id', altId); } catch {}
+            try { localStorage.setItem('assessment_session_id', altId); } catch { }
           }
         }
         let evaluation = list.find(ev => String(ev.indicator_id) === String(indicator.id));
         if (!evaluation) {
-          const resLegacy = await fetch(`http://localhost:3002/api/evaluations/history?${new URLSearchParams({ session_id: '2147483647', major_name: major }).toString()}`);
+          const resLegacy = await fetch(`${BASE_URL}/api/evaluations/history?${new URLSearchParams({ session_id: '2147483647', major_name: major }).toString()}`);
           if (resLegacy.ok) {
             const rows = await resLegacy.json();
             evaluation = (Array.isArray(rows) ? rows : []).find(ev => String(ev.indicator_id) === String(indicator.id));
@@ -61,19 +63,19 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
       const altId = sessionId && sessionId.length > 10 ? String(Math.floor(Number(sessionId) / 1000)) : '';
       const major = selectedProgram?.majorName || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      
-      let res = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`);
+
+      let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
       if (res.ok) {
         let evaluations = await res.json();
         let filtered = (Array.isArray(evaluations) ? evaluations : []).filter(ev => !sessionId || String(ev.session_id) === String(sessionId));
         if (filtered.length === 0 && altId) {
           filtered = (Array.isArray(evaluations) ? evaluations : []).filter(ev => String(ev.session_id) === altId);
           if (filtered.length > 0) {
-            try { localStorage.setItem('assessment_session_id', altId); } catch {}
+            try { localStorage.setItem('assessment_session_id', altId); } catch { }
           }
         }
         if (filtered.length === 0) {
-          const resLegacy = await fetch(`http://localhost:3002/api/evaluations/history?${new URLSearchParams({ session_id: '2147483647', major_name: major }).toString()}`);
+          const resLegacy = await fetch(`${BASE_URL}/api/evaluations/history?${new URLSearchParams({ session_id: '2147483647', major_name: major }).toString()}`);
           if (resLegacy.ok) filtered = await resLegacy.json();
         }
         const history = (Array.isArray(filtered) ? filtered : [])
@@ -93,7 +95,7 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram?.majorName || '';
-      
+
       const formData = new FormData();
       formData.append('session_id', sessionId);
       formData.append('indicator_id', indicator.id);
@@ -102,12 +104,12 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
       formData.append('comment', comment);
       formData.append('status', 'submitted');
       formData.append('major_name', major);
-      
+
       if (evidenceFile) {
         formData.append('evidence_file', evidenceFile);
       }
 
-      const res = await fetch('http://localhost:3002/api/evaluations', {
+      const res = await fetch(`${BASE_URL}/api/evaluations`, {
         method: 'POST',
         body: formData
       });

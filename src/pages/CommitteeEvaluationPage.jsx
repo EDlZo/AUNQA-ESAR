@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { GraduationCap, ClipboardCheck } from 'lucide-react';
 import ProgramSelection from '../components/ProgramSelection.jsx';
+import { BASE_URL } from '../config/api.js';
+
 // import CommitteeEvaluationModal from '../components/CommitteeEvaluationModal.jsx';
 
 export default function CommitteeEvaluationPage({ currentUser }) {
@@ -45,7 +47,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
       const countMap = {};
       for (const comp of components) {
         try {
-          const res = await fetch(`http://localhost:3002/api/indicators-by-component/${encodeURIComponent(comp.id)}?session_id=${sessionId}&major_name=${encodeURIComponent(major)}`);
+          const res = await fetch(`${BASE_URL}/api/indicators-by-component/${encodeURIComponent(comp.id)}?session_id=${sessionId}&major_name=${encodeURIComponent(major)}`);
           const inds = res.ok ? await res.json() : [];
           const mainCount = (Array.isArray(inds) ? inds : []).filter(ind => !String(ind?.sequence ?? '').includes('.')).length;
           countMap[comp.id] = mainCount;
@@ -74,7 +76,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram.majorName || selectedProgram.major_name;
-      const response = await fetch(`http://localhost:3002/api/quality-components?major_name=${encodeURIComponent(major)}&session_id=${sessionId}`);
+      const response = await fetch(`${BASE_URL}/api/quality-components?major_name=${encodeURIComponent(major)}&session_id=${sessionId}`);
       if (response.ok) {
         const data = await response.json();
         setComponents(data);
@@ -92,7 +94,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram.majorName || selectedProgram.major_name;
-      const response = await fetch(`http://localhost:3002/api/indicators?major_name=${encodeURIComponent(major)}&session_id=${sessionId}`);
+      const response = await fetch(`${BASE_URL}/api/indicators?major_name=${encodeURIComponent(major)}&session_id=${sessionId}`);
       if (response.ok) {
         const data = await response.json();
         setViewIndicators(data);
@@ -110,14 +112,14 @@ export default function CommitteeEvaluationPage({ currentUser }) {
       const major = selectedProgram.majorName || selectedProgram.major_name;
 
       // โหลดข้อมูล evaluations_actual
-      const actualResponse = await fetch(`http://localhost:3002/api/evaluations-actual/history?session_id=${sessionId}&major_name=${major}`);
+      const actualResponse = await fetch(`${BASE_URL}/api/evaluations-actual/history?session_id=${sessionId}&major_name=${major}`);
       if (actualResponse.ok) {
         const actualData = await actualResponse.json();
         setRows(Array.isArray(actualData) ? actualData : []);
       }
 
       // โหลดข้อมูลเกณฑ์ (target, score)
-      const criteriaResponse = await fetch(`http://localhost:3002/api/evaluations/history?session_id=${sessionId}&major_name=${major}`);
+      const criteriaResponse = await fetch(`${BASE_URL}/api/evaluations/history?session_id=${sessionId}&major_name=${major}`);
       if (criteriaResponse.ok) {
         const criteriaData = await criteriaResponse.json();
         const map = {};
@@ -128,7 +130,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
       }
 
       // โหลดข้อมูลกรรมการประเมิน
-      const committeeResponse = await fetch(`http://localhost:3002/api/committee-evaluations?session_id=${sessionId}&major_name=${major}`);
+      const committeeResponse = await fetch(`${BASE_URL}/api/committee-evaluations?session_id=${sessionId}&major_name=${major}`);
       if (committeeResponse.ok) {
         const committeeData = await committeeResponse.json();
         const map = {};
@@ -154,7 +156,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
       const major = selectedProgram.majorName || selectedProgram.major_name;
       // ใช้ endpoint เดียวกับหน้า "สรุปผลการดำเนินการ" เพื่อดึงตัวบ่งชี้ตามองค์ประกอบ
       const response = await fetch(
-        `http://localhost:3002/api/indicators-by-component/${encodeURIComponent(component.id)}?session_id=${sessionId}&major_name=${encodeURIComponent(major)}`
+        `${BASE_URL}/api/indicators-by-component/${encodeURIComponent(component.id)}?session_id=${sessionId}&major_name=${encodeURIComponent(major)}`
       );
       if (response.ok) {
         const data = await response.json();
@@ -200,7 +202,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
         strengths: editorStrengths,
         improvements: editorImprovements,
       };
-      const res = await fetch('http://localhost:3002/api/committee-evaluations', {
+      const res = await fetch(`${BASE_URL}/api/committee-evaluations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -265,7 +267,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
             <tbody className="bg-white divide-y divide-gray-200">
               {evidenceFiles.map((filename, index) => {
                 const fileMeta = evidenceMeta[filename] || {};
-                const evidenceNumber = fileMeta.number || `${index + 1}`;
+                const evidenceNumber = fileMeta.number || (index + 1).toString();
                 const evidenceName = fileMeta.name || latest?.evidence_name || filename;
                 return (
                   <tr key={index} className="hover:bg-gray-50">
@@ -275,7 +277,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                       {filename.startsWith('url_') ? (
                         <a href={fileMeta.url || latest?.evidence_url || '#'} target="_blank" rel="noreferrer" className="text-green-600 hover:text-green-800 underline cursor-pointer">URL: เปิดลิงก์</a>
                       ) : (
-                        <a href={`http://localhost:3002/api/view/${encodeURIComponent(filename)}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 underline cursor-pointer">ไฟล์: เปิดไฟล์</a>
+                        <a href={`${BASE_URL}/api/view/${encodeURIComponent(filename)}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 underline cursor-pointer">ไฟล์: เปิดไฟล์</a>
                       )}
                     </td>
                   </tr>

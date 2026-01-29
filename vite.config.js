@@ -4,17 +4,31 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(),tailwindcss()],
+  plugins: [react(), tailwindcss()],
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:3002', // Firebase server
         changeOrigin: true
       },
       '/uploads': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:3002', // Firebase server
         changeOrigin: true
       }
     }
-  }
+  },
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          firebase: ['firebase', 'firebase-admin']
+        }
+      }
+    }
+  },
+  publicDir: 'public'
 })

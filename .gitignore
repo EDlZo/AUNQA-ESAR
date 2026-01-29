@@ -25,6 +25,7 @@ dist-ssr
 
 # Firebase
 firebase-service-account.json
+firebase-service-account-prod.json
 .firebase/
 firebase-debug.log
 
@@ -32,3 +33,13 @@ firebase-debug.log
 .env
 .env.local
 .env.production
+.env.staging
+
+# Uploads
+uploads/*
+!uploads/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

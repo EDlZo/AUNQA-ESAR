@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import AssessmentFormModal from './AssessmentFormModal';
 import EvaluationFormModal from './EvaluationFormModal';
+import { BASE_URL } from '../config/api.js';
+
 
 export default function AssessmentTable({ selectedComponent, indicators, selectedProgram, mode = 'criteria', onBack }) {
   const [evaluatedIndicators, setEvaluatedIndicators] = useState(new Set());
@@ -28,8 +30,8 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
 
       // ใช้ endpoint ให้ตรงกับโหมด
       const endpoint = mode === 'evaluation'
-        ? 'http://localhost:3002/api/evaluations-actual/history'
-        : 'http://localhost:3002/api/evaluations/history';
+        ? `${BASE_URL}/api/evaluations-actual/history`
+        : `${BASE_URL}/api/evaluations/history`;
       let res = await fetch(`${endpoint}?${qs}`);
       if (res.ok) {
         let evaluations = await res.json();
@@ -74,7 +76,7 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram?.majorName || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      let res = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`);
+      let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
       if (res.ok) {
         let rows = await res.json();
         let list = (Array.isArray(rows) ? rows : []).filter(ev => !sessionId || String(ev.session_id) === String(sessionId));
@@ -165,8 +167,8 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
       {/* Flash Message */}
       {flash.message && (
         <div className={`mx-6 mt-4 rounded-md px-4 py-2 border ${flash.type === 'success'
-            ? 'bg-green-50 border-green-200 text-green-800'
-            : 'bg-red-50 border-red-200 text-red-800'
+          ? 'bg-green-50 border-green-200 text-green-800'
+          : 'bg-red-50 border-red-200 text-red-800'
           }`}>
           {flash.message}
           <button
@@ -252,8 +254,8 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
                     <button
                       onClick={() => handleAssessClick(indicator)}
                       className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white transition-colors whitespace-nowrap ${mode === 'evaluation'
-                          ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
-                          : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
+                        ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+                        : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
                         } focus:outline-none focus:ring-2 focus:ring-offset-2`}
                     >
                       {mode === 'evaluation'

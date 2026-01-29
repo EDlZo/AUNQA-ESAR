@@ -57,7 +57,7 @@ export default function Header({
             <div className="p-1.5 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100">
               {logoOk ? (
                 <img
-                  src="/src/image/rmutsv-logo.png"
+                  src="/rmutsv-logo.png"
                   alt="RMUTSV Logo"
                   className="w-7 h-7 object-contain"
                   onError={() => setLogoOk(false)}

@@ -1,14 +1,16 @@
 // src/components/Quality/AddQualityForm.jsx
 import React, { useState, useEffect } from 'react';
+import { BASE_URL } from '../../config/api.js';
 
-export default function AddQualityForm({ 
-  qualityName, 
+
+export default function AddQualityForm({
+  qualityName,
   componentId,
   setComponentId,
-  setQualityName, 
-  onSubmit, 
-  onCancel, 
-  error 
+  setQualityName,
+  onSubmit,
+  onCancel,
+  error
 }) {
   const [components, setComponents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,7 +26,7 @@ export default function AddQualityForm({
       const sel = localStorage.getItem('selectedProgramContext');
       const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      const response = await fetch(`http://localhost:3002/api/quality-components?${qs}`);
+      const response = await fetch(`${BASE_URL}/api/quality-components?${qs}`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -47,7 +49,7 @@ export default function AddQualityForm({
   useEffect(() => {
     // ตรวจสอบว่ามีข้อมูลในหน่วยความจำหรือไม่
     const cachedComponents = sessionStorage.getItem('existingComponents');
-    
+
     if (cachedComponents) {
       // ใช้ข้อมูลจากหน่วยความจำ
       setComponents(JSON.parse(cachedComponents));
@@ -57,7 +59,7 @@ export default function AddQualityForm({
       fetchComponents(true);
     }
   }, []);
-  
+
   // ฟังก์ชันสำหรับรีเฟรชข้อมูล
   const handleRefresh = () => {
     setRefreshing(true);
@@ -68,11 +70,11 @@ export default function AddQualityForm({
   const handleComponentChange = (e) => {
     const selectedId = e.target.value;
     setComponentId(selectedId);
-    
+
     // หาองค์ประกอบที่เลือก
     const comp = components.find(comp => comp.id == selectedId);
     setSelectedComponent(comp);
-    
+
     if (comp) {
       setQualityName(comp.quality_name || '');
     } else {
@@ -86,20 +88,20 @@ export default function AddQualityForm({
       // ตรวจสอบว่าเป็น string และไม่ใช่ค่าว่าง
       const aId = String(a.component_id || '').trim();
       const bId = String(b.component_id || '').trim();
-      
+
       // ถ้ามีค่าว่างให้ย้ายไปไว้ด้านหลัง
       if (!aId) return 1;
       if (!bId) return -1;
-      
+
       // แยกส่วนของตัวเลข
       const aParts = aId.split('.').map(Number);
       const bParts = bId.split('.').map(Number);
-      
+
       // เปรียบเทียบทีละส่วน
       for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
         const aPart = isNaN(aParts[i]) ? 0 : aParts[i];
         const bPart = isNaN(bParts[i]) ? 0 : bParts[i];
-        
+
         if (aPart !== bPart) {
           return aPart - bPart;
         }
@@ -121,9 +123,9 @@ export default function AddQualityForm({
         </div>
         <h2 className="text-2xl font-semibold text-gray-900 mb-2">เพิ่มองค์ประกอบคุณภาพ</h2>
         <p className="text-gray-600">กรอกข้อมูลองค์ประกอบคุณภาพใหม่</p>
-        <button 
-          type="button" 
-          onClick={handleRefresh} 
+        <button
+          type="button"
+          onClick={handleRefresh}
           className="mt-2 inline-flex items-center px-3 py-1 border border-transparent text-sm leading-4 font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           disabled={refreshing}
         >
@@ -153,7 +155,7 @@ export default function AddQualityForm({
       )}
 
       <form onSubmit={onSubmit} className="space-y-6">
-          <div>
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             องค์ประกอบ
           </label>
@@ -172,8 +174,8 @@ export default function AddQualityForm({
                   .filter(item => item.component_id) // กรองเฉพาะรายการที่มี component_id
                   .sort(sortComponents)
                   .map((item) => (
-                    <option 
-                      key={item.id} 
+                    <option
+                      key={item.id}
                       value={item.id}
                     >
                       {item.component_id} {item.quality_name ? `- ${item.quality_name}` : ''}

@@ -9,6 +9,8 @@ import {
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { generateAssessmentPDF, downloadPDF } from '../utils/pdfGenerator';
+import { BASE_URL } from '../config/api.js';
+
 
 export default function ReportsPage() {
   const navigate = useNavigate();

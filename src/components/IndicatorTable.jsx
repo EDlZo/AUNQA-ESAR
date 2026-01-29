@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { AUNQA_SUBITEMS } from '../templates/aunqa';
 import IndicatorForm from './IndicatorForm';
+import { BASE_URL } from '../config/api.js';
 
-export default function IndicatorTable({ 
-  selectedComponent, 
-  indicators, 
-  onEditClick, 
+
+export default function IndicatorTable({
+  selectedComponent,
+  indicators,
+  onEditClick,
   onDeleteClick,
   onAddIndicator, // เพิ่ม prop สำหรับ handle การเพิ่มตัวบ่งชี้ (optional)
   onAfterBulkAdded,
@@ -41,7 +43,7 @@ export default function IndicatorTable({
     const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
 
     // 1) เพิ่มหัวข้อหลัก (บรรทัดหัว) ก่อน
-    await fetch('http://localhost:3002/api/indicators', {
+    await fetch(`${BASE_URL}/api/indicators`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -54,13 +56,13 @@ export default function IndicatorTable({
         session_id: sessionId,
         major_name: major
       })
-    }).catch(() => {});
+    }).catch(() => { });
 
     // 2) เพิ่มหัวข้อย่อยตามเทมเพลต
     const list = AUNQA_SUBITEMS[mainCode] || [];
     for (let i = 0; i < list.length; i++) {
       const it = list[i];
-      await fetch('http://localhost:3002/api/indicators', {
+      await fetch(`${BASE_URL}/api/indicators`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -73,7 +75,7 @@ export default function IndicatorTable({
           session_id: sessionId,
           major_name: major
         })
-      }).catch(() => {});
+      }).catch(() => { });
     }
   };
 
@@ -107,8 +109,8 @@ export default function IndicatorTable({
       const sel = localStorage.getItem('selectedProgramContext');
       const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      
-      let res = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`);
+
+      let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
       if (res.ok) {
         let evaluations = await res.json();
         // กรองเฉพาะของ session ปัจจุบัน และสถานะที่ส่งแล้ว
@@ -119,14 +121,14 @@ export default function IndicatorTable({
           list = (Array.isArray(evaluations) ? evaluations : [])
             .filter(ev => String(ev.session_id) === altId && (ev.status ? String(ev.status).toLowerCase() === 'submitted' : true));
           if (list.length > 0) {
-            try { localStorage.setItem('assessment_session_id', altId); } catch {}
+            try { localStorage.setItem('assessment_session_id', altId); } catch { }
           }
         }
         let evaluatedIds = new Set(list.map(ev => String(ev.indicator_id)));
         // ถ้ายังว่าง ลองดึงผ่าน endpoint component_id เฉพาะ component ปัจจุบัน
         if (evaluatedIds.size === 0 && selectedComponent?.id) {
           const qs2 = new URLSearchParams({ component_id: selectedComponent.id, session_id: sessionId, major_name: major }).toString();
-          const res2 = await fetch(`http://localhost:3002/api/evaluations?${qs2}`);
+          const res2 = await fetch(`${BASE_URL}/api/evaluations?${qs2}`);
           if (res2.ok) {
             const rows = await res2.json();
             evaluatedIds = new Set((Array.isArray(rows) ? rows : []).map(r => String(r.indicator_id)));
@@ -135,7 +137,7 @@ export default function IndicatorTable({
         // ถ้ายังว่าง ให้ fallback legacy id
         if (evaluatedIds.size === 0) {
           const qsLegacy = new URLSearchParams({ session_id: '2147483647', major_name: major }).toString();
-          const resLegacy = await fetch(`http://localhost:3002/api/evaluations/history?${qsLegacy}`);
+          const resLegacy = await fetch(`${BASE_URL}/api/evaluations/history?${qsLegacy}`);
           if (resLegacy.ok) {
             const rows = await resLegacy.json();
             evaluatedIds = new Set((Array.isArray(rows) ? rows : []).map(r => String(r.indicator_id)));
@@ -162,9 +164,9 @@ export default function IndicatorTable({
       const sel = localStorage.getItem('selectedProgramContext');
       const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      
+
       // ลองหาใน session ปัจจุบันก่อน
-      let res = await fetch(`http://localhost:3002/api/evaluations/history?${qs}`);
+      let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
       if (res.ok) {
         const evaluations = await res.json();
         const evaluation = (Array.isArray(evaluations) ? evaluations : [])
@@ -176,7 +178,7 @@ export default function IndicatorTable({
       // ถ้าไม่พบ ให้ดึงทุก session ใน major เดียวกันผ่าน /api/evaluations
       if (selectedComponent?.id) {
         const qs2 = new URLSearchParams({ component_id: selectedComponent.id, major_name: major }).toString();
-        res = await fetch(`http://localhost:3002/api/evaluations?${qs2}`);
+        res = await fetch(`${BASE_URL}/api/evaluations?${qs2}`);
         if (res.ok) {
           const rows = await res.json();
           const history = (Array.isArray(rows) ? rows : [])
@@ -203,8 +205,8 @@ export default function IndicatorTable({
       const qs2 = new URLSearchParams({ component_id: selectedComponent.id, major_name: major }).toString();
 
       const [res1, res2] = await Promise.all([
-        fetch(`http://localhost:3002/api/evaluations/history?${qs1}`),
-        fetch(`http://localhost:3002/api/evaluations?${qs2}`)
+        fetch(`${BASE_URL}/api/evaluations/history?${qs1}`),
+        fetch(`${BASE_URL}/api/evaluations?${qs2}`)
       ]);
 
       const arr1 = res1.ok ? await res1.json() : [];
@@ -240,7 +242,7 @@ export default function IndicatorTable({
   useEffect(() => {
     if (typeof onAfterBulkAdded === 'undefined' && typeof onAssessingChange === 'undefined') return;
     if (typeof onAssessingChange === 'function') {
-      try { onAssessingChange(Boolean(assessIndicator)); } catch {}
+      try { onAssessingChange(Boolean(assessIndicator)); } catch { }
     }
   }, [assessIndicator]);
 
@@ -273,10 +275,10 @@ export default function IndicatorTable({
   const handleSubmit = async (e) => {
     e.preventDefault();
     const mainMatch = String(indicatorName || '').match(/^\s*AUN\.(\d+)/i);
-      if (!mainMatch) {
-    if (!indicatorSequence || !indicatorType || !criteriaType || !indicatorName) {
-      setError('กรุณากรอกข้อมูลให้ครบถ้วน');
-      return;
+    if (!mainMatch) {
+      if (!indicatorSequence || !indicatorType || !criteriaType || !indicatorName) {
+        setError('กรุณากรอกข้อมูลให้ครบถ้วน');
+        return;
       }
       // ตรวจซ้ำก่อนเพิ่ม (ลำดับหรือชื่อซ้ำ)
       const dupBySeq = indicatorList.some(ind => String(ind.sequence) === String(indicatorSequence));
@@ -308,13 +310,13 @@ export default function IndicatorTable({
         await seedIndicatorsForMainCode(mainCode);
         // แจ้งให้หน้าพ่อ refresh เฉพาะรายการ โดยไม่ออกจากหน้า
         if (typeof onAfterBulkAdded === 'function') {
-          try { await onAfterBulkAdded(selectedComponent); } catch {}
+          try { await onAfterBulkAdded(selectedComponent); } catch { }
         }
         setFlash({ message: 'เพิ่มตัวบ่งชี้เรียบร้อย', type: 'success' });
         return;
       }
       // เรียก API เพิ่มตัวบ่งชี้
-      const res = await fetch('http://localhost:3002/api/indicators', {
+      const res = await fetch(`${BASE_URL}/api/indicators`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newIndicator)
@@ -345,14 +347,14 @@ export default function IndicatorTable({
     let sessionId = localStorage.getItem('assessment_session_id') || '';
     const normalizedId = sessionId && sessionId.length > 10 ? String(Math.floor(Number(sessionId) / 1000)) : sessionId;
     if (normalizedId !== sessionId) {
-      try { localStorage.setItem('assessment_session_id', normalizedId); } catch {}
+      try { localStorage.setItem('assessment_session_id', normalizedId); } catch { }
     }
     const sel = localStorage.getItem('selectedProgramContext');
     const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
 
     // เช็คว่าเคยประเมินแล้วหรือไม่
     const existingEvaluation = await fetchIndicatorEvaluation(assessIndicator.id);
-    
+
     const formData = new FormData();
     formData.append('session_id', normalizedId);
     formData.append('indicator_id', assessIndicator.id);
@@ -372,20 +374,20 @@ export default function IndicatorTable({
     });
 
     try {
-      const res = await fetch('http://localhost:3002/api/evaluations', { method: 'POST', body: formData });
+      const res = await fetch(`${BASE_URL}/api/evaluations`, { method: 'POST', body: formData });
       const responseText = await res.text();
       console.log('Server response:', responseText);
-      
+
       let responseData;
       try {
         responseData = JSON.parse(responseText);
       } catch {
         responseData = { success: false, error: 'Invalid response format' };
       }
-      
+
       if (res.ok && responseData.success) {
-        const message = existingEvaluation ? 
-          'อัปเดตเกณฑ์การประเมินเรียบร้อย' : 
+        const message = existingEvaluation ?
+          'อัปเดตเกณฑ์การประเมินเรียบร้อย' :
           'บันทึกเกณฑ์การประเมินเรียบร้อย';
         setFlash({ message, type: 'success' });
         setAssessIndicator(null);
@@ -418,7 +420,7 @@ export default function IndicatorTable({
           <h3 className="text-lg font-medium text-gray-900">เกณฑ์การประเมิน</h3>
           <button
             className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
-            onClick={() => { setAssessIndicator(null); if (typeof onAssessingChange === 'function') { try { onAssessingChange(false); } catch {} } }}
+            onClick={() => { setAssessIndicator(null); if (typeof onAssessingChange === 'function') { try { onAssessingChange(false); } catch { } } }}
           >
             กลับ
           </button>
@@ -475,25 +477,25 @@ export default function IndicatorTable({
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">ค่าเป้าหมาย</label>
-                <input 
-                  type="text" 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                  value={assessTarget} 
-                  onChange={e=>setAssessTarget(e.target.value)}
-                  placeholder="กรอกค่าเป้าหมาย" 
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={assessTarget}
+                  onChange={e => setAssessTarget(e.target.value)}
+                  placeholder="กรอกค่าเป้าหมาย"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">คะแนนค่าเป้าหมาย</label>
-                <input 
-                  type="number" 
-                  min="0" 
-                  max="5" 
-                  step="0.1" 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-                  value={assessScore} 
-                  onChange={e=>setAssessScore(e.target.value)}
-                  placeholder="0.0 - 5.0" 
+                <input
+                  type="number"
+                  min="0"
+                  max="5"
+                  step="0.1"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={assessScore}
+                  onChange={e => setAssessScore(e.target.value)}
+                  placeholder="0.0 - 5.0"
                 />
               </div>
             </div>
@@ -501,12 +503,12 @@ export default function IndicatorTable({
             {/* ช่องหมายเหตุ */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">หมายเหตุ</label>
-              <textarea 
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 rows="3"
-                value={assessComment} 
-                onChange={e=>setAssessComment(e.target.value)}
-                placeholder="กรอกหมายเหตุเพิ่มเติม (ถ้ามี)" 
+                value={assessComment}
+                onChange={e => setAssessComment(e.target.value)}
+                placeholder="กรอกหมายเหตุเพิ่มเติม (ถ้ามี)"
               />
             </div>
 
@@ -634,9 +636,9 @@ export default function IndicatorTable({
                       {String(indicator.sequence).includes('.') ? (
                         <span>{formatSequence(indicator.sequence)}</span>
                       ) : (
-                      <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-sm font-bold">
+                        <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-sm font-bold">
                           {formatSequence(indicator.sequence)}
-                      </span>
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-4 text-sm text-gray-900 border-r border-gray-200">
@@ -655,7 +657,7 @@ export default function IndicatorTable({
                       </span>
                     </td>
                     <td className="px-4 py-4 text-center border-r border-gray-200">
-                      <button 
+                      <button
                         onClick={() => onDeleteClick(indicator.id, selectedComponent.id)}
                         className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
                       >

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { FileText, GraduationCap, BarChart3 } from 'lucide-react';
 import ProgramSelection from '../components/ProgramSelection';
+import { BASE_URL } from '../config/api.js';
+
 
 export default function SummaryPage({ currentUser }) {
   const [selectedProgram, setSelectedProgram] = useState(null);
@@ -29,18 +31,18 @@ export default function SummaryPage({ currentUser }) {
     const major = selectedProgram?.majorName || '';
     if (!sessionId || !major) return;
     setLoading(true);
-    fetch(`http://localhost:3002/api/evaluations-actual/history?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
+    fetch(`${BASE_URL}/api/evaluations-actual/history?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
       .then(res => res.ok ? res.json() : [])
       .then(json => setRows(Array.isArray(json) ? json : []))
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
     // ดึงรายการองค์ประกอบคุณภาพของสาขา
-    fetch(`http://localhost:3002/api/quality-components?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
+    fetch(`${BASE_URL}/api/quality-components?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
       .then(res => res.ok ? res.json() : [])
       .then(list => setComponents(Array.isArray(list) ? list : []))
       .catch(() => setComponents([]));
     // ดึงข้อมูลเกณฑ์ (target, score) สำหรับคอลัมน์ค่าเป้าหมาย/ประเมินตนเอง
-    fetch(`http://localhost:3002/api/evaluations/history?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
+    fetch(`${BASE_URL}/api/evaluations/history?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
       .then(res => res.ok ? res.json() : [])
       .then(list => {
         const map = {};
@@ -52,7 +54,7 @@ export default function SummaryPage({ currentUser }) {
       .catch(() => setCriteriaMap({}));
 
     // ดึงข้อมูลคะแนนกรรมการ
-    fetch(`http://localhost:3002/api/committee-evaluations?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
+    fetch(`${BASE_URL}/api/committee-evaluations?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
       .then(res => res.ok ? res.json() : [])
       .then(list => {
         const map = {};
@@ -79,7 +81,7 @@ export default function SummaryPage({ currentUser }) {
       const map = {};
       for (const id of ids) {
         try {
-          const res = await fetch(`http://localhost:3002/api/indicator-detail?${new URLSearchParams({ indicator_id: id, session_id: sessionId, major_name: major }).toString()}`);
+          const res = await fetch(`${BASE_URL}/api/indicator-detail?${new URLSearchParams({ indicator_id: id, session_id: sessionId, major_name: major }).toString()}`);
           if (res.ok) {
             const d = await res.json();
             map[id] = d;
@@ -99,7 +101,7 @@ export default function SummaryPage({ currentUser }) {
       const countMap = {};
       for (const comp of components) {
         try {
-          const res = await fetch(`http://localhost:3002/api/indicators-by-component/${encodeURIComponent(comp.id)}?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`);
+          const res = await fetch(`${BASE_URL}/api/indicators-by-component/${encodeURIComponent(comp.id)}?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`);
           const inds = res.ok ? await res.json() : [];
           // นับเฉพาะหัวข้อหลักของตัวบ่งชี้ (sequence ไม่มีจุด)
           const mainCount = (Array.isArray(inds) ? inds : []).filter(ind => !String(ind?.sequence ?? '').includes('.')).length;
@@ -116,7 +118,7 @@ export default function SummaryPage({ currentUser }) {
     const sessionId = localStorage.getItem('assessment_session_id') || '';
     const major = selectedProgram?.majorName || '';
     try {
-      const res = await fetch(`http://localhost:3002/api/indicators-by-component/${encodeURIComponent(component.id)}?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`);
+      const res = await fetch(`${BASE_URL}/api/indicators-by-component/${encodeURIComponent(component.id)}?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`);
       const inds = res.ok ? await res.json() : [];
       setViewIndicators(Array.isArray(inds) ? inds : []);
     } catch { setViewIndicators([]); }
@@ -285,7 +287,7 @@ export default function SummaryPage({ currentUser }) {
                                 ) : (
                                   // ไฟล์เอกสาร - เปิดผ่าน /api/view/
                                   <a
-                                    href={`http://localhost:3002/api/view/${encodeURIComponent(filename)}`}
+                                    href={`${BASE_URL}/api/view/${encodeURIComponent(filename)}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="text-blue-600 hover:text-blue-800 underline cursor-pointer"

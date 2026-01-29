@@ -4,6 +4,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, X, CheckCircle, AlertCircle, FileText, Target } from 'lucide-react';
 import Header from './Header';
 import Footer from './Footer';
+import { BASE_URL } from '../config/api.js';
+
 
 export default function AssessmentForm() {
   const { indicatorId } = useParams();
@@ -21,8 +23,8 @@ export default function AssessmentForm() {
     const sel = localStorage.getItem('selectedProgramContext');
     const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
     const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-    
-    fetch(`http://localhost:3002/api/indicators/${indicatorId}?${qs}`)
+
+    fetch(`${BASE_URL}/api/indicators/${indicatorId}?${qs}`)
       .then(res => res.json())
       .then(data => setIndicator(data))
       .catch(() => setIndicator(null));
@@ -37,7 +39,7 @@ export default function AssessmentForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
+
     const sessionId = localStorage.getItem('assessment_session_id') || '';
     const sel = localStorage.getItem('selectedProgramContext');
     const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
@@ -51,7 +53,7 @@ export default function AssessmentForm() {
     formData.append('major_name', major);
 
     try {
-      const res = await fetch('http://localhost:3002/api/evaluations', {
+      const res = await fetch(`${BASE_URL}/api/evaluations`, {
         method: 'POST',
         body: formData
       });
@@ -81,10 +83,10 @@ export default function AssessmentForm() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Header isMenuOpen={false} setIsMenuOpen={() => {}}
-        activeTab={''} setActiveTab={() => {}}
-        currentUser={null} handleLogout={() => {}}
-        setShowLogin={() => {}} rolePermissions={{}} />
+      <Header isMenuOpen={false} setIsMenuOpen={() => { }}
+        activeTab={''} setActiveTab={() => { }}
+        currentUser={null} handleLogout={() => { }}
+        setShowLogin={() => { }} rolePermissions={{}} />
 
       <main className="flex-1 container mx-auto px-4 py-8 max-w-4xl">
         {/* Header Section */}
@@ -96,7 +98,7 @@ export default function AssessmentForm() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             กลับไปหน้าตัวบ่งชี้
           </button>
-          
+
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -126,11 +128,12 @@ export default function AssessmentForm() {
 
         {/* Flash Message */}
         {flash.message && (
-          <div className={`mb-6 rounded-xl p-4 border flex items-center justify-between ${
-            flash.type === 'success' 
-              ? 'bg-green-50 border-green-200 text-green-800' 
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}>
+          <div className={
+            "mb-6 rounded-xl p-4 border flex items-center justify-between " +
+            (flash.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-red-50 border-red-200 text-red-800')
+          }>
             <div className="flex items-center">
               {flash.type === 'success' ? (
                 <CheckCircle className="w-5 h-5 mr-3" />
@@ -139,7 +142,7 @@ export default function AssessmentForm() {
               )}
               <span className="font-medium">{flash.message}</span>
             </div>
-            <button 
+            <button
               onClick={() => setFlash({ message: '', type: 'success' })}
               className="ml-4 hover:opacity-70 transition-opacity"
             >
@@ -208,11 +211,12 @@ export default function AssessmentForm() {
                         key={num}
                         type="button"
                         onClick={() => setScore(num.toString())}
-                        className={`py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
-                          score === num.toString()
+                        className={
+                          "py-2 px-3 rounded-lg border text-sm font-medium transition-all " +
+                          (score === num.toString()
                             ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                        }`}
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50')
+                        }
                       >
                         {num}
                       </button>
@@ -272,5 +276,3 @@ export default function AssessmentForm() {
     </div>
   );
 }
-
-

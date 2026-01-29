@@ -289,16 +289,15 @@ export default function App() {
       </main>
 
       {showLogin && (
-        <div className="fixed inset-0 bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50">
-          <LoginModal
-            onLogin={(user) => {
-              setCurrentUser(user);
-              try { localStorage.setItem('currentUser', JSON.stringify(user)); } catch { }
-              setShowLogin(false);
-              setActiveTab('dashboard'); // เปลี่ยนไปหน้า dashboard หลังจากเข้าสู่ระบบ
-            }}
-          />
-        </div>
+        <LoginModal
+          onLogin={(user) => {
+            setCurrentUser(user);
+            try { localStorage.setItem('currentUser', JSON.stringify(user)); } catch { }
+            setShowLogin(false);
+            setActiveTab('dashboard'); // เปลี่ยนไปหน้า dashboard หลังจากเข้าสู่ระบบ
+          }}
+          onClose={() => setShowLogin(false)}
+        />
       )}
 
       <Footer />

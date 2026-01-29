@@ -2,248 +2,265 @@
 
 ## 📋 ข้อกำหนดสำหรับ Production
 
-### Server Requirements
-- **Node.js**: 18+ LTS
-- **RAM**: อย่างน้อย 2GB
-- **Storage**: อย่างน้อย 10GB
-- **Network**: HTTPS support
-- **OS**: Ubuntu 20.04+ หรือ CentOS 8+
+- Node.js 18+ 
+- Firebase Project (Prion)
+- Domain name (ถ้าต้องการ)
+- SSL Certificate (สำหรับ HTTPS)
 
-### Services ที่ต้องการ
-- **Firebase Project** (Production)
-- **Domain Name** + **SSL Certificate**
-- **Process Manager** (PM2 แนะนำ)
-- **Reverse Proxy** (Nginx แนะนำ)
+## 🔧 การเตรียมความพร้อม
 
-## 🔧 การเตรียม Production Environment
+### 1. ตั้งค่า Firebase Production Project
 
-### 1. สร้าง Firebase Project สำหรับ Production
-
+#### สร้าง Firebase Project ใหม่สำหรับ Production
 ```bash
-# สร้าง project ใหม่สำหรับ production
-# หรือใช้ project เดียวกันแต่แยก environment
+# ไปที่ Firebase Console
+# สร้าง project ใหม่ เช่น "aunqa-esar-prod"
+# เปิดใช้งาน Firestore Database
+# ดาวน์โหลด Service Account Key ใหม่
 ```
 
-#### 1.1 Firebase Security Rules (Production)
-```javascript
-// Firestore Security Rules
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Users collection - เฉพาะ authenticated users
-    match /users/{userId} {
-      allow read, write: if request.auth != null;
+#### ตั้งค่า Environment Variables สำหรับ Production
+```bash
+# Copy ไฟล์ production template
+cp oduction .env
+
+# แก้ไขค่าใน .env ให้ตรงกับ production
+```
+
+### 2. แก้ไข .env สำหรับ Production
+
+```env
+# Application Environment
+NODE_ENV=production
+PORT=3002
+
+# API Configuration (Production)
+VITE_API_BASE_URL=https://your-domain.com
+API_BASE_URL=https://your-domain.com
+
+# Firebase Configuration (Production)
+FIREBASE_PROJECT_ID=your-production-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-production-project.iam.gserviceaccount.com
+FIRECTION_PRIVATE_KEY\n-----END PRIVATE KEY-----\n"
+FIREBASE_STORAGE_BUCKET=your-production-project.appspot.com
+
+# Firebase Web App Config (Production)
+VITE_FIREBASE_API_KEY=your-production-api-key
+VITE_FIREBASE_AUTH_DOMAIN=your-production-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-production-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-production-project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your-production-sender-id
+VITE_FIREBASE_APP_ID=your-production-app-id
+
+# JWT Configuration (Production)
+JWTSECRET=your-super-strong-production-jwt-secret-min-32-chars
+JWT_EXPIRES_IN=7d
+
+# CORS Configuration (Production)
+CORS_ORIGIN=https://your-domain.com,https://www.your-domain.com
+CORS_CREDENTIALS=true
+
+# Production Settings
+DEBUG=false
+LOG_LEVEL=warn
+```
+
+## 🌐 การ Deploy บน Vercel
+
+### 1. เตรียม Project สำหรับ Vercel
+
+สร้างไฟล์ `vercel.json`:
+```json
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server-firebase.cjs",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "package.json",
+      "usecel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     }
-    
-    // Quality components - เฉพาะ admin
-    match /quality_components/{docId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/server-firebase.cjs"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/dist/$1"
     }
-    
-    // Evaluations - เฉพาะเจ้าของหรือ admin
-    match /evaluations/{docId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
   }
 }
 ```
 
-### 2. เตรียม Server
+### 2. Deploy ขั้นตอน
 
-#### 2.1 ติดตั้ง Dependencies
 ```bash
-# อัปเดต system
+# 1. Install Vercel CLI
+npm install -g vercel
+
+# 2. Login to Vercel
+vercel login
+
+# 3. Deploy
+vercel --prod
+
+# 4. ตั้งค่า Environment Variables ใน Vercel Dashboard
+# ไปที่ Vercel Dashboard > Project > Settings > Environment Variables
+# เพิ่มตัวแปรทั้งหมดจาก .env
+```
+
+### 3. ตั้งค่า Environment Variables ใน Vercel
+
+ใน Vercel Dashboard > Settings > Environment Variables:
+
+```
+NODE_ENV=production
+PORT=3002
+VITE_API_BASE_URL=https://your-vercel-app.vercel.app
+FIREBASE_PROJECT_ID=your-production-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_STORAGEspot.com
+VITE_FIREBASE_API_KEY=your-api-key
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+VITE_FIREBASE_APP_ID=your-app-id
+JWT_SECRET=your-jwt-secret
+CORS_ORIGIN=https://your-vercel-app.vercel.app
+```
+
+## 🐳 การ Deploy ด้วย Docker
+
+### 1. สร้าง Dockerfile
+
+```dockerfile
+# Dockerfile
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COP./
+COPY .npmrc ./
+
+# Install dependencies
+RUN npm install --legacy-peer-deps
+
+# Copy source code
+COPY . .
+
+# Build frontend
+RUN npm run build
+
+# Expose port
+EXPOSE 3002
+
+# Start server
+CMD ["npm", "run", "server-firebase"]
+```
+
+### 2. สร้าง docker-compose.yml
+
+```yaml
+version: '3.8'
+services:
+  aunqa-app:
+    build: .
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
+      -_EMAIL}
+      - FIREBASE_PRIVATE_KEY=${FIREBASE_PRIVATE_KEY}
+      - FIREBASE_STORAGE_BUCKET=${FIREBASE_STORAGE_BUCKET}
+      - JWT_SECRET=${JWT_SECRET}
+    env_file:
+      - .env
+    restart: unless-stopped
+```
+
+### 3. Deploy ด้วย Docker
+
+```bash
+# Build image
+docker build -t aunqa-esar .
+
+# Run container
+docker run -d \
+  --name aunqa-app \
+  -p 3002:3002 \
+  --env-file .env \
+  aunqa-esar
+
+# หรือใช้ docker-compose
+docker-compose up -d
+```
+
+## ☁️ การ Deploy บน VPS/Server
+
+### 1. เตรียม Server
+
+```bash
+# Update system
 sudo apt update && sudo apt upgrade -y
 
-# ติดตั้ง Node.js 18 LTS
+# Install Node.js 18
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
-# ติดตั้ง PM2
+# Install PM2 (Process Manager)
 sudo npm install -g pm2
 
-# ติดตั้ง Nginx
+# Install Nginx (ถ้าต้องการ reverse proxy)
 sudo apt install nginx -y
 ```
 
-#### 2.2 สร้าง User สำหรับ Application
-```bash
-# สร้าง user
-sudo adduser aunqa
-sudo usermod -aG sudo aunqa
+### 2. Deploy Application
 
-# สลับไปใช้ user ใหม่
-su - aunqa
-```
-
-### 3. Deploy Application
-
-#### 3.1 Clone และ Setup
 ```bash
 # Clone repository
-git clone <your-repository-url> /home/aunqa/aunqa-esar
-cd /home/aunqa/aunqa-esar
+git clone <your-repo-url>
+cd AUNQA-ESAR
 
-# ติดตั้ง dependencies
-npm install --production
+# Install dependencies
+npm install --legacy-peer-deps
 
-# สร้าง directories
-mkdir -p logs uploads ssl
-```
-
-#### 3.2 Setup Environment Variables
-```bash
-# Copy production environment
-cp .env.production .env
-
-# แก้ไขค่าใน .env
-nano .env
-```
-
-**สิ่งที่ต้องแก้ไขใน .env:**
-```env
-# เปลี่ยนเป็น domain จริง
-VITE_API_BASE_URL=https://your-domain.com
-API_BASE_URL=https://your-domain.com
-
-# ใส่ Firebase config จริง
-VITE_FIREBASE_API_KEY=your-real-api-key
-VITE_FIREBASE_PROJECT_ID=your-production-project
-
-# ใส่ secret key ที่แข็งแกร่ง
-SESSION_SECRET=your-super-strong-32-character-secret
-
-# จำกัด CORS เฉพาะ domain จริง
-CORS_ORIGIN=https://your-domain.com
-```
-
-#### 3.3 Upload Firebase Service Account Key
-```bash
-# อัปโหลดไฟล์ service account key สำหรับ production
-# ตั้งชื่อเป็น firebase-service-account.json
-scp firebase-service-account-prod.json aunqa@your-server:/home/aunqa/aunqa-esar/firebase-service-account.json
-
-# ตั้งสิทธิ์ไฟล์
-chmod 600 firebase-service-account.json
-```
-
-### 4. Build Application
-
-#### 4.1 Build Frontend
-```bash
-# Build React app สำหรับ production
+# Build frontend
 npm run build
 
-# ตรวจสอบ build
-ls -la dist/
-```
+# Copy environment file
+cp .env.production .env
+# แก้ไขค่าใน .env ให้ถูกต้อง
 
-#### 4.2 Test Production Build
-```bash
-# ทดสอบ production build
-npm run preview
-
-# ทดสอบ backend
-node server-firebase.cjs
-```
-
-### 5. Setup Process Manager (PM2)
-
-#### 5.1 สร้าง PM2 Configuration
-```bash
-# สร้างไฟล์ ecosystem.config.js
-cat > ecosystem.config.js << 'EOF'
-module.exports = {
-  apps: [
-    {
-      name: 'aunqa-esar-api',
-      script: 'server-firebase.cjs',
-      instances: 2,
-      exec_mode: 'cluster',
-      env: {
-        NODE_ENV: 'production',
-        PORT: 3002
-      },
-      error_file: './logs/api-error.log',
-      out_file: './logs/api-out.log',
-      log_file: './logs/api-combined.log',
-      time: true,
-      max_memory_restart: '1G',
-      node_args: '--max-old-space-size=1024'
-    }
-  ]
-};
-EOF
-```
-
-#### 5.2 เริ่ม Application ด้วย PM2
-```bash
-# เริ่ม application
-pm2 start ecosystem.config.js
-
-# ตั้งให้เริ่มอัตโนมัติเมื่อ server restart
-pm2 startup
+# Start with PM2
+pm2 start ecosystem.config.js --env production
 pm2 save
-
-# ตรวจสอบสถานะ
-pm2 status
-pm2 logs
+pm2 startup
 ```
 
-### 6. Setup Nginx Reverse Proxy
-
-#### 6.1 สร้าง Nginx Configuration
-```bash
-sudo nano /etc/nginx/sites-available/aunqa-esar
-```
+### 3. ตั้งค่า Nginx (ถ้าต้องการ)
 
 ```nginx
+# /etc/nginx/sites-available/aunqa-esar
 server {
     listen 80;
-    server_name your-domain.com www.your-domain.com;
-    
-    # Redirect HTTP to HTTPS
-    return 301 https://$server_name$request_uri;
-}
+    server_name your-domain.com;
 
-server {
-    listen 443 ssl http2;
-    server_name your-domain.com www.your-domain.com;
-    
-    # SSL Configuration
-    ssl_certificate /path/to/your/cert.pem;
-    ssl_certificate_key /path/to/your/key.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
-    
-    # Security Headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header Referrer-Policy "no-referrer-when-downgrade" always;
-    add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
-    
-    # Serve static files (React build)
     location / {
-        root /home/aunqa/aunqa-esar/dist;
-        try_files $uri $uri/ /index.html;
-        
-        # Cache static assets
-        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
-            expires 1y;
-            add_header Cache-Control "public, immutable";
-        }
-    }
-    
-    # API Proxy
-    location /api/ {
         proxy_pass http://localhost:3002;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -253,179 +270,77 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
-        
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
     }
-    
-    # File uploads
-    location /uploads/ {
-        proxy_pass http://localhost:3002;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        
-        # Large file upload support
-        client_max_body_size 50M;
-    }
-    
-    # Gzip Compression
-    gzip on;
-    gzip_vary on;
-    gzip_min_length 1024;
-    gzip_proxied expired no-cache no-store private must-revalidate auth;
-    gzip_types text/plain text/css text/xml text/javascript application/x-javascript application/xml+rss application/javascript;
 }
 ```
 
-#### 6.2 เปิดใช้งาน Site
+## 🔒 Security Checklist สำหรับ Production
+
+- [ ] ใช้ HTTPS (SSL Certificate)
+- [ ] ตั้งค่า CORS ให้จำกัดเฉพาะ domain ที่ต้องการ
+- [ ] ใช้ JWT Secret ที่แข็งแกร่ง (32+ characters)
+- [ ] ตั้งค่า Firebase Security Rules
+- [ ] ซ่อน sensitive information ใน environment variables
+- [ ] เปิดใช้งาน rate liting
+- [ ] ตั้งค่า logging และ monitoring
+- [ ] Backup database เป็นประจำ
+
+## 🚨 การแก้ไขปัญหา Deploy
+
+### ปัญหา: npm install ล้มเหลว
 ```bash
-# เปิดใช้งาน site
-sudo ln -s /etc/nginx/sites-available/aunqa-esar /etc/nginx/sites-enabled/
+# ใช้ legacy peer deps
+npm install --legacy-peer-deps
 
-# ทดสอบ configuration
-sudo nginx -t
-
-# Restart Nginx
-sudo systemctl restart nginx
-sudo systemctl enable nginx
+# หรือลบ node_modules และ package-lock.json แล้วติดตั้งใหม่
+rm -rf node_modules package-lock.json
+npm install --legacy-peer-deps
 ```
 
-### 7. Setup SSL Certificate
+### ปัญหา: Firebase connection failed
+- ตรวจสอบ environment variables
+- ตรวจสอบ Firebase project ID
+- ตรวจสอบ private key format (ต้องมี \\n)
 
-#### 7.1 ใช้ Let's Encrypt (ฟรี)
+### ปัญหา: CORS Error
+ ให้ตรงกับ domain
+- ตรวจสอบ protocol (http vs https)
+
+### ปัญหา: Build failed
 ```bash
-# ติดตั้ง Certbot
-sudo apt install certbot python3-certbot-nginx -y
+# ตรวจสอบ dependencies
+npm audit fix --legacy-peer-deps
 
-# สร้าง SSL certificate
-sudo certbot --nginx -d your-domain.com -d www.your-domain.com
-
-# ตั้งให้ renew อัตโนมัติ
-sudo crontab -e
-# เพิ่มบรรทัด: 0 12 * * * /usr/bin/certbot renew --quiet
+# Build แบบ verbose
+npm run build -- --verbose
 ```
 
-### 8. Setup Monitoring & Logging
+## 📊 Monitoring และ Maintenance
 
-#### 8.1 Log Rotation
+### การตรวจสอบสถานะ
 ```bash
-sudo nano /etc/logrotate.d/aunqa-esar
-```
-
-```
-/home/aunqa/aunqa-esar/logs/*.log {
-    daily
-    missingok
-    rotate 52
-    compress
-    delaycompress
-    notifempty
-    create 644 aunqa aunqa
-    postrotate
-        pm2 reload aunqa-esar-api
-    endscript
-}
-```
-
-#### 8.2 Basic Monitoring
-```bash
-# ติดตั้ง htop สำหรับ monitoring
-sudo apt install htop -y
-
-# Setup PM2 monitoring
-pm2 install pm2-logrotate
-pm2 set pm2-logrotate:max_size 10M
-pm2 set pm2-logrotate:retain 30
-```
-
-## 🔒 Security Checklist
-
-- [ ] **Firewall**: เปิดเฉพาะ port 80, 443, 22
-- [ ] **SSH**: ปิด password login, ใช้ key-based authentication
-- [ ] **SSL**: ใช้ HTTPS เท่านั้น
-- [ ] **Environment**: ไม่มี sensitive data ใน code
-- [ ] **Firebase Rules**: จำกัดการเข้าถึงข้อมูล
-- [ ] **CORS**: จำกัดเฉพาะ domain ที่อนุญาต
-- [ ] **Headers**: ตั้งค่า security headers
-- [ ] **Updates**: อัปเดต system และ dependencies เป็นประจำ
-
-## 📊 Performance Optimization
-
-### 1. Frontend Optimization
-```bash
-# Build optimization
-npm run build -- --mode production
-
-# Analyze bundle size
-npm install -g webpack-bundle-analyzer
-npx webpack-bundle-analyzer dist/assets/*.js
-```
-
-### 2. Backend Optimization
-```javascript
-// ใน server-firebase.cjs เพิ่ม
-const compression = require('compression');
-app.use(compression());
-
-// Connection pooling
-const admin = require('firebase-admin');
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  // เพิ่ม connection settings
-});
-```
-
-### 3. Database Optimization
-- สร้าง Firestore indexes ที่จำเป็น
-- ใช้ pagination สำหรับข้อมูลจำนวนมาก
-- Cache ข้อมูลที่ไม่เปลี่ยนแปลงบ่อย
-
-## 🚀 Deployment Commands
-
-```bash
-# การ deploy แบบเต็ม
-git pull origin main
-npm install --production
-npm run build
-pm2 reload all
-sudo systemctl reload nginx
-
-# การ deploy แบบ quick (เฉพาะ code)
-git pull origin main
-npm run build
-pm2 reload aunqa-esar-api
-```
-
-## 📞 Troubleshooting
-
-### ปัญหาที่พบบ่อย:
-
-1. **502 Bad Gateway**: ตรวจสอบ PM2 และ port 3002
-2. **SSL Error**: ตรวจสอบ certificate และ Nginx config
-3. **Firebase Error**: ตรวจสอบ service account key และ permissions
-4. **CORS Error**: ตรวจสอบ CORS_ORIGIN ใน .env
-
-### การตรวจสอบ:
-```bash
-# ตรวจสอบ PM2
+# ตรวจสอบ PM2 processes
 pm2 status
+
+# ดู logs
 pm2 logs
 
-# ตรวจสอบ Nginx
-sudo nginx -t
-sudo systemctl status nginx
+# Restart application
+pm2 restart all
 
-# ตรวจสอบ SSL
-openssl s_client -connect your-domain.com:443
+# Monitor resources
+pm2 monit
+```
 
-# ตรวจสอบ API
-curl https://your-domain.com/api/ping
+### การ Backup
+```bash
+# Backup Firebase data (ใช้ Firebase CLI)
+%m%d)
+
+# Backup uploaded files
+tar -czf uploads-backup-$(date +%Y%m%d).tar.gz uploads/
 ```
 
 ---
 
-✅ **เมื่อ deploy เสร็จแล้ว ระบบจะพร้อมใช้งาน production ที่ปลอดภัยและมีประสิทธิภาพ!**
+✅ **เมื่อ deploy เสร็จแล้ว ระบบจะพร้อมใช้งานบน production!**
