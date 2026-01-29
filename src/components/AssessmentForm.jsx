@@ -129,7 +129,7 @@ export default function AssessmentForm() {
         {/* Flash Message */}
         {flash.message && (
           <div className={
-            "mb-6 rounded-xl p-4 border flex items-center justify-between " +
+            "mb-6 rounded-xl p-4 border border-gray-200 flex items-center justify-between " +
             (flash.type === 'success'
               ? 'bg-green-50 border-green-200 text-green-800'
               : 'bg-red-50 border-red-200 text-red-800')
@@ -212,7 +212,7 @@ export default function AssessmentForm() {
                         type="button"
                         onClick={() => setScore(num.toString())}
                         className={
-                          "py-2 px-3 rounded-lg border text-sm font-medium transition-all " +
+                          "py-2 px-3 rounded-lg border border-gray-300 text-sm font-medium transition-all " +
                           (score === num.toString()
                             ? 'bg-blue-600 text-white border-blue-600'
                             : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50')

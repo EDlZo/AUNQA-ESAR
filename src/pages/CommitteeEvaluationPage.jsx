@@ -17,6 +17,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
   const [rows, setRows] = useState([]); // evaluations_actual
   const [criteriaMap, setCriteriaMap] = useState({}); // indicator_id -> { target_value, score }
   const [committeeMap, setCommitteeMap] = useState({}); // indicator_id -> { committee_score, strengths, improvements }
+  const [allIndicatorsMap, setAllIndicatorsMap] = useState({}); // componentId -> indicators[]
   // ฟิลด์แก้ไขของหน้าแบบเต็ม (ต้องอยู่นอกการเรนเดอร์แบบมีเงื่อนไข เพื่อไม่ให้ผิดกติกา Hooks)
   const [editorScore, setEditorScore] = useState('');
   const [editorStrengths, setEditorStrengths] = useState('');
@@ -32,32 +33,10 @@ export default function CommitteeEvaluationPage({ currentUser }) {
 
   useEffect(() => {
     if (selectedProgram) {
-      fetchComponents();
-      // โหลดข้อมูลจากหน้าสรุปผลการดำเนินการ
-      fetchEvaluationData();
+      fetchAllCommitteeData();
     }
   }, [selectedProgram]);
 
-  // นับจำนวนหัวข้อหลักของตัวบ่งชี้ต่อองค์ประกอบ
-  useEffect(() => {
-    const sessionId = localStorage.getItem('assessment_session_id') || '';
-    const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
-    if (!sessionId || !major || components.length === 0) return;
-    (async () => {
-      const countMap = {};
-      for (const comp of components) {
-        try {
-          const res = await fetch(`${BASE_URL}/api/indicators-by-component/${encodeURIComponent(comp.id)}?session_id=${sessionId}&major_name=${encodeURIComponent(major)}`);
-          const inds = res.ok ? await res.json() : [];
-          const mainCount = (Array.isArray(inds) ? inds : []).filter(ind => !String(ind?.sequence ?? '').includes('.')).length;
-          countMap[comp.id] = mainCount;
-        } catch {
-          countMap[comp.id] = 0;
-        }
-      }
-      setComponentIndicatorsCount(countMap);
-    })();
-  }, [components, selectedProgram]);
 
   // ตั้งค่า initial values เมื่อเลือกตัวบ่งชี้เพื่อประเมิน
   useEffect(() => {
@@ -69,98 +48,96 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     setEditorImprovements(committee.improvements || '');
   }, [evaluatingIndicator, committeeMap]);
 
-  const fetchComponents = async () => {
+  const fetchAllCommitteeData = async () => {
     if (!selectedProgram) return;
-
     setLoading(true);
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram.majorName || selectedProgram.major_name;
-      const response = await fetch(`${BASE_URL}/api/quality-components?major_name=${encodeURIComponent(major)}&session_id=${sessionId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setComponents(data);
-      }
+      const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
+
+      console.log(`[BULK] Fetching committee data bundle for ${major}`);
+      const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
+      if (!res.ok) throw new Error('Failed to fetch committee data bundle');
+
+      const data = await res.json();
+      const {
+        components = [],
+        evaluations = [],
+        evaluations_actual = [],
+        committee_evaluations = [],
+        indicators = []
+      } = data;
+
+      setComponents(components);
+      setRows(evaluations_actual);
+
+      // Map criteria (indicator_id -> target/score)
+      const critMap = {};
+      evaluations.forEach(r => {
+        critMap[String(r.indicator_id)] = { target_value: r.target_value || '', score: r.score || '' };
+      });
+      setCriteriaMap(critMap);
+
+      // Map committee evaluations
+      const commMap = {};
+      committee_evaluations.forEach(r => {
+        commMap[String(r.indicator_id)] = {
+          committee_score: r.committee_score || '',
+          strengths: r.strengths || '',
+          improvements: r.improvements || ''
+        };
+      });
+      setCommitteeMap(commMap);
+
+      // Group indicators by component_id
+      const indMap = {};
+      indicators.forEach(ind => {
+        const cid = String(ind.component_id);
+        if (!indMap[cid]) indMap[cid] = [];
+        indMap[cid].push(ind);
+      });
+      setAllIndicatorsMap(indMap);
+
+      // Count main indicators per component
+      const countMap = {};
+      components.forEach(comp => {
+        const compId = String(comp.id);
+        const compInds = indMap[compId] || [];
+        const mainCount = compInds.filter(ind => !String(ind?.sequence ?? '').includes('.')).length;
+        countMap[comp.id] = mainCount;
+      });
+      setComponentIndicatorsCount(countMap);
+
     } catch (error) {
-      console.error('Error fetching components:', error);
+      console.error('Error in comprehensive committee fetch:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchAllIndicators = async () => {
-    if (!selectedProgram) return;
-
-    try {
-      const sessionId = localStorage.getItem('assessment_session_id') || '';
-      const major = selectedProgram.majorName || selectedProgram.major_name;
-      const response = await fetch(`${BASE_URL}/api/indicators?major_name=${encodeURIComponent(major)}&session_id=${sessionId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setViewIndicators(data);
-      }
-    } catch (error) {
-      console.error('Error fetching indicators:', error);
-    }
-  };
-
-  const fetchEvaluationData = async () => {
-    if (!selectedProgram) return;
-
-    try {
-      const sessionId = localStorage.getItem('assessment_session_id') || '';
-      const major = selectedProgram.majorName || selectedProgram.major_name;
-
-      // โหลดข้อมูล evaluations_actual
-      const actualResponse = await fetch(`${BASE_URL}/api/evaluations-actual/history?session_id=${sessionId}&major_name=${major}`);
-      if (actualResponse.ok) {
-        const actualData = await actualResponse.json();
-        setRows(Array.isArray(actualData) ? actualData : []);
-      }
-
-      // โหลดข้อมูลเกณฑ์ (target, score)
-      const criteriaResponse = await fetch(`${BASE_URL}/api/evaluations/history?session_id=${sessionId}&major_name=${major}`);
-      if (criteriaResponse.ok) {
-        const criteriaData = await criteriaResponse.json();
-        const map = {};
-        (Array.isArray(criteriaData) ? criteriaData : []).forEach(r => {
-          map[String(r.indicator_id)] = { target_value: r.target_value || '', score: r.score || '' };
-        });
-        setCriteriaMap(map);
-      }
-
-      // โหลดข้อมูลกรรมการประเมิน
-      const committeeResponse = await fetch(`${BASE_URL}/api/committee-evaluations?session_id=${sessionId}&major_name=${major}`);
-      if (committeeResponse.ok) {
-        const committeeData = await committeeResponse.json();
-        const map = {};
-        (Array.isArray(committeeData) ? committeeData : []).forEach(r => {
-          map[String(r.indicator_id)] = {
-            committee_score: r.committee_score || '',
-            strengths: r.strengths || '',
-            improvements: r.improvements || ''
-          };
-        });
-        setCommitteeMap(map);
-      }
-    } catch (error) {
-      console.error('Error fetching evaluation data:', error);
-    }
-  };
-
   const handleViewIndicators = async (component) => {
     setViewComponent(component);
+    const compId = String(component.id);
+
+    // Use pre-fetched indicators if available for instant load
+    if (allIndicatorsMap[compId]) {
+      setViewIndicators(allIndicatorsMap[compId]);
+      return;
+    }
+
     setLoading(true);
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram.majorName || selectedProgram.major_name;
-      // ใช้ endpoint เดียวกับหน้า "สรุปผลการดำเนินการ" เพื่อดึงตัวบ่งชี้ตามองค์ประกอบ
       const response = await fetch(
         `${BASE_URL}/api/indicators-by-component/${encodeURIComponent(component.id)}?session_id=${sessionId}&major_name=${encodeURIComponent(major)}`
       );
       if (response.ok) {
         const data = await response.json();
         setViewIndicators(data);
+        // Update map for next time
+        setAllIndicatorsMap(prev => ({ ...prev, [compId]: data }));
       }
     } catch (error) {
       console.error('Error fetching indicators:', error);
@@ -173,9 +150,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     setEvaluatingIndicator(null);
     setFlash({ message: 'บันทึกการประเมินเรียบร้อย', type: 'success' });
     // รีเฟรชข้อมูล
-    if (viewComponent) {
-      handleViewIndicators(viewComponent);
-    }
+    fetchAllCommitteeData();
   };
 
   const handleEvaluationCancel = () => {
@@ -184,7 +159,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
 
   const handleEvaluationSaved = () => {
     // รีเฟรชข้อมูลหลังจากบันทึกการประเมิน
-    fetchEvaluationData();
+    fetchAllCommitteeData();
     setFlash({ message: 'บันทึกการประเมินเรียบร้อยแล้ว', type: 'success' });
     setTimeout(() => setFlash({ message: '', type: 'success' }), 3000);
   };
@@ -349,26 +324,32 @@ export default function CommitteeEvaluationPage({ currentUser }) {
 
         <div className="bg-white rounded-2xl shadow-xl shadow-blue-900/5 border border-gray-100 overflow-hidden">
           {/* Header Card */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-8 py-10 text-white relative overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-50 to-blue-60 px-8 py-10 text-gray-800 relative overflow-hidden">
             <div className="relative z-10">
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-blue-50 text-xs font-semibold uppercase tracking-wider mb-4 border border-white/10">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/60 backdrop-blur-md rounded-full text-blue-700 text-xs font-semibold uppercase tracking-wider mb-4 border border-blue-200">
                 <Target className="w-3.5 h-3.5" />
                 ตัวบ่งชี้ {ind.sequence}
               </div>
               <h2 className="text-3xl font-bold leading-tight">{ind.indicator_name}</h2>
               <div className="mt-6 flex flex-wrap gap-4">
-                <div className="flex items-center gap-2 text-blue-100 text-sm">
+                <div className="flex items-center gap-2 text-blue-600 text-sm">
                   <BookOpen className="w-4 h-4" />
                   <span>{viewComponent?.quality_name}</span>
                 </div>
-                <div className="flex items-center gap-2 text-blue-100 text-sm">
+                <div className="flex items-center gap-2 text-blue-600 text-sm">
                   <Clock className="w-4 h-4" />
-                  <span>บันทึกล่าสุด: {latest ? new Date(latest.created_at).toLocaleString('th-TH') : '-'}</span>
+                  <span>บันทึกล่าสุด: {latest ? new Date(latest.created_at).toLocaleDateString('th-TH', {
+                    year: 'numeric',
+                    month: 'long', 
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  }) : 'ยังไม่มีข้อมูล'}</span>
                 </div>
               </div>
             </div>
             {/* Decorative background element */}
-            <div className="absolute top-0 right-0 -transtion-y-1/2 translate-x-1/4 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
+            <div className="absolute top-0 right-0 -transtion-y-1/2 translate-x-1/4 w-96 h-96 bg-blue-300/20 rounded-full blur-3xl" />
           </div>
 
           <div className="p-8 space-y-10">
@@ -570,7 +551,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
   }
 
   return (
-    <div className="max-w-6xl mx-auto py-8">
+    <div className="max-w-6xl mx-auto">
       {flash.message && (
         <div className={`mb-4 rounded-md px-4 py-2 border transition-all ${flash.type === 'success'
           ? 'bg-green-50 border-green-200 text-green-800'
@@ -586,11 +567,18 @@ export default function CommitteeEvaluationPage({ currentUser }) {
         </div>
       )}
 
-      {/* Header section (Always visible while program is selected) */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">สรุปผลการประเมิน</h1>
-          <p className="text-sm text-gray-600 mt-1">สาขา: <span className="font-semibold text-gray-800">{selectedProgram.majorName || selectedProgram.major_name}</span></p>
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">สรุปผลการประเมิน</h1>
+        <p className="text-gray-600 mt-1">ประเมินผลการดำเนินงานและให้คะแนนสำหรับแต่ละตัวบ่งชี้</p>
+      </div>
+
+      {/* Program info and change button */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="text-sm text-gray-700">
+          <span className="text-gray-500">กำลังประเมินของ:</span>{' '}
+          <span className="font-medium">{selectedProgram?.majorName || selectedProgram?.major_name || '-'}</span>
+          {selectedProgram?.facultyName ? <span className="ml-1 text-gray-500">({selectedProgram.facultyName})</span> : null}
         </div>
         <div className="flex gap-2">
           {viewComponent && (
@@ -603,12 +591,52 @@ export default function CommitteeEvaluationPage({ currentUser }) {
           )}
           <button
             onClick={() => setSelectedProgram(null)}
-            className="px-4 py-2 text-sm font-medium bg-white hover:bg-gray-50 text-blue-600 border border-blue-200 rounded-lg transition-colors shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
           >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
             เปลี่ยนสาขา
           </button>
         </div>
       </div>
+
+      {/* Steps section */}
+      {!viewComponent && (
+        <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-2xl p-8 mb-8 border border-blue-200">
+          <div className="flex items-center gap-3 mb-6">
+            <ClipboardCheck className="w-8 h-8 text-blue-600" />
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">ขั้นตอนการประเมินผลการดำเนินงาน</h2>
+              <p className="text-gray-600 text-sm">ทำตามขั้นตอนเพื่อประเมินผลการดำเนินงานให้ครบทุกตัวบ่งชี้</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">เลือกองค์ประกอบ</h3>
+                <p className="text-sm text-gray-600">เลือกองค์ประกอบคุณภาพที่ต้องการประเมิน</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">ประเมินตัวบ่งชี้</h3>
+                <p className="text-sm text-gray-600">ให้คะแนนและข้อเสนอแนะสำหรับแต่ละตัวบ่งชี้</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-1">ตรวจสอบและบันทึก</h3>
+                <p className="text-sm text-gray-600">ตรวจสอบความถูกต้องและบันทึกผลการประเมิน</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!viewComponent ? (
         <>
@@ -678,7 +706,9 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                             onClick={() => handleViewIndicators(c)}
                             className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm"
                           >
-                            <Eye className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
+                            <svg className="w-3.5 h-3.5 mr-1.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
                             ตัวบ่งชี้
                           </button>
                         </td>
@@ -693,7 +723,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
       ) : (
         /* รายการตัวบ่งชี้ขององค์ประกอบที่เลือก */
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b bg-gray-50 flex items-center justify-between">
+          <div className="px-6 py-4 border-b bg-gray-50 flex items-center justify-between border-none">
             <div>
               <div className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">ตัวบ่งชี้ขององค์ประกอบ</div>
               <div className="font-bold text-lg text-gray-900">{viewComponent.quality_name}</div>
@@ -717,15 +747,14 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">ประเมินตน</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">ดำเนินงาน</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">บรรลุ</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">คกก.</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loading ? (
-                    <tr><td colSpan={8} className="text-center py-6">กำลังโหลด...</td></tr>
+                    <tr><td colSpan={7} className="text-center py-6">กำลังโหลด...</td></tr>
                   ) : viewIndicators.length === 0 ? (
-                    <tr><td colSpan={8} className="text-center py-6 text-gray-400">ยังไม่มีตัวบ่งชี้</td></tr>
+                    <tr><td colSpan={7} className="text-center py-6 text-gray-400">ยังไม่มีตัวบ่งชี้</td></tr>
                   ) : (
                     viewIndicators
                       // แสดงเฉพาะตัวบ่งชี้ที่มีผลการดำเนินการแล้ว (อิงจากหน้าผลการดำเนินการ)
@@ -767,9 +796,6 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                                 </span>
                               ) : '-'}
                             </td>
-                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200 font-bold text-blue-600">
-                              {committeeMap[String(ind.id)]?.committee_score || '-'}
-                            </td>
                             <td className="px-4 py-4 text-center">
                               {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
                                 <button
@@ -800,7 +826,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
               </table>
             </div>
           </div>
-          <div className="px-6 py-4 bg-gray-50 border-t flex items-center text-xs text-gray-500">
+          <div className="px-6 py-4 bg-gray-50 border-t flex items-center text-xs text-gray-500 border-none">
             <div className="flex items-center mr-4">
               <div className="w-2 h-2 bg-blue-600 rounded-full mr-1.5"></div>
               <span>รอการประเมิน</span>

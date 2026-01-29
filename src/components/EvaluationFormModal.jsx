@@ -18,7 +18,7 @@ import {
   Clock
 } from 'lucide-react';
 
-export default function EvaluationFormModal({ indicator, selectedProgram, onComplete, onCancel }) {
+export default function EvaluationFormModal({ indicator, selectedProgram, onComplete, onCancel, allEvaluations, allEvaluationsActual }) {
   // ข้อมูลจากการประเมินเกณฑ์ก่อนหน้า (target_value, score)
   const [criteriaData, setCriteriaData] = useState({ target_value: '', score: '' });
 
@@ -55,13 +55,41 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
   };
 
   useEffect(() => {
-    // โหลดข้อมูลเกณฑ์การประเมินก่อนหน้า
-    fetchCriteriaData();
-    // โหลดข้อมูลผลการดำเนินการเดิม (ถ้ามี)
-    fetchExistingEvaluation();
-    // โหลดประวัติผลการดำเนินการ
-    fetchEvaluationHistory();
-  }, [indicator]);
+    // โหลดข้อมูลเกณฑ์การประเมินและการประเมินเดิมจาก props (ถ้ามี)
+    if (allEvaluations && allEvaluationsActual) {
+      const criteria = allEvaluations.find(ev => String(ev.indicator_id) === String(indicator.id));
+      if (criteria) {
+        setCriteriaData({
+          target_value: criteria.target_value || '',
+          score: criteria.score || ''
+        });
+      }
+
+      const existing = allEvaluationsActual.find(ev => String(ev.indicator_id) === String(indicator.id));
+      if (existing) {
+        setOperationResult(existing.operation_result || '');
+        setOperationScore(existing.operation_score || '');
+        setReferenceScore(existing.reference_score || '');
+        setGoalAchievement(existing.goal_achievement || '');
+        setEvidenceNumber(existing.evidence_number || '');
+        setEvidenceName(existing.evidence_name || '');
+        setEvidenceUrl(existing.evidence_url || '');
+        setComment(existing.comment || '');
+      }
+
+      // สำหรับประวัติ (evaluationHistory) ถ้าจะให้สมบูรณ์ควรกรองจาก allEvaluationsActual 
+      // แต่ในโมดอลเดิมมีการ fetch แยกเพื่อเอาประวัติทั้งหมดทุก session
+      // เพื่อความเร็ว เราจะใช้ข้อมูลปัจจุบันก่อน แล้วค่อย fetch history จริงๆ เพิ่มเติม
+      const currentHistory = allEvaluationsActual
+        .filter(ev => String(ev.indicator_id) === String(indicator.id))
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setEvaluationHistory(currentHistory);
+    } else {
+      fetchCriteriaData();
+      fetchExistingEvaluation();
+      fetchEvaluationHistory();
+    }
+  }, [indicator, allEvaluations, allEvaluationsActual]);
 
   const fetchCriteriaData = async () => {
     try {

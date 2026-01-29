@@ -64,43 +64,70 @@ export default function DashboardContent({ user }) {
     try {
       const { majorName } = selectedProgram;
       const sessionId = localStorage.getItem('assessment_session_id');
+      const qs = new URLSearchParams({
+        major_name: majorName,
+        session_id: sessionId || ''
+      }).toString();
 
-      // Fetch Components
-      const compRes = await fetch(`${BASE_URL}/api/quality-components?major_name=${encodeURIComponent(majorName)}`);
-      const components = await compRes.json();
+      // Use the new bulk session summary endpoint
+      const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
+      if (!res.ok) throw new Error('Failed to fetch dashboard data');
 
-      // Fetch Evaluations
-      const evalRes = await fetch(`${BASE_URL}/api/evaluations/history?major_name=${encodeURIComponent(majorName)}&session_id=${sessionId}`);
-      const evaluations = await evalRes.json();
+      const {
+        components = [],
+        evaluations = [],
+        evaluations_actual = [],
+        committee_evaluations = [],
+        indicators = []
+      } = await res.json();
 
-      // Fetch Committee Evaluations
-      const commRes = await fetch(`${BASE_URL}/api/committee-evaluations?major_name=${encodeURIComponent(majorName)}&session_id=${sessionId}`);
-      const committeeEvals = await commRes.json();
+      // Calculate stats based on real indicators and evaluations
+      const totalIndicatorsCount = indicators.length;
+      const completedAssessmentsCount = evaluations_actual.length;
 
-      // Calculate stats
-      // For simplicity, let's assume each component has some indicators (this would need another API call in a real app, 
-      // but we can estimate based on unique indicator_ids in evaluations)
-      const uniqueIndicatorIds = new Set(evaluations.map(e => e.indicator_id));
+      // Calculate progress and score per component
+      const componentStats = components.map(c => {
+        const componentIndicators = indicators.filter(ind => String(ind.component_id) === String(c.id));
+        const componentIndicatorIds = new Set(componentIndicators.map(ind => String(ind.id)));
 
-      const componentProgress = components.map(c => {
-        const componentEvals = evaluations.filter(e => {
-          // This mapping depends on how indicator -> component is stored
-          return true; // Simplified for demo
-        });
+        const completedInComponent = evaluations_actual.filter(ev => componentIndicatorIds.has(String(ev.indicator_id))).length;
+        const totalInComponent = componentIndicators.length;
+
+        const progress = totalInComponent > 0 ? Math.round((completedInComponent / totalInComponent) * 100) : 0;
+
+        // Average score for this component (from evaluations_actual if available)
+        const componentScores = evaluations_actual
+          .filter(ev => componentIndicatorIds.has(String(ev.indicator_id)))
+          .map(ev => parseFloat(ev.operation_score) || 0)
+          .filter(s => s > 0);
+
+        const score = componentScores.length > 0
+          ? (componentScores.reduce((a, b) => a + b, 0) / componentScores.length).toFixed(2)
+          : "0.00";
+
         return {
           name: c.quality_name,
-          progress: Math.floor(Math.random() * 40) + 60, // Mock progress for now as indicators aren't fetched here
-          score: (Math.random() * 2 + 3).toFixed(2)
+          progress,
+          score
         };
       });
 
+      // Overall average score
+      const allScores = evaluations_actual
+        .map(ev => parseFloat(ev.operation_score) || 0)
+        .filter(s => s > 0);
+
+      const averageScore = allScores.length > 0
+        ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(2)
+        : "0.00";
+
       setStats({
         totalComponents: components.length,
-        totalIndicators: uniqueIndicatorIds.size || 24, // Mock if empty
-        completedAssessments: evaluations.length,
-        averageScore: (evaluations.reduce((acc, curr) => acc + (curr.score || 0), 0) / (evaluations.length || 1)).toFixed(2),
-        componentProgress,
-        recentEvaluations: evaluations.slice(0, 5)
+        totalIndicators: totalIndicatorsCount,
+        completedAssessments: completedAssessmentsCount,
+        averageScore,
+        componentProgress: componentStats,
+        recentEvaluations: evaluations_actual.slice(0, 5)
       });
 
     } catch (error) {

@@ -498,6 +498,128 @@ app.get('/api/indicators-by-component/:componentId', async (req, res) => {
   }
 });
 
+app.post('/api/bulk/indicators-by-components', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const { component_ids, major_name } = req.body || {};
+    if (!Array.isArray(component_ids)) {
+      return res.status(400).json({ error: 'component_ids ต้องเป็นอาเรย์' });
+    }
+
+    // Firestore doesn't support 'IN' with more than 10-30 items depending on version
+    // But we can fetch indicators and filter or do multiple queries
+    // For simplicity and to avoid too many queries, let's fetch all indicators for the major
+    // and then filter in memory if there are many components.
+
+    let query = db.collection('indicators');
+    if (major_name) {
+      query = query.where('major_name', '==', major_name);
+    }
+
+    const snapshot = await query.get();
+    const allIndicators = [];
+    snapshot.forEach(doc => {
+      const data = { id: doc.id, ...doc.data() };
+      // Filter by component_ids in memory to handle type mismatches (string/number)
+      if (component_ids.some(id => String(id) === String(data.component_id))) {
+        allIndicators.push(data);
+      }
+    });
+
+    // Sort by sequence
+    allIndicators.sort((a, b) => {
+      const seqA = String(a.sequence || '');
+      const seqB = String(b.sequence || '');
+      return seqA.localeCompare(seqB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    res.json(allIndicators);
+  } catch (error) {
+    console.error('Error in bulk indicators fetch:', error);
+    res.status(500).json({ error: 'ดึงข้อมูลตัวบ่งชี้แบบกลุ่มไม่สำเร็จ' });
+  }
+});
+
+// ดึงข้อมูลสรุปทั้งหมดในครั้งเดียว (Dashboard / Assessment / Summary)
+app.get('/api/bulk/session-summary', async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: 'Firebase not initialized' });
+    const { session_id, major_name } = req.query;
+    if (!major_name) return res.status(400).json({ error: 'กรุณาระบุ major_name' });
+
+    console.log(`[BULK] Fetching session summary for major: ${major_name}, session: ${session_id}`);
+
+    // Parallel fetch using Promise.all
+    const [compSnap, evalSnap, evalActualSnap, commSnap, indSnap] = await Promise.all([
+      db.collection('quality_components').where('major_name', '==', major_name).get(),
+      session_id ? db.collection('evaluations').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
+      session_id ? db.collection('evaluations_actual').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
+      session_id ? db.collection('committee_evaluations').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
+      db.collection('indicators').where('major_name', '==', major_name).get()
+    ]);
+
+    const components = compSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const evaluations = evalSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const evaluations_actual = evalActualSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const committee_evaluations = commSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const indicators = indSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Sort indicators
+    indicators.sort((a, b) => {
+      const seqA = String(a.sequence || '');
+      const seqB = String(b.sequence || '');
+      return seqA.localeCompare(seqB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    res.json({
+      components,
+      evaluations,
+      evaluations_actual,
+      committee_evaluations,
+      indicators
+    });
+  } catch (error) {
+    console.error('Error in session summary batch:', error);
+    res.status(500).json({ error: 'ดึงข้อมูลสรุปไม่สำเร็จ', details: error.message });
+  }
+});
+
+// บันทึกตัวบ่งชี้แบบกลุ่ม (Batch Create)
+app.post('/api/bulk/indicators', async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: 'Firebase not initialized' });
+    const { indicators } = req.body;
+    if (!Array.isArray(indicators) || indicators.length === 0) {
+      return res.status(400).json({ error: 'indicators must be a non-empty array' });
+    }
+
+    console.log(`[BULK] Creating ${indicators.length} indicators`);
+
+    const batch = db.batch();
+    const results = [];
+    const timestamp = new Date().toISOString();
+
+    for (const item of indicators) {
+      const docRef = db.collection('indicators').doc();
+      const docData = {
+        ...item,
+        created_at: timestamp
+      };
+      batch.set(docRef, docData);
+      results.push({ id: docRef.id, ...docData });
+    }
+
+    await batch.commit();
+    res.json({ success: true, count: results.length, indicators: results });
+  } catch (error) {
+    console.error('Error in bulk indicators creation:', error);
+    res.status(500).json({ error: 'บันทึกข้อมูลแบบกลุ่มไม่สำเร็จ', details: error.message });
+  }
+});
+
 // ================= ASSESSMENT SESSIONS =================
 app.post('/api/assessment-sessions', async (req, res) => {
   try {
@@ -1143,7 +1265,7 @@ app.get('/api/indicator-detail', async (req, res) => {
       return res.status(500).json({ error: 'Firebase not initialized' });
     }
 
-    const { indicator_id, session_id, major_name } = req.query || {};
+    const { indicator_id } = req.query || {};
     if (!indicator_id) return res.status(400).json({ error: 'indicator_id จำเป็น' });
 
     const doc = await db.collection('indicators').doc(indicator_id).get();
@@ -1156,6 +1278,46 @@ app.get('/api/indicator-detail', async (req, res) => {
   } catch (error) {
     console.error('Error fetching indicator detail:', error);
     res.status(500).json({ error: 'ดึงข้อมูลตัวบ่งชี้ไม่สำเร็จ', details: error.message });
+  }
+});
+
+app.post('/api/bulk/indicator-details', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const { indicator_ids } = req.body || {};
+    if (!Array.isArray(indicator_ids) || indicator_ids.length === 0) {
+      return res.json({}); // Return empty map if no IDs
+    }
+
+    // Firestore doesn't support 'IN' with more than 10-30 IDs.
+    // If there are many IDs, we can fetch all and filter, or do multiple queries.
+    // For indicator details, they are usually in the same major, so we can fetch all indicators for a major if major_name is provided,
+    // or fetch by ID if there are few.
+
+    // Let's use get() for specific IDs in chunks of 30
+    const chunks = [];
+    for (let i = 0; i < indicator_ids.length; i += 30) {
+      chunks.push(indicator_ids.slice(i, i + 30));
+    }
+
+    const results = {};
+    for (const chunk of chunks) {
+      const snapshot = await db.collection('indicators')
+        .where(admin.firestore.FieldPath.documentId(), 'in', chunk)
+        .get();
+
+      snapshot.forEach(doc => {
+        results[doc.id] = { id: doc.id, ...doc.data() };
+      });
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error('Error in bulk indicator details fetch:', error);
+    res.status(500).json({ error: 'ดึงรายละเอียดตัวบ่งชี้แบบกลุ่มไม่สำเร็จ' });
   }
 });
 

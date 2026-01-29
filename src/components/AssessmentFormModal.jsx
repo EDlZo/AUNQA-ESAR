@@ -185,23 +185,23 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
         <div className="mb-6">
           <h4 className="text-md font-medium text-gray-900 mb-3">เกณฑ์การประเมิน</h4>
           <div className="overflow-x-auto">
-            <table className="w-full border border-gray-300">
+            <table className="w-full border border-gray-200">
               <thead>
                 <tr className="bg-gray-50">
-                  <th className="border border-gray-300 px-4 py-2 text-center font-medium text-gray-700">ระดับ 1</th>
-                  <th className="border border-gray-300 px-4 py-2 text-center font-medium text-gray-700">ระดับ 2</th>
-                  <th className="border border-gray-300 px-4 py-2 text-center font-medium text-gray-700">ระดับ 3</th>
-                  <th className="border border-gray-300 px-4 py-2 text-center font-medium text-gray-700">ระดับ 4</th>
-                  <th className="border border-gray-300 px-4 py-2 text-center font-medium text-gray-700">ระดับ 5</th>
+                  <th className="border border-gray-200 px-4 py-2 text-center font-medium text-gray-700">ระดับ 1</th>
+                  <th className="border border-gray-200 px-4 py-2 text-center font-medium text-gray-700">ระดับ 2</th>
+                  <th className="border border-gray-200 px-4 py-2 text-center font-medium text-gray-700">ระดับ 3</th>
+                  <th className="border border-gray-200 px-4 py-2 text-center font-medium text-gray-700">ระดับ 4</th>
+                  <th className="border border-gray-200 px-4 py-2 text-center font-medium text-gray-700">ระดับ 5</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 1</td>
-                  <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 2</td>
-                  <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 3</td>
-                  <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 4</td>
-                  <td className="border border-gray-300 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 5-7</td>
+                  <td className="border border-gray-200 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 1</td>
+                  <td className="border border-gray-200 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 2</td>
+                  <td className="border border-gray-200 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 3</td>
+                  <td className="border border-gray-200 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 4</td>
+                  <td className="border border-gray-200 px-4 py-2 text-sm text-gray-600">มีการดำเนินงานระดับ 5-7</td>
                 </tr>
               </tbody>
             </table>
@@ -287,7 +287,7 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
 
         {/* ประวัติการประเมิน */}
         {evaluationHistory.length > 0 && (
-          <div className="mt-8 border-t pt-6">
+          <div className="mt-8 border-t border-gray-200 pt-6">
             <h4 className="text-md font-medium text-gray-900 mb-4">
               ประวัติการประเมิน ({evaluationHistory.length} ครั้ง)
             </h4>

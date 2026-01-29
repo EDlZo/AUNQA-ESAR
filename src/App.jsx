@@ -228,10 +228,13 @@ export default function App() {
 
           return (
             <div className="max-w-6xl mx-auto">
+              {/* Header */}
               <div className="mb-6">
                 <h1 className="text-3xl font-bold">จัดการองค์ประกอบคุณภาพการศึกษา</h1>
                 <p className="text-gray-600 mt-1">จัดการข้อมูลกลุ่มคุณภาพ องค์ประกอบ และตัวบ่งชี้</p>
               </div>
+
+              {/* Program info and change button */}
               <div className="mb-6 flex items-center justify-between">
                 <div className="text-sm text-gray-700">
                   <span className="text-gray-500">กำลังจัดการของ:</span>{' '}
@@ -240,11 +243,50 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => { try { localStorage.removeItem('selectedProgramContext'); localStorage.removeItem('assessment_session_id'); } catch { }; setSelectedProgram(null); setActiveTab('manage'); }}
-                  className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                  className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
                 >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
                   เปลี่ยนสาขา
                 </button>
               </div>
+
+              {/* Steps section */}
+              <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-2xl p-8 mb-8 border border-blue-200">
+                <div className="flex items-center gap-3 mb-6">
+                  <Layers className="w-8 h-8 text-blue-600" />
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">ขั้นตอนการจัดการองค์ประกอบคุณภาพ</h2>
+                    <p className="text-gray-600 text-sm">ทำตามขั้นตอนเพื่อจัดการข้อมูลองค์ประกอบและตัวบ่งชี้ให้ครบถ้วน</p>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-1">สร้างองค์ประกอบ</h3>
+                      <p className="text-sm text-gray-600">เพิ่มองค์ประกอบคุณภาพใหม่และกำหนดรายละเอียด</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-1">เพิ่มตัวบ่งชี้</h3>
+                      <p className="text-sm text-gray-600">สร้างตัวบ่งชี้และกำหนดรายละเอียดสำหรับแต่ละองค์ประกอบ</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 mb-1">ตรวจสอบและจัดการ</h3>
+                      <p className="text-sm text-gray-600">ตรวจสอบความถูกต้องและจัดการข้อมูลที่มีอยู่</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <DefineComponentSection />
             </div>
           );

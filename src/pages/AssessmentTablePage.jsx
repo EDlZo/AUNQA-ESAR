@@ -1,5 +1,6 @@
 // src/pages/AssessmentTablePage.jsx
 import React, { useEffect, useState } from 'react';
+import { FileText } from 'lucide-react';
 import AssessmentTable from '../components/AssessmentTable';
 import { BASE_URL } from '../config/api.js';
 
@@ -113,34 +114,85 @@ export default function AssessmentTablePage({ setActiveTab }) {
 
   if (!selectedProgram) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-md p-6 text-center">
-          <p className="text-gray-700 mb-4">ยังไม่ได้เลือกสาขา</p>
-          <button
-            onClick={() => setActiveTab && setActiveTab('assessment')}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            เลือกสาขา
-          </button>
+      <div className="max-w-4xl mx-auto py-12">
+        <div className="text-center mb-8">
+          <FileText className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-gray-900">ตารางสรุปหลักฐานอ้างอิง</h1>
+          <p className="text-gray-600 mt-2">กรุณาเลือกสาขาที่ต้องการดูตารางหลักฐาน</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+          <div className="text-center">
+            <p className="text-gray-700 mb-4">ยังไม่ได้เลือกสาขา</p>
+            <button
+              onClick={() => setActiveTab && setActiveTab('assessment')}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors"
+            >
+              เลือกสาขา
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex items-center justify-between">
+    <div className="max-w-6xl mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">ตารางสรุปหลักฐานอ้างอิง</h1>
+        <p className="text-gray-600 mt-1">ดูรายการหลักฐานอ้างอิงที่อัปโหลดสำหรับแต่ละตัวบ่งชี้</p>
+      </div>
+
+      {/* Program info and change button */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="text-sm text-gray-700">
+          <span className="text-gray-500">กำลังดูหลักฐานของ:</span>{' '}
+          <span className="font-medium">{selectedProgram?.majorName || '-'}</span>
+          {selectedProgram?.facultyName ? <span className="ml-1 text-gray-500">({selectedProgram.facultyName})</span> : null}
+        </div>
+        <button
+          onClick={() => { setActiveTab && setActiveTab('assessment'); }}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          เปลี่ยนสาขา
+        </button>
+      </div>
+
+      {/* Steps section */}
+      <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-2xl p-8 mb-8 border border-blue-200">
+        <div className="flex items-center gap-3 mb-6">
+          <FileText className="w-8 h-8 text-blue-600" />
           <div>
-            <h2 className="text-xl font-semibold text-gray-900">สาขา: {selectedProgram.majorName}</h2>
-            <p className="text-gray-600">คณะ: {selectedProgram.facultyName}</p>
+            <h2 className="text-xl font-bold text-gray-900">ขั้นตอนการดูตารางหลักฐานอ้างอิง</h2>
+            <p className="text-gray-600 text-sm">ตรวจสอบและจัดการหลักฐานอ้างอิงที่อัปโหลดแล้ว</p>
           </div>
-          <button
-            onClick={() => { setActiveTab && setActiveTab('assessment'); }}
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
-          >
-            เปลี่ยนสาขา
-          </button>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">ตรวจสอบรายการ</h3>
+              <p className="text-sm text-gray-600">ดูรายการหลักฐานที่อัปโหลดล่าสุด</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">เปิดดูเอกสาร</h3>
+              <p className="text-sm text-gray-600">คลิกเพื่อเปิดดูเนื้อหาของหลักฐานแต่ละรายการ</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-1">จัดการและปรับปรุง</h3>
+              <p className="text-sm text-gray-600">กลับไปแก้ไขหรือเพิ่มเติมหลักฐานตามต้องการ</p>
+            </div>
+          </div>
         </div>
       </div>
 

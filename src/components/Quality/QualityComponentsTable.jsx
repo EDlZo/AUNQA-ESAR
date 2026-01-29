@@ -53,51 +53,51 @@ export default function QualityComponentsTable({
   }
 
   return (
-    <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                องค์ประกอบที่
-              </th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                ชื่อองค์ประกอบ
-              </th>
-
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                แก้ไข
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                ลบ
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                จำนวน
-              </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ตัวบ่งชี้
-              </th>
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+              องค์ประกอบที่
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+              ชื่อองค์ประกอบ
+            </th>
+            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              ตัวบ่งชี้
+            </th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {Array.isArray(items) && items.map((item, idx) => (
+            <tr key={item.id || idx} className="hover:bg-gray-50">
+              <td className="px-4 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
+                <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-sm font-bold">
+                  {item.component_id || item.componentId || idx + 1}
+                </span>
+              </td>
+              <td className="px-4 py-4 text-sm text-gray-900 border-r border-gray-200">
+                <div className="font-medium text-gray-900">
+                  {item.quality_name || item.qualityName}
+                </div>
+              </td>
+              <td className="px-4 py-4 text-center">
+                <button
+                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm"
+                  onClick={() => onIndicatorClick(item)}
+                >
+                  <svg className="w-3.5 h-3.5 mr-1.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  ตัวบ่งชี้
+                </button>
+              </td>
             </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {Array.isArray(items) && items.map((item, idx) => (
-              <tr key={item.id || idx} className="hover:bg-gray-50">
-                <td className="px-4 py-4 text-center text-sm font-medium text-gray-900 border-r border-gray-200">
-                  <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-sm font-bold">
-                    {item.component_id || item.componentId || idx + 1}
-                  </span>
-                </td>
-                <td className="px-4 py-4 text-sm text-gray-900 border-r border-gray-200">
-                  <div
-                    className={`${indicators[item.id] && indicators[item.id].length > 0 ? 'font-bold' : 'font-medium'} text-gray-900 cursor-pointer hover:text-blue-600 transition-colors`}
-                    onClick={() => onIndicatorClick(item)}
-                  >
-                    {item.quality_name || item.qualityName}
-                  </div>
-                </td>
-
-                <td className="px-4 py-4 text-center border-r border-gray-200">
-                  <button
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
                     onClick={() => onEditClick(item)}
                     className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-yellow-700 bg-yellow-100 hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors"
                   >

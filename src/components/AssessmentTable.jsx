@@ -5,13 +5,31 @@ import EvaluationFormModal from './EvaluationFormModal';
 import { BASE_URL } from '../config/api.js';
 
 
-export default function AssessmentTable({ selectedComponent, indicators, selectedProgram, mode = 'criteria', onBack }) {
+export default function AssessmentTable({ selectedComponent, indicators, selectedProgram, mode = 'criteria', onBack, sessionData }) {
   const [evaluatedIndicators, setEvaluatedIndicators] = useState(new Set());
   const [assessingIndicator, setAssessingIndicator] = useState(null);
   const [flash, setFlash] = useState({ message: '', type: 'success' });
   const [criteriaCompletedIds, setCriteriaCompletedIds] = useState(new Set());
 
   const indicatorList = indicators[selectedComponent.id] || [];
+
+  // Derived state from sessionData prop
+  useEffect(() => {
+    if (sessionData) {
+      const { evaluations, evaluationsActual } = sessionData;
+
+      // Update evaluated indicators based on mode
+      const relevantList = mode === 'evaluation' ? evaluationsActual : evaluations;
+      const evaluatedIds = new Set(relevantList.map(ev => String(ev.indicator_id)));
+      setEvaluatedIndicators(evaluatedIds);
+
+      // Update criteria completion status for evaluation mode
+      if (mode === 'evaluation') {
+        const criteriaIds = new Set(evaluations.map(ev => String(ev.indicator_id)));
+        setCriteriaCompletedIds(criteriaIds);
+      }
+    }
+  }, [sessionData, mode, selectedComponent]);
 
   useEffect(() => {
     if (flash.message) {
@@ -20,7 +38,7 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
     }
   }, [flash.message]);
 
-  // ดึงข้อมูลสถานะการประเมิน
+  // ดึงข้อมูลสถานะการประเมิน (กรณีต้องการรีเฟรชหลังบันทึก)
   const fetchEvaluationStatus = async () => {
     if (!selectedComponent) return;
     try {
@@ -28,70 +46,32 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
       const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
 
-      // ใช้ endpoint ให้ตรงกับโหมด
       const endpoint = mode === 'evaluation'
         ? `${BASE_URL}/api/evaluations-actual/history`
         : `${BASE_URL}/api/evaluations/history`;
+
       let res = await fetch(`${endpoint}?${qs}`);
       if (res.ok) {
         let evaluations = await res.json();
-        let sessionId = localStorage.getItem('assessment_session_id') || '';
-        let list = (Array.isArray(evaluations) ? evaluations : []).filter(ev => !sessionId || String(ev.session_id) === String(sessionId));
-        // normalize milliseconds id
-        const altId = sessionId && sessionId.length > 10 ? String(Math.floor(Number(sessionId) / 1000)) : '';
-        if (list.length === 0 && altId) {
-          list = (Array.isArray(evaluations) ? evaluations : []).filter(ev => String(ev.session_id) === altId);
-          if (list.length > 0) {
-            try { localStorage.setItem('assessment_session_id', altId); } catch { }
-          }
-        }
-
-        // Fallback: เผื่อเคยบันทึกด้วย session_id แบบ INT max (2147483647)
-        if (list.length === 0) {
-          const legacyId = '2147483647';
-          const qsLegacy = new URLSearchParams({ session_id: legacyId, major_name: selectedProgram?.majorName || '' }).toString();
-          const resLegacy = await fetch(`${endpoint}?${qsLegacy}`);
-          if (resLegacy.ok) {
-            const legacyRows = await resLegacy.json();
-            list = Array.isArray(legacyRows) ? legacyRows : [];
-          }
-        }
+        let list = (Array.isArray(evaluations) ? evaluations : []).filter(ev => String(ev.session_id) === String(sessionId));
 
         const evaluatedIds = new Set(list.map(ev => String(ev.indicator_id)));
         setEvaluatedIndicators(evaluatedIds);
+
+        // ถ้าเป็นโหมดประเมินผล ให้ดึงเกณฑ์มาด้วยเพื่อเช็คความพร้อม
+        if (mode === 'evaluation') {
+          const criteriaRes = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
+          if (criteriaRes.ok) {
+            const criteriaRows = await criteriaRes.json();
+            const criteriaIds = new Set(criteriaRows.filter(ev => String(ev.session_id) === String(sessionId)).map(ev => String(ev.indicator_id)));
+            setCriteriaCompletedIds(criteriaIds);
+          }
+        }
       }
     } catch (error) {
-      console.error('Error fetching evaluation status:', error);
+      console.error('Error refreshing evaluation status:', error);
     }
   };
-
-  useEffect(() => {
-    fetchEvaluationStatus();
-  }, [selectedComponent, selectedProgram]);
-
-  // โหลดตัวที่กำหนดเกณฑ์แล้ว เพื่อใช้กรองในโหมดประเมินผล
-  const fetchCriteriaCompleted = async () => {
-    if (mode !== 'evaluation') return;
-    try {
-      const sessionId = localStorage.getItem('assessment_session_id') || '';
-      const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
-      const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
-      if (res.ok) {
-        let rows = await res.json();
-        let list = (Array.isArray(rows) ? rows : []).filter(ev => !sessionId || String(ev.session_id) === String(sessionId));
-        const altId = sessionId && sessionId.length > 10 ? String(Math.floor(Number(sessionId) / 1000)) : '';
-        if (list.length === 0 && altId) {
-          list = (Array.isArray(rows) ? rows : []).filter(ev => String(ev.session_id) === altId);
-        }
-        setCriteriaCompletedIds(new Set(list.map(ev => String(ev.indicator_id))));
-      }
-    } catch (e) {
-      console.error('Error fetching criteria completion list:', e);
-    }
-  };
-
-  useEffect(() => { fetchCriteriaCompleted(); }, [mode, selectedComponent, selectedProgram, indicators]);
 
   const formatSequence = (seq) => {
     if (!seq) return '';
@@ -130,6 +110,8 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
         selectedProgram={selectedProgram}
         onComplete={handleAssessmentComplete}
         onCancel={handleAssessmentCancel}
+        allEvaluations={sessionData?.evaluations || []}
+        allEvaluationsActual={sessionData?.evaluationsActual || []}
       />
     );
   }

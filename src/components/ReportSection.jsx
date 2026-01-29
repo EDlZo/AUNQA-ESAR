@@ -171,7 +171,7 @@ export default function ReportSection() {
       <div className="text-sm text-gray-500">ยังไม่มีข้อมูลผลประเมินสำหรับสาขานี้</div>
     );
     return (
-      <table className="w-full border mt-2 text-sm">
+      <table className="w-full border border-gray-200 mt-2 text-sm">
         <thead>
           <tr className="bg-gray-100">
             <th className="py-2 px-3">คะแนน</th>
@@ -182,7 +182,7 @@ export default function ReportSection() {
         </thead>
         <tbody>
           {history.map((ev) => (
-            <tr key={ev.evaluation_id} className="border-t">
+            <tr key={ev.evaluation_id} className="border-t border-gray-200">
               <td className="py-2 px-3">{ev.score}</td>
               <td className="py-2 px-3">{ev.comment}</td>
               <td className="py-2 px-3">{ev.evidence_file || '-'}</td>
