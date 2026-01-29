@@ -33,6 +33,10 @@ if (!admin.apps.length) {
   try {
     // Try to use environment variables first
     if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID) {
+      console.log('🔑 Using Firebase environment variables');
+      console.log('📧 Client Email:', process.env.FIREBASE_CLIENT_EMAIL);
+      console.log('🆔 Project ID:', process.env.FIREBASE_PROJECT_ID);
+      
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId: process.env.FIREBASE_PROJECT_ID,
@@ -43,6 +47,11 @@ if (!admin.apps.length) {
       });
       console.log('✅ Firebase Admin initialized with environment variables (local storage)');
     } else {
+      console.log('⚠️ Missing Firebase environment variables:');
+      console.log('- FIREBASE_PRIVATE_KEY:', !!process.env.FIREBASE_PRIVATE_KEY);
+      console.log('- FIREBASE_CLIENT_EMAIL:', !!process.env.FIREBASE_CLIENT_EMAIL);
+      console.log('- FIREBASE_PROJECT_ID:', !!process.env.FIREBASE_PROJECT_ID);
+      
       // Fallback to service account file (Only in development)
       if (process.env.NODE_ENV !== 'production' && fs.existsSync('./firebase-service-account.json')) {
         const serviceAccount = require('./firebase-service-account.json');
@@ -52,7 +61,7 @@ if (!admin.apps.length) {
         });
         console.log('✅ Firebase Admin initialized with service account file');
       } else {
-        console.log('⚠️ Firebase Admin not initialized: Missing credentials');
+        console.log('❌ Firebase Admin not initialized: Missing credentials and no service account file');
       }
     }
   } catch (error) {
@@ -61,6 +70,11 @@ if (!admin.apps.length) {
 }
 
 const db = admin.apps.length ? admin.firestore() : null;
+if (db) {
+  console.log('✅ Firestore database initialized');
+} else {
+  console.log('❌ Firestore database not available');
+}
 // Disable Firebase Storage - using local file storage instead
 const bucket = null;
 console.log('📦 Using local file storage (Firebase Storage disabled)');
