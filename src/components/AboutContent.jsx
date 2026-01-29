@@ -3,16 +3,13 @@ import React from 'react';
 import { Building, BookOpen, Award, Users, Globe, CheckCircle } from 'lucide-react';
 
 export default function AboutContent({ currentUser, rolePermissions, standards }) {
-  const userRole = rolePermissions[currentUser.role] || { name: 'Unknown', color: 'bg-gray-500' };
+  const userRole = (currentUser && rolePermissions[currentUser.role]) || { name: 'Unknown', color: 'bg-gray-500' };
 
   return (
     <div className="space-y-6">
       <div className="bg-white rounded-xl shadow-lg p-8">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-2xl font-bold text-gray-900">เกี่ยวกับ AUNQA</h3>
-          <div className={`${userRole.color} text-white px-4 py-2 rounded-lg flex items-center space-x-2`}>
-            <span className="text-sm font-medium">{userRole.name}</span>
-          </div>
         </div>
         <p className="text-gray-600 leading-relaxed mb-6">
           ASEAN University Network - Quality Assurance (AUNQA) เป็นกลไกการประกันคุณภาพการศึกษาระดับอุดมศึกษา
@@ -33,7 +30,7 @@ export default function AboutContent({ currentUser, rolePermissions, standards }
           </div>
         </div>
       </div>
-      
+
       <div className="bg-white rounded-xl shadow-lg p-8">
         <h3 className="text-2xl font-bold text-gray-900 mb-6">มาตรฐานการประเมิน</h3>
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -50,6 +47,6 @@ export default function AboutContent({ currentUser, rolePermissions, standards }
           ))}
         </div>
       </div>
-    </div>
+    </div >
   );
 }

@@ -23,7 +23,7 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
       let sessionId = localStorage.getItem('assessment_session_id') || '';
       // normalize milliseconds to seconds if needed
       const altId = sessionId && sessionId.length > 10 ? String(Math.floor(Number(sessionId) / 1000)) : '';
-      const major = selectedProgram?.majorName || '';
+      const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
 
       let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
@@ -61,7 +61,7 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
     try {
       let sessionId = localStorage.getItem('assessment_session_id') || '';
       const altId = sessionId && sessionId.length > 10 ? String(Math.floor(Number(sessionId) / 1000)) : '';
-      const major = selectedProgram?.majorName || '';
+      const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
 
       let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
@@ -80,7 +80,19 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
         }
         const history = (Array.isArray(filtered) ? filtered : [])
           .filter(ev => String(ev.indicator_id) === String(indicator.id))
-          .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          .sort((a, b) => {
+            const getTime = (val) => {
+              if (!val) return 0;
+              if (val instanceof Date) return val.getTime();
+              if (typeof val === 'string') return new Date(val).getTime();
+              if (val && typeof val === 'object') {
+                if (val.seconds) return val.seconds * 1000;
+                if (val._seconds) return val._seconds * 1000;
+              }
+              return 0;
+            };
+            return getTime(b.created_at) - getTime(a.created_at);
+          });
         setEvaluationHistory(history);
       }
     } catch (error) {
@@ -94,7 +106,7 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
 
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
-      const major = selectedProgram?.majorName || '';
+      const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
 
       const formData = new FormData();
       formData.append('session_id', sessionId);

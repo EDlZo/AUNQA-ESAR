@@ -17,7 +17,7 @@ const FirebaseLoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
 
     try {
       const result = await login(formData.username, formData.password, formData.role);
-      
+
       if (result.success) {
         onLoginSuccess(result.user);
         onClose();
@@ -91,11 +91,13 @@ const FirebaseLoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="system_admin">ผู้ดูแลระบบ</option>
+              <option value="qa_admin">QA Admin</option>
               <option value="sar_manager">ผู้จัดการ SAR</option>
               <option value="reporter">ผู้รายงาน</option>
               <option value="evaluator">ผู้ประเมิน</option>
               <option value="external_evaluator">ผู้ประเมินภายนอก</option>
               <option value="executive">ผู้บริหาร</option>
+              <option value="qa_admin">QA Admin</option>
             </select>
           </div>
 

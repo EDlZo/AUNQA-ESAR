@@ -39,7 +39,8 @@ export default function LoginModal({ onLogin, onClose }) {
           3: 'reporter',
           4: 'evaluator',
           5: 'external_evaluator',
-          6: 'executive'
+          6: 'executive',
+          7: 'qa_admin'
         };
 
         const userData = {
@@ -142,6 +143,7 @@ export default function LoginModal({ onLogin, onClose }) {
                 required
               >
                 <option value="system_admin">System Admin</option>
+                <option value="qa_admin">QA Admin</option>
                 <option value="sar_manager">SAR Manager</option>
                 <option value="reporter">Reporter</option>
                 <option value="evaluator">Evaluator</option>

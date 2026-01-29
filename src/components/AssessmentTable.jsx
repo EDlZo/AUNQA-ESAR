@@ -25,7 +25,7 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
     if (!selectedComponent) return;
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
-      const major = selectedProgram?.majorName || '';
+      const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
 
       // ใช้ endpoint ให้ตรงกับโหมด
@@ -74,7 +74,7 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
     if (mode !== 'evaluation') return;
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
-      const major = selectedProgram?.majorName || '';
+      const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
       let res = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
       if (res.ok) {

@@ -28,7 +28,7 @@ export default function SummaryPage({ currentUser }) {
 
   useEffect(() => {
     const sessionId = localStorage.getItem('assessment_session_id') || '';
-    const major = selectedProgram?.majorName || '';
+    const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
     if (!sessionId || !major) return;
     setLoading(true);
     fetch(`${BASE_URL}/api/evaluations-actual/history?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`)
@@ -72,7 +72,7 @@ export default function SummaryPage({ currentUser }) {
 
   useEffect(() => {
     const sessionId = localStorage.getItem('assessment_session_id') || '';
-    const major = selectedProgram?.majorName || '';
+    const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
     if (!sessionId || !major) return;
     // fetch detail for each indicator id present
     const ids = Array.from(new Set(rows.map(r => r.indicator_id).filter(Boolean)));
@@ -95,7 +95,7 @@ export default function SummaryPage({ currentUser }) {
   // นับจำนวนตัวบ่งชี้ต่อองค์ประกอบเพื่อแสดงในคอลัมน์ "จำนวน"
   useEffect(() => {
     const sessionId = localStorage.getItem('assessment_session_id') || '';
-    const major = selectedProgram?.majorName || '';
+    const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
     if (!sessionId || !major || components.length === 0) return;
     (async () => {
       const countMap = {};
@@ -116,7 +116,7 @@ export default function SummaryPage({ currentUser }) {
     setViewComponent(component);
     setViewIndicators([]);
     const sessionId = localStorage.getItem('assessment_session_id') || '';
-    const major = selectedProgram?.majorName || '';
+    const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
     try {
       const res = await fetch(`${BASE_URL}/api/indicators-by-component/${encodeURIComponent(component.id)}?${new URLSearchParams({ session_id: sessionId, major_name: major }).toString()}`);
       const inds = res.ok ? await res.json() : [];
@@ -128,7 +128,19 @@ export default function SummaryPage({ currentUser }) {
     setDetailIndicator(indicator);
     // หา evaluation ล่าสุดของตัวบ่งชี้นี้จาก rows
     const list = rows.filter(r => String(r.indicator_id) === String(indicator.id))
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      .sort((a, b) => {
+        const getTime = (val) => {
+          if (!val) return 0;
+          if (val instanceof Date) return val.getTime();
+          if (typeof val === 'string') return new Date(val).getTime();
+          if (val && typeof val === 'object') {
+            if (val.seconds) return val.seconds * 1000;
+            if (val._seconds) return val._seconds * 1000;
+          }
+          return 0;
+        };
+        return getTime(b.created_at) - getTime(a.created_at);
+      });
     setDetailEvaluation(list[0] || null);
   };
 
@@ -218,23 +230,32 @@ export default function SummaryPage({ currentUser }) {
                 const evidenceFiles = [];
                 let evidenceMeta = {};
 
-                if (detailEvaluation?.evidence_files_json) {
-                  try {
-                    const files = JSON.parse(detailEvaluation.evidence_files_json);
-                    if (Array.isArray(files)) {
-                      evidenceFiles.push(...files);
-                    }
-                  } catch { }
-                }
-                if (detailEvaluation?.evidence_file && !evidenceFiles.includes(detailEvaluation.evidence_file)) {
+                // 1. ดึงจากไฟล์เดียวแบบเดิม (legacy)
+                if (detailEvaluation?.evidence_file) {
                   evidenceFiles.push(detailEvaluation.evidence_file);
                 }
 
-                // ดึง metadata ของหลักฐาน
+                // 2. ดึงจาก JSON (ระบบใหม่ รองรับหลายไฟล์)
+                if (detailEvaluation?.evidence_files_json) {
+                  try {
+                    const files = typeof detailEvaluation.evidence_files_json === 'string'
+                      ? JSON.parse(detailEvaluation.evidence_files_json)
+                      : detailEvaluation.evidence_files_json;
+                    if (Array.isArray(files)) {
+                      files.forEach(f => {
+                        if (!evidenceFiles.includes(f)) evidenceFiles.push(f);
+                      });
+                    }
+                  } catch (e) { console.error('Error parsing evidence_files_json:', e); }
+                }
+
+                // 3. ดึง metadata ของหลักฐาน
                 if (detailEvaluation?.evidence_meta_json) {
                   try {
-                    evidenceMeta = JSON.parse(detailEvaluation.evidence_meta_json) || {};
-                  } catch { }
+                    evidenceMeta = typeof detailEvaluation.evidence_meta_json === 'string'
+                      ? JSON.parse(detailEvaluation.evidence_meta_json)
+                      : detailEvaluation.evidence_meta_json;
+                  } catch (e) { console.error('Error parsing evidence_meta_json:', e); }
                 }
 
                 if (evidenceFiles.length === 0) {
@@ -260,7 +281,6 @@ export default function SummaryPage({ currentUser }) {
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {evidenceFiles.map((filename, index) => {
-                          // ดึงข้อมูล metadata สำหรับไฟล์นี้
                           const fileMeta = evidenceMeta[filename] || {};
                           const evidenceNumber = fileMeta.number || `${index + 1}`;
                           const evidenceName = fileMeta.name || detailEvaluation?.evidence_name || filename;
@@ -274,18 +294,16 @@ export default function SummaryPage({ currentUser }) {
                                 {evidenceName}
                               </td>
                               <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                                {filename.startsWith('url_') ? (
-                                  // URL หลักฐาน - เปิดลิงก์โดยตรง
+                                {(fileMeta.url || (filename.startsWith('url_') && detailEvaluation?.evidence_url)) ? (
                                   <a
-                                    href={fileMeta.url || detailEvaluation?.evidence_url || '#'}
+                                    href={fileMeta.url || detailEvaluation?.evidence_url}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="text-green-600 hover:text-green-800 underline cursor-pointer"
                                   >
-                                    URL: เปิดลิงก์
+                                    {filename.startsWith('url_') ? 'URL: เปิดลิงก์' : 'ไฟล์: เปิดไฟล์ (Cloud)'}
                                   </a>
                                 ) : (
-                                  // ไฟล์เอกสาร - เปิดผ่าน /api/view/
                                   <a
                                     href={`${BASE_URL}/api/view/${encodeURIComponent(filename)}`}
                                     target="_blank"
@@ -342,7 +360,7 @@ export default function SummaryPage({ currentUser }) {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold">สรุปผลการดำเนินการคุณภาพการศึกษา</h1>
-          <p className="text-sm text-gray-600">สาขา: {selectedProgram?.majorName || '-'}</p>
+          <p className="text-sm text-gray-600">สาขา: {selectedProgram?.majorName || selectedProgram?.major_name || '-'}</p>
         </div>
         <button
           onClick={() => setSelectedProgram(null)}

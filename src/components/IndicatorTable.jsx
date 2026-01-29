@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { AUNQA_SUBITEMS } from '../templates/aunqa';
 import IndicatorForm from './IndicatorForm';
 import { BASE_URL } from '../config/api.js';
+import { Trash2 } from 'lucide-react';
 
 
 export default function IndicatorTable({
@@ -616,18 +617,12 @@ export default function IndicatorTable({
                 <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
                   จัดการ
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                  เกณฑ์การประเมิน
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  สถานะการประเมิน
-                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {indicatorList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-6 text-gray-500">ไม่มีข้อมูลตัวบ่งชี้</td>
+                  <td colSpan={5} className="text-center py-6 text-gray-500">ไม่มีข้อมูลตัวบ่งชี้</td>
                 </tr>
               ) : (
                 indicatorList.map((indicator) => (
@@ -656,50 +651,14 @@ export default function IndicatorTable({
                         {indicator.criteria_type}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-center border-r border-gray-200">
+                    <td className="px-4 py-4 text-center">
                       <button
                         onClick={() => onDeleteClick(indicator.id, selectedComponent.id)}
-                        className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-all duration-200 group"
+                        title="ลบตัวบ่งชี้"
                       >
-                        ลบ
+                        <Trash2 className="w-5 h-5 group-hover:scale-110" />
                       </button>
-                    </td>
-                    <td className="px-4 py-4 text-center border-r border-gray-200">
-                      <button
-                        className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-                        onClick={async () => {
-                          setAssessIndicator(indicator);
-                          // โหลดประวัติการประเมิน
-                          await fetchIndicatorHistory(indicator.id);
-                          // ถ้าเคยประเมินแล้ว ให้โหลดข้อมูลเดิมมาแสดง
-                          if (evaluatedIndicators.has(String(indicator.id))) {
-                            const evaluation = await fetchIndicatorEvaluation(indicator.id);
-                            if (evaluation) {
-                              setAssessTarget(evaluation.target_value || ''); // โหลด target_value
-                              setAssessScore(evaluation.score || '');
-                              setAssessComment(evaluation.comment || ''); // โหลด comment
-                            }
-                          } else {
-                            // รีเซ็ตฟิลด์สำหรับการประเมินใหม่
-                            setAssessTarget('');
-                            setAssessScore('');
-                            setAssessComment('');
-                          }
-                        }}
-                      >
-                        เกณฑ์การประเมิน
-                      </button>
-                    </td>
-                    <td className="px-4 py-4 text-center text-sm">
-                      {evaluatedIndicators.has(String(indicator.id)) ? (
-                        <span className="inline-flex items-center justify-center w-6 h-6 bg-green-500 text-white rounded-full text-sm font-bold">
-                          ✓
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center justify-center w-6 h-6 bg-red-500 text-white rounded-full text-sm font-bold">
-                          ✗
-                        </span>
-                      )}
                     </td>
                   </tr>
                 ))

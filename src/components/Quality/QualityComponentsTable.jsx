@@ -1,15 +1,15 @@
 // src/components/QualityComponentsTable.jsx
 import React from 'react';
 
-export default function QualityComponentsTable({ 
-  items, 
-  loading, 
-  error, 
-  onAddClick, 
-  onEditClick, 
-  onDeleteClick, 
+export default function QualityComponentsTable({
+  items,
+  loading,
+  error,
+  onAddClick,
+  onEditClick,
+  onDeleteClick,
   onIndicatorClick,
-  indicators 
+  indicators
 }) {
   if (loading) {
     return (
@@ -64,9 +64,7 @@ export default function QualityComponentsTable({
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
                 ชื่อองค์ประกอบ
               </th>
-              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                แสดง
-              </th>
+
               <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
                 แก้ไข
               </th>
@@ -90,24 +88,16 @@ export default function QualityComponentsTable({
                   </span>
                 </td>
                 <td className="px-4 py-4 text-sm text-gray-900 border-r border-gray-200">
-                  <div 
+                  <div
                     className={`${indicators[item.id] && indicators[item.id].length > 0 ? 'font-bold' : 'font-medium'} text-gray-900 cursor-pointer hover:text-blue-600 transition-colors`}
                     onClick={() => onIndicatorClick(item)}
                   >
                     {item.quality_name || item.qualityName}
                   </div>
                 </td>
+
                 <td className="px-4 py-4 text-center border-r border-gray-200">
-                  <button className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                    แสดง
-                  </button>
-                </td>
-                <td className="px-4 py-4 text-center border-r border-gray-200">
-                  <button 
+                  <button
                     onClick={() => onEditClick(item)}
                     className="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded-md text-yellow-700 bg-yellow-100 hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition-colors"
                   >
@@ -134,7 +124,7 @@ export default function QualityComponentsTable({
                   </span>
                 </td>
                 <td className="px-4 py-4 text-center">
-                  <button 
+                  <button
                     className="inline-flex items-center px-2 py-1 border border-gray-300 text-xs font-medium rounded text-gray-600 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-400 transition-colors"
                     onClick={() => onIndicatorClick(item)}
                   >

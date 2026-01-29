@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GraduationCap, ClipboardCheck } from 'lucide-react';
+import { GraduationCap, ClipboardCheck, Eye, ChevronRight, CheckCircle2, Search, X, ChevronLeft, Target, BookOpen, Clock, FileText, BarChart3, Activity, Star, Save, Link2, ShieldCheck } from 'lucide-react';
 import ProgramSelection from '../components/ProgramSelection.jsx';
 import { BASE_URL } from '../config/api.js';
 
@@ -227,7 +227,19 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     const ind = evaluatingIndicator;
     const latest = rows
       .filter(r => String(r.indicator_id) === String(ind.id))
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null;
+      .sort((a, b) => {
+        const getTime = (val) => {
+          if (!val) return 0;
+          if (val instanceof Date) return val.getTime();
+          if (typeof val === 'string') return new Date(val).getTime();
+          if (val && typeof val === 'object') {
+            if (val.seconds) return val.seconds * 1000;
+            if (val._seconds) return val._seconds * 1000;
+          }
+          return 0;
+        };
+        return getTime(b.created_at) - getTime(a.created_at);
+      })[0] || null;
     const crit = criteriaMap[String(ind.id)] || {};
     const committee = committeeMap[String(ind.id)] || {};
 
@@ -235,18 +247,35 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     const renderEvidence = () => {
       const evidenceFiles = [];
       let evidenceMeta = {};
-      if (latest?.evidence_files_json) {
-        try {
-          const files = JSON.parse(latest.evidence_files_json);
-          if (Array.isArray(files)) evidenceFiles.push(...files);
-        } catch { }
-      }
-      if (latest?.evidence_file && !evidenceFiles.includes(latest.evidence_file)) {
+
+      // 1. ดึงจากไฟล์เดียวแบบเดิม (legacy)
+      if (latest?.evidence_file) {
         evidenceFiles.push(latest.evidence_file);
       }
-      if (latest?.evidence_meta_json) {
-        try { evidenceMeta = JSON.parse(latest.evidence_meta_json) || {}; } catch { }
+
+      // 2. ดึงจาก JSON (ระบบใหม่ รองรับหลายไฟล์)
+      if (latest?.evidence_files_json) {
+        try {
+          const files = typeof latest.evidence_files_json === 'string'
+            ? JSON.parse(latest.evidence_files_json)
+            : latest.evidence_files_json;
+          if (Array.isArray(files)) {
+            files.forEach(f => {
+              if (!evidenceFiles.includes(f)) evidenceFiles.push(f);
+            });
+          }
+        } catch (e) { console.error('Error parsing evidence_files_json:', e); }
       }
+
+      // 3. ดึง Metadata
+      if (latest?.evidence_meta_json) {
+        try {
+          evidenceMeta = typeof latest.evidence_meta_json === 'string'
+            ? JSON.parse(latest.evidence_meta_json)
+            : latest.evidence_meta_json;
+        } catch (e) { console.error('Error parsing evidence_meta_json:', e); }
+      }
+
       if (evidenceFiles.length === 0) {
         return (
           <div className="text-center py-4 text-gray-500">
@@ -274,10 +303,24 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                     <td className="px-4 py-3 text-sm text-gray-900 font-medium text-center bg-gray-50 w-20">{evidenceNumber}</td>
                     <td className="px-4 py-3 text-sm text-gray-900">{evidenceName}</td>
                     <td className="px-4 py-3 text-sm text-gray-900 text-right">
-                      {filename.startsWith('url_') ? (
-                        <a href={fileMeta.url || latest?.evidence_url || '#'} target="_blank" rel="noreferrer" className="text-green-600 hover:text-green-800 underline cursor-pointer">URL: เปิดลิงก์</a>
+                      {(fileMeta.url || (filename.startsWith('url_') && latest?.evidence_url)) ? (
+                        <a
+                          href={fileMeta.url || latest?.evidence_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-green-600 hover:text-green-800 underline cursor-pointer"
+                        >
+                          {filename.startsWith('url_') ? 'URL: เปิดลิงก์' : 'ไฟล์: เปิดไฟล์ (Cloud)'}
+                        </a>
                       ) : (
-                        <a href={`${BASE_URL}/api/view/${encodeURIComponent(filename)}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-800 underline cursor-pointer">ไฟล์: เปิดไฟล์</a>
+                        <a
+                          href={`${BASE_URL}/api/view/${encodeURIComponent(filename)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                        >
+                          ไฟล์: เปิดไฟล์
+                        </a>
                       )}
                     </td>
                   </tr>
@@ -290,98 +333,215 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     };
 
     return (
-      <div className="max-w-6xl mx-auto py-8">
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b flex items-center justify-between">
-            <div>
-              <div className="text-sm text-gray-500">รายละเอียด</div>
-              <div className="font-semibold">{ind.sequence} : {ind.indicator_name}</div>
+      <div className="max-w-6xl mx-auto py-8 px-4">
+        {/* Breadcrumb/Navigation */}
+        <div className="flex items-center gap-2 mb-6 text-sm">
+          <button
+            onClick={() => setEvaluatingIndicator(null)}
+            className="text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-1"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            กลับไปที่รายการตัวบ่งชี้
+          </button>
+          <span className="text-gray-400">/</span>
+          <span className="text-gray-500 font-medium">รายละเอียดการประเมิน</span>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-xl shadow-blue-900/5 border border-gray-100 overflow-hidden">
+          {/* Header Card */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-8 py-10 text-white relative overflow-hidden">
+            <div className="relative z-10">
+              <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-md rounded-full text-blue-50 text-xs font-semibold uppercase tracking-wider mb-4 border border-white/10">
+                <Target className="w-3.5 h-3.5" />
+                ตัวบ่งชี้ {ind.sequence}
+              </div>
+              <h2 className="text-3xl font-bold leading-tight">{ind.indicator_name}</h2>
+              <div className="mt-6 flex flex-wrap gap-4">
+                <div className="flex items-center gap-2 text-blue-100 text-sm">
+                  <BookOpen className="w-4 h-4" />
+                  <span>{viewComponent?.quality_name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-blue-100 text-sm">
+                  <Clock className="w-4 h-4" />
+                  <span>บันทึกล่าสุด: {latest ? new Date(latest.created_at).toLocaleString('th-TH') : '-'}</span>
+                </div>
+              </div>
             </div>
-            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={() => { setEvaluatingIndicator(null); }}>กลับ</button>
+            {/* Decorative background element */}
+            <div className="absolute top-0 right-0 -transtion-y-1/2 translate-x-1/4 w-96 h-96 bg-white/5 rounded-full blur-3xl" />
           </div>
-          <div className="p-6 space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-900">
-              {ind.sequence} {ind.indicator_name}
-            </div>
-            {/* ผลการดำเนินงาน (Rich text) */}
-            <div>
-              <div className="font-semibold mb-2">ผลการดำเนินงาน</div>
-              <div
-                className="prose max-w-none border rounded p-3"
-                dangerouslySetInnerHTML={{ __html: latest?.operation_result || '<em>ไม่มีข้อมูล</em>' }}
-              />
-            </div>
-            <div className="border-2 border-green-300 rounded p-3">
-              <div className="text-center text-sm text-gray-700 mb-3 font-medium">ผลการดำเนินงาน ปีการศึกษา</div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-3 py-2 text-center">ค่าเป้าหมาย</th>
-                      <th className="px-3 py-2 text-center">คะแนนค่าเป้าหมาย</th>
-                      <th className="px-3 py-2 text-center">ผลการดำเนินงาน</th>
-                      <th className="px-3 py-2 text-center">คะแนนอ้างอิงเกณฑ์</th>
-                      <th className="px-3 py-2 text-center">การบรรลุเป้าหมาย</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td className="px-3 py-2 text-center">{crit.target_value || '-'}</td>
-                      <td className="px-3 py-2 text-center">{crit.score || '-'}</td>
-                      <td className="px-3 py-2 text-center">{latest?.operation_score ?? '-'}</td>
-                      <td className="px-3 py-2 text-center">{latest?.reference_score ?? '-'}</td>
-                      <td className="px-3 py-2 text-center">{latest?.goal_achievement ?? '-'}</td>
-                    </tr>
-                  </tbody>
-                </table>
+
+          <div className="p-8 space-y-10">
+            {/* Section: Result Summary */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+              <div className="lg:col-span-8 space-y-6">
+                <div className="flex items-center gap-2 text-gray-900 font-bold text-lg border-b border-gray-100 pb-3">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  ผลการดำเนินงาน
+                </div>
+                <div
+                  className="prose max-w-none text-gray-700 bg-gray-50/50 rounded-xl p-6 border border-gray-100 shadow-inner leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: latest?.operation_result || '<div class="text-gray-400 italic">ไม่มีข้อมูลการดำเนินงาน</div>' }}
+                />
+              </div>
+
+              <div className="lg:col-span-4 space-y-6">
+                <div className="flex items-center gap-2 text-gray-900 font-bold text-lg border-b border-gray-100 pb-3">
+                  <BarChart3 className="w-5 h-5 text-blue-600" />
+                  ผลลัพธ์เชิงตัวเลข
+                </div>
+
+                <div className="space-y-4">
+                  <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">เป้าหมาย</span>
+                      <Target className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold text-gray-900">{crit.target_value || '-'}</span>
+                      <span className="text-sm text-gray-500">(คะแนน {crit.score || '-'})</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">ผลลัพธ์จริง</span>
+                      <Activity className="w-4 h-4 text-green-400" />
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold text-green-600">{latest?.operation_score ?? '-'}</span>
+                      <span className="text-sm text-gray-500">(เกณฑ์ {latest?.reference_score ?? '-'})</span>
+                    </div>
+                  </div>
+
+                  <div className={`rounded-xl border p-5 shadow-sm ${latest?.goal_achievement === 'บรรลุ'
+                    ? 'bg-green-50 border-green-100'
+                    : latest?.goal_achievement === 'ไม่บรรลุ'
+                      ? 'bg-red-50 border-red-100'
+                      : 'bg-yellow-50 border-yellow-100'
+                    }`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-xs font-semibold uppercase tracking-wider ${latest?.goal_achievement === 'บรรลุ' ? 'text-green-600' : 'text-gray-500'
+                        }`}>การบรรลุเป้าหมาย</span>
+                      {latest?.goal_achievement === 'บรรลุ' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                    </div>
+                    <div className={`text-xl font-bold ${latest?.goal_achievement === 'บรรลุ' ? 'text-green-700' : 'text-gray-800'
+                      }`}>
+                      {latest?.goal_achievement || 'รอยืนยัน'}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
-              <div className="border-2 border-blue-300 rounded p-3 space-y-4">
-                <div>
-                  <div className="font-medium">คะแนนประเมิน (กรรมการ)</div>
-                  <input type="number" inputMode="decimal" value={editorScore} onChange={e => setEditorScore(e.target.value)} className="mt-1 w-full border rounded px-3 py-2" placeholder="กรอกคะแนนกรรมการ" />
-                </div>
-                <div>
-                  <div className="font-medium">Strengths (จุดแข็ง)</div>
-                  <textarea value={editorStrengths} onChange={e => setEditorStrengths(e.target.value)} className="mt-1 w-full border rounded px-3 py-2" rows={4} placeholder="พิมพ์จุดแข็ง" />
-                </div>
-                <div>
-                  <div className="font-medium">Areas for Improvement (เรื่องที่พัฒนา/ปรับปรุงได้)</div>
-                  <textarea value={editorImprovements} onChange={e => setEditorImprovements(e.target.value)} className="mt-1 w-full border rounded px-3 py-2" rows={4} placeholder="พิมพ์ข้อที่ควรพัฒนา" />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={() => setEvaluatingIndicator(null)}>ยกเลิก</button>
-                  <button className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700" onClick={handleSaveCommittee}>บันทึก</button>
-                </div>
+            {/* Section: Committee Review */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 text-gray-900 font-bold text-lg border-b border-gray-100 pb-3">
+                <ClipboardCheck className="w-5 h-5 text-indigo-600" />
+                การประเมินโดยคณะกรรมการ
               </div>
-            ) : (
-              <div className="border-2 border-gray-300 rounded p-3 space-y-4 bg-gray-50">
-                <div>
-                  <div className="font-medium">คะแนนประเมิน (กรรมการ)</div>
-                  <div className="mt-1 w-full bg-white border rounded px-3 py-2 text-gray-700">{committee.committee_score || '-'}</div>
-                </div>
-                <div>
-                  <div className="font-medium">Strengths (จุดแข็ง)</div>
-                  <div className="mt-1 w-full bg-white border rounded px-3 py-2 text-gray-700 min-h-[60px] whitespace-pre-wrap">{committee.strengths || '-'}</div>
-                </div>
-                <div>
-                  <div className="font-medium">Areas for Improvement (เรื่องที่พัฒนา/ปรับปรุงได้)</div>
-                  <div className="mt-1 w-full bg-white border rounded px-3 py-2 text-gray-700 min-h-[60px] whitespace-pre-wrap">{committee.improvements || '-'}</div>
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 rounded" onClick={() => setEvaluatingIndicator(null)}>ปิด</button>
-                </div>
-              </div>
-            )}
 
-            {/* ส่วนแสดงหลักฐานอ้างอิง */}
-            <div className="border-2 border-purple-300 rounded p-3">
-              <div className="font-medium mb-3">รายการหลักฐานอ้างอิง</div>
-              {renderEvidence()}
+              {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
+                <div className="bg-indigo-50/30 rounded-2xl p-8 border border-indigo-100 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
+                    <div className="md:col-span-1">
+                      <label className="block text-sm font-bold text-gray-700 mb-2">คะแนนประเมิน</label>
+                      <div className="relative">
+                        <Star className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-yellow-500" />
+                        <input
+                          type="number"
+                          step="0.1"
+                          max="5"
+                          min="0"
+                          value={editorScore}
+                          onChange={e => setEditorScore(e.target.value)}
+                          className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all font-bold text-lg shadow-sm"
+                          placeholder="0.0"
+                        />
+                      </div>
+                    </div>
+                    <div className="md:col-span-3 space-y-6">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Strengths (จุดแข็ง)</label>
+                        <textarea
+                          value={editorStrengths}
+                          onChange={e => setEditorStrengths(e.target.value)}
+                          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-sm"
+                          rows={3}
+                          placeholder="ระบุจุดแข็งที่พบจากการพิจารณาหลักฐาน..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Areas for Improvement (ข้อควรพัฒนา)</label>
+                        <textarea
+                          value={editorImprovements}
+                          onChange={e => setEditorImprovements(e.target.value)}
+                          className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all shadow-sm"
+                          rows={3}
+                          placeholder="ระบุแนวทางที่ควรปรับปรุงเพื่อผลลัพธ์ที่ดีขึ้น..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-4">
+                    <button
+                      className="px-6 py-2.5 text-sm font-semibold bg-white text-gray-600 hover:bg-gray-50 border border-gray-200 rounded-xl transition-all shadow-sm"
+                      onClick={() => setEvaluatingIndicator(null)}
+                    >
+                      ยกเลิก
+                    </button>
+                    <button
+                      className="px-8 py-2.5 text-sm font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-900/20 transition-all flex items-center gap-2"
+                      onClick={handleSaveCommittee}
+                    >
+                      <Save className="w-4 h-4" />
+                      บันทึกผลการประเมิน
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">คะแนนประเมิน</div>
+                    <div className="text-3xl font-black text-gray-800">{committee.committee_score || '-'}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">จุดแข็ง</div>
+                    <div className="text-gray-700 text-sm italic">{committee.strengths || 'ยังไม่มีข้อมูล'}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-6 border border-gray-100">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">ข้อควรพัฒนา</div>
+                    <div className="text-gray-700 text-sm italic">{committee.improvements || 'ยังไม่มีข้อมูล'}</div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="text-xs text-gray-500">บันทึกล่าสุด: {latest ? new Date(latest.created_at).toLocaleString('th-TH') : '-'}</div>
+
+            {/* Section: Evidence */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-2 text-gray-900 font-bold text-lg border-b border-gray-100 pb-3">
+                <Link2 className="w-5 h-5 text-purple-600" />
+                รายการหลักฐานอ้างอิง
+              </div>
+
+              <div className="border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                {renderEvidence()}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Card */}
+          <div className="bg-gray-50 border-t border-gray-100 px-8 py-6 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-gray-400 text-xs font-medium italic">
+              <ShieldCheck className="w-4 h-4" />
+              ระบบประเมินคุณภาพการศึกษา AUN-QA
+            </div>
+            <button
+              className="px-6 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
+              onClick={() => setEvaluatingIndicator(null)}
+            >
+              กลับหน้ารายการ
+            </button>
           </div>
         </div>
       </div>
@@ -412,32 +572,13 @@ export default function CommitteeEvaluationPage({ currentUser }) {
   return (
     <div className="max-w-6xl mx-auto py-8">
       {flash.message && (
-        <div className={`mb-4 p-3 rounded ${flash.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-          {flash.message}
-        </div>
-      )}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold">สรุปผลการประเมิน</h1>
-          <p className="text-sm text-gray-600">สาขา: {selectedProgram.majorName || selectedProgram.major_name}</p>
-        </div>
-        <button
-          onClick={() => setSelectedProgram(null)}
-          className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded"
-        >
-          เปลี่ยนสาขา
-        </button>
-      </div>
-
-      {/* Flash Message */}
-      {flash.message && (
-        <div className={`mb-4 rounded-md px-4 py-2 border ${flash.type === 'success'
+        <div className={`mb-4 rounded-md px-4 py-2 border transition-all ${flash.type === 'success'
           ? 'bg-green-50 border-green-200 text-green-800'
           : 'bg-red-50 border-red-200 text-red-800'
           }`}>
           {flash.message}
           <button
-            className={`${flash.type === 'success' ? 'text-green-700' : 'text-red-700'} float-right`}
+            className={`${flash.type === 'success' ? 'text-green-700' : 'text-red-700'} float-right font-bold`}
             onClick={() => setFlash({ message: '', type: 'success' })}
           >
             ×
@@ -445,138 +586,231 @@ export default function CommitteeEvaluationPage({ currentUser }) {
         </div>
       )}
 
-      {/* ตารางองค์ประกอบหลัก */}
-      <div className="overflow-x-auto bg-white rounded-lg shadow mb-8">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">องค์ประกอบที่</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ชื่อองค์ประกอบ</th>
-              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">แสดง</th>
-              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">จำนวน</th>
-              <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">ตัวบ่งชี้</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {loading ? (
-              <tr><td colSpan={5} className="text-center py-6">กำลังโหลด...</td></tr>
-            ) : components.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-6 text-gray-400">ยังไม่มีองค์ประกอบ</td></tr>
-            ) : (
-              components.map((c) => (
-                <tr key={c.id}>
-                  <td className="px-4 py-3 text-center">
-                    <span className="inline-flex items-center justify-center w-7 h-7 bg-red-500 text-white rounded-full text-sm font-bold">{c.component_id || '-'}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-900">{c.quality_name}</td>
-                  <td className="px-4 py-3 text-center">
-                    <button className="inline-flex items-center px-3 py-1.5 text-xs rounded bg-blue-100 text-black" onClick={() => handleViewIndicators(c)}>แสดง</button>
-                  </td>
-                  <td className="px-4 py-3 text-center">{componentIndicatorsCount[c.id] ?? '-'}</td>
-                  <td className="px-4 py-3 text-center">
-                    <button className="inline-flex items-center px-3 py-1.5 text-xs rounded border" onClick={() => handleViewIndicators(c)}>ตัวบ่งชี้</button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Header section (Always visible while program is selected) */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">สรุปผลการประเมิน</h1>
+          <p className="text-sm text-gray-600 mt-1">สาขา: <span className="font-semibold text-gray-800">{selectedProgram.majorName || selectedProgram.major_name}</span></p>
+        </div>
+        <div className="flex gap-2">
+          {viewComponent && (
+            <button
+              onClick={() => { setViewComponent(null); setViewIndicators([]); }}
+              className="px-4 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors border border-gray-200"
+            >
+              กลับหน้าหลัก
+            </button>
+          )}
+          <button
+            onClick={() => setSelectedProgram(null)}
+            className="px-4 py-2 text-sm font-medium bg-white hover:bg-gray-50 text-blue-600 border border-blue-200 rounded-lg transition-colors shadow-sm"
+          >
+            เปลี่ยนสาขา
+          </button>
+        </div>
       </div>
 
-      {/* รายการตัวบ่งชี้ขององค์ประกอบที่เลือก */}
-      {viewComponent && (
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-4 py-3 border-b flex items-center justify-between">
-            <div>
-              <div className="text-sm text-gray-500">ตัวบ่งชี้ขององค์ประกอบ</div>
-              <div className="font-semibold">{viewComponent.quality_name}</div>
-            </div>
-            <button className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded" onClick={() => { setViewComponent(null); setViewIndicators([]); }}>ปิด</button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ลำดับ</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ชื่อตัวบ่งชี้</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">คะแนนค่าเป้าหมาย</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">ผลประเมินตนเอง</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">ผลการดำเนินการ</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">การบรรลุเป้าหมาย</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">ผลประเมินกรรมการ</th>
-                  <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">ประเมินผล</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {loading ? (
-                  <tr><td colSpan={7} className="text-center py-6">กำลังโหลด...</td></tr>
-                ) : viewIndicators.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-6 text-gray-400">ยังไม่มีตัวบ่งชี้</td></tr>
-                ) : (
-                  viewIndicators
-                    // แสดงเฉพาะตัวบ่งชี้ที่มีผลการดำเนินการแล้ว (อิงจากหน้าผลการดำเนินการ)
-                    .filter((ind) => rows.some(r => String(r.indicator_id) === String(ind.id)))
-                    .map((ind) => (
-                      <tr key={ind.id}>
-                        <td className="px-4 py-3 text-center text-sm">
-                          {String(ind.sequence).includes('.') ? (
-                            <span>{ind.sequence}</span>
-                          ) : (
-                            <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-sm font-bold">
-                              {ind.sequence}
-                            </span>
-                          )}
+      {!viewComponent ? (
+        <>
+          {/* ตารางองค์ประกอบหลัก */}
+          <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden mb-8">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                      องค์ประกอบที่
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                      ชื่อองค์ประกอบ
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
+                      จำนวน
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      ตัวบ่งชี้
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-8 text-center">
+                        <div className="inline-flex items-center text-sm text-gray-500">
+                          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          กำลังโหลด...
+                        </div>
+                      </td>
+                    </tr>
+                  ) : components.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-12 text-center text-gray-400">
+                        <Search className="mx-auto h-12 w-12 text-gray-300 mb-2" />
+                        <p>ยังไม่มีองค์ประกอบ</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    components.map((c) => (
+                      <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-4 text-center border-r border-gray-200">
+                          <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-sm font-bold shadow-sm">
+                            {c.component_id || '-'}
+                          </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-left">
-                          <div className={(String(ind.sequence).includes('.') ? 'font-normal' : 'font-bold') + ' text-gray-900 text-left'}>
-                            {ind.indicator_name}
+                        <td className="px-4 py-4 text-sm text-gray-900 border-r border-gray-200">
+                          <div
+                            className="font-medium cursor-pointer hover:text-blue-600 transition-colors"
+                            onClick={() => handleViewIndicators(c)}
+                          >
+                            {c.quality_name}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          {criteriaMap[String(ind.id)]?.target_value || '-'}
+                        <td className="px-4 py-4 text-center border-r border-gray-200">
+                          <span className="inline-flex items-center justify-center w-8 h-8 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
+                            {componentIndicatorsCount[c.id] ?? '-'}
+                          </span>
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          {criteriaMap[String(ind.id)]?.score || '-'}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {(() => {
-                            const actual = rows.find(r => String(r.indicator_id) === String(ind.id));
-                            return actual ? `${actual.operation_score ?? '-'}` : '-';
-                          })()}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {(() => {
-                            const actual = rows.find(r => String(r.indicator_id) === String(ind.id));
-                            return actual ? `${actual.goal_achievement ?? '-'}` : '-';
-                          })()}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {committeeMap[String(ind.id)]?.committee_score || '-'}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
-                            <button
-                              onClick={() => setEvaluatingIndicator(ind)}
-                              className="inline-flex items-center px-3 py-1.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
-                            >
-                              ประเมินผล
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => setEvaluatingIndicator(ind)}
-                              className="inline-flex items-center px-3 py-1.5 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
-                            >
-                              ดูรายละเอียด
-                            </button>
-                          )}
+                        <td className="px-4 py-4 text-center">
+                          <button
+                            onClick={() => handleViewIndicators(c)}
+                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm"
+                          >
+                            <Eye className="w-3.5 h-3.5 mr-1.5 text-gray-500" />
+                            ตัวบ่งชี้
+                          </button>
                         </td>
                       </tr>
                     ))
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div className="px-4 py-3 text-xs text-gray-500 border-t">หน้าสำหรับกรรมการประเมิน</div>
+        </>
+      ) : (
+        /* รายการตัวบ่งชี้ขององค์ประกอบที่เลือก */
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div className="px-6 py-4 border-b bg-gray-50 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">ตัวบ่งชี้ขององค์ประกอบ</div>
+              <div className="font-bold text-lg text-gray-900">{viewComponent.quality_name}</div>
+            </div>
+            <button
+              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+              onClick={() => { setViewComponent(null); setViewIndicators([]); }}
+              title="ปิด"
+            >
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+          <div className="bg-white">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">ลำดับ</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">ชื่อตัวบ่งชี้</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">เป้าหมาย</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">ประเมินตน</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">ดำเนินงาน</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">บรรลุ</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">คกก.</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {loading ? (
+                    <tr><td colSpan={8} className="text-center py-6">กำลังโหลด...</td></tr>
+                  ) : viewIndicators.length === 0 ? (
+                    <tr><td colSpan={8} className="text-center py-6 text-gray-400">ยังไม่มีตัวบ่งชี้</td></tr>
+                  ) : (
+                    viewIndicators
+                      // แสดงเฉพาะตัวบ่งชี้ที่มีผลการดำเนินการแล้ว (อิงจากหน้าผลการดำเนินการ)
+                      .filter((ind) => rows.some(r => String(r.indicator_id) === String(ind.id)))
+                      .map((ind) => {
+                        const actual = rows.find(r => String(r.indicator_id) === String(ind.id));
+                        const hasCommitteeScore = !!committeeMap[String(ind.id)]?.committee_score;
+
+                        return (
+                          <tr key={ind.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-4 text-center border-r border-gray-200">
+                              {String(ind.sequence).includes('.') ? (
+                                <span className="text-sm font-medium text-gray-600">{ind.sequence}</span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-xs font-bold shadow-sm">
+                                  {ind.sequence}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-4 text-sm text-left border-r border-gray-200">
+                              <div className={(String(ind.sequence).includes('.') ? 'font-normal' : 'font-bold') + ' text-gray-900'}>
+                                {ind.indicator_name}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
+                              {criteriaMap[String(ind.id)]?.target_value || '-'}
+                            </td>
+                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
+                              {criteriaMap[String(ind.id)]?.score || '-'}
+                            </td>
+                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200 font-medium">
+                              {actual ? `${actual.operation_score ?? '-'}` : '-'}
+                            </td>
+                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
+                              {actual && actual.goal_achievement ? (
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${actual.goal_achievement === 'บรรลุ' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  }`}>
+                                  {actual.goal_achievement}
+                                </span>
+                              ) : '-'}
+                            </td>
+                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200 font-bold text-blue-600">
+                              {committeeMap[String(ind.id)]?.committee_score || '-'}
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
+                                <button
+                                  onClick={() => setEvaluatingIndicator(ind)}
+                                  className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all ${hasCommitteeScore
+                                    ? 'bg-green-600 text-white hover:bg-green-700'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                    }`}
+                                >
+                                  {hasCommitteeScore ? <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> : <ClipboardCheck className="w-3.5 h-3.5 mr-1" />}
+                                  ประเมินผล
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setEvaluatingIndicator(ind)}
+                                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-all"
+                                >
+                                  <Search className="w-3.5 h-3.5 mr-1" />
+                                  รายละเอียด
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="px-6 py-4 bg-gray-50 border-t flex items-center text-xs text-gray-500">
+            <div className="flex items-center mr-4">
+              <div className="w-2 h-2 bg-blue-600 rounded-full mr-1.5"></div>
+              <span>รอการประเมิน</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-2 h-2 bg-green-600 rounded-full mr-1.5"></div>
+              <span>ประเมินแล้ว</span>
+            </div>
+            <div className="ml-auto italic">หน้าสำหรับกรรมการประเมิน</div>
+          </div>
         </div>
       )}
     </div>

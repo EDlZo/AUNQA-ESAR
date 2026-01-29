@@ -55,7 +55,8 @@ export default function App() {
     reporter: { name: 'Reporter', color: 'bg-green-600', permissions: ['fill_results', 'upload_evidence', 'write_sar', 'edit_own_data'] },
     evaluator: { name: 'Evaluator', color: 'bg-yellow-600', permissions: ['view_assigned', 'give_scores', 'give_feedback', 'view_own_eval'] },
     external_evaluator: { name: 'External Evaluator', color: 'bg-purple-600', permissions: ['view_assigned_limited', 'give_scores', 'give_feedback'] },
-    executive: { name: 'Executive', color: 'bg-gray-600', permissions: ['view_summary', 'view_dashboard', 'compare_results'] }
+    executive: { name: 'Executive', color: 'bg-gray-600', permissions: ['view_summary', 'view_dashboard', 'compare_results'] },
+    qa_admin: { name: 'QA Admin', color: 'bg-indigo-600', permissions: ['manage_structure', 'view_all', 'view_summary', 'view_dashboard', 'view_reports'] }
   };
 
 
@@ -84,7 +85,7 @@ export default function App() {
 
   // Logic สำหรับแสดงเนื้อหาแต่ละ Tab
   const TabContent = () => {
-    if (!currentUser && activeTab !== 'summary') {
+    if (!currentUser && activeTab !== 'about' && activeTab !== 'summary' && activeTab !== 'process' && activeTab !== 'results') {
       return (
         <div className="text-center py-16">
           <div className="bg-white rounded-xl shadow-lg p-8 max-w-md mx-auto">
@@ -113,10 +114,17 @@ export default function App() {
       hasPermission = () => false;
     }
 
+    // Role-based access control for tabs
+    const role = currentUser?.role;
+
     switch (activeTab) {
       case 'about':
         return <AboutContent currentUser={currentUser} rolePermissions={rolePermissions} standards={standards} />;
       case 'programs':
+        // Only Admin or QA Admin can access programs setup
+        if (role !== 'system_admin' && role !== 'qa_admin') {
+          return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+        }
         return (
           <div className="max-w-4xl mx-auto py-12">
             <div className="text-center mb-8">
@@ -165,6 +173,10 @@ export default function App() {
       case 'manage':
         {
           const sel = selectedProgram;
+          // Only Admin or QA Admin can access management
+          if (role !== 'system_admin' && role !== 'qa_admin') {
+            return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+          }
           if (!sel) {
             return (
               <div className="max-w-4xl mx-auto py-12">
@@ -238,12 +250,15 @@ export default function App() {
           );
         }
       case 'process':
-        return <ProcessContent hasPermission={hasPermission} />;
+        return <ProcessContent hasPermission={hasPermission} user={currentUser} />;
       case 'results':
         return <ResultsContent hasPermission={hasPermission} achievements={achievements} />;
       case 'summary':
         return <SummaryPage currentUser={currentUser} />;
       case 'committee':
+        if (!['system_admin', 'sar_manager', 'evaluator', 'external_evaluator'].includes(role)) {
+          return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+        }
         return <CommitteeEvaluationPage currentUser={currentUser} />;
       case 'assessment_criteria':
         return <AssessmentPage currentUser={currentUser} setActiveTab={setActiveTab} assessmentMode="criteria" />;

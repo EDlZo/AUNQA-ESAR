@@ -26,7 +26,8 @@ export default function AssessmentPage({ currentUser, setActiveTab, assessmentMo
         // ใช้ seconds เพื่อไม่ให้เกินค่า INT ของฐานข้อมูล
         const sessionId = localStorage.getItem('assessment_session_id') || Math.floor(Date.now() / 1000).toString();
         localStorage.setItem('assessment_session_id', sessionId);
-        const apiUrl = `${BASE_URL}/api/quality-components?session_id=${sessionId}&major_name=${encodeURIComponent(selectedProgram.majorName)}`;
+        const majorName = selectedProgram.majorName || selectedProgram.major_name || '';
+        const apiUrl = `${BASE_URL}/api/quality-components?session_id=${sessionId}&major_name=${encodeURIComponent(majorName)}`;
         const res = await fetch(apiUrl);
         if (res.ok) {
           const data = await res.json();
@@ -57,7 +58,8 @@ export default function AssessmentPage({ currentUser, setActiveTab, assessmentMo
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const compId = selectedComponent.id; // ใช้ id ขององค์ประกอบ (ตรงกับที่บันทึกตัวบ่งชี้)
-      const url = `${BASE_URL}/api/indicators-by-component/${encodeURIComponent(compId)}?session_id=${sessionId}&major_name=${encodeURIComponent(selectedProgram.majorName)}`;
+      const majorName = selectedProgram.majorName || selectedProgram.major_name || '';
+      const url = `${BASE_URL}/api/indicators-by-component/${encodeURIComponent(compId)}?session_id=${sessionId}&major_name=${encodeURIComponent(majorName)}`;
       let res = await fetch(url);
       let data = [];
       if (res.ok) {

@@ -1,5 +1,5 @@
 // Firebase Authentication
-import { 
+import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
@@ -20,7 +20,8 @@ export const authAPI = {
         'reporter': 3,
         'evaluator': 4,
         'external_evaluator': 5,
-        'executive': 6
+        'executive': 6,
+        'qa_admin': 7
       };
 
       const roleId = roleMapping[role];
@@ -30,7 +31,7 @@ export const authAPI = {
 
       // Authenticate with Firestore (custom logic)
       const result = await usersAPI.authenticate(email, password, roleId);
-      
+
       if (result.success) {
         // Optional: Sign in with Firebase Auth for session management
         try {
@@ -39,10 +40,10 @@ export const authAPI = {
           // If Firebase Auth fails, still return success from Firestore auth
           console.warn('Firebase Auth failed, but Firestore auth succeeded:', authError);
         }
-        
+
         return { success: true, user: result.user };
       }
-      
+
       return { success: false, error: 'ชื่อผู้ใช้ รหัสผ่าน หรือ Role ไม่ถูกต้อง' };
     } catch (error) {
       console.error('Error signing in:', error);

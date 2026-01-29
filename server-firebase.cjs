@@ -1,15 +1,32 @@
-// Firebase-based server
+// Firebase-based// Dependencies
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-
-// Load environment variables
 require('dotenv').config();
 
 // Firebase Admin SDK
 const admin = require('firebase-admin');
+
+// Supabase Client
+const { createClient } = require('@supabase/supabase-js');
+
+// Initialize Supabase
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+console.log('✅ Supabase client initialized');
+console.log('📦 Bucket:', process.env.SUPABASE_BUCKET_NAME);
+
+// Create uploads directory if it doesn't exist
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  console.log('📁 Created uploads directory');
+}
 
 // Initialize Firebase Admin with environment variables
 if (!admin.apps.length) {
@@ -22,9 +39,9 @@ if (!admin.apps.length) {
           clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
           privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
         }),
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET
+        // storageBucket: process.env.FIREBASE_STORAGE_BUCKET // Commented out to force local storage
       });
-      console.log('✅ Firebase Admin initialized with environment variables');
+      console.log('✅ Firebase Admin initialized with environment variables (local storage)');
     } else {
       // Fallback to service account file (Only in development)
       if (process.env.NODE_ENV !== 'production' && fs.existsSync('./firebase-service-account.json')) {
@@ -44,7 +61,9 @@ if (!admin.apps.length) {
 }
 
 const db = admin.apps.length ? admin.firestore() : null;
-const bucket = (admin.apps.length && admin.storage) ? admin.storage().bucket() : null;
+// Disable Firebase Storage - using local file storage instead
+const bucket = null;
+console.log('📦 Using local file storage (Firebase Storage disabled)');
 
 // Collections
 const firebaseConfig = {
@@ -90,6 +109,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve uploaded files statically
+app.use('/uploads', express.static(UPLOADS_DIR));
+console.log('📁 Serving uploads from:', UPLOADS_DIR);
+
 // Debug middleware
 app.use((req, res, next) => {
   console.log(`[REQ] ${req.method} ${req.path}`);
@@ -107,36 +130,84 @@ app.get('/api/ping', (req, res) => {
   });
 });
 
-// Helper functions
-async function uploadFileToFirebase(filePath, destination) {
-  if (!bucket) {
-    throw new Error('Firebase Storage not initialized');
-  }
-
+// Helper function to upload file to Supabase Storage
+async function uploadFileToFirebase(localPath, destination) {
   try {
-    const [file] = await bucket.upload(filePath, {
-      destination: destination,
-      metadata: {
-        cacheControl: 'public, max-age=31536000',
-      },
-    });
+    // Read file from local path
+    const fileBuffer = fs.readFileSync(localPath);
+    const fileName = path.basename(destination);
+    const filePath = destination;
 
-    // Make file publicly accessible
-    await file.makePublic();
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from(process.env.SUPABASE_BUCKET_NAME)
+      .upload(filePath, fileBuffer, {
+        contentType: 'application/octet-stream',
+        upsert: false
+      });
+
+    if (error) {
+      console.error('Supabase upload error:', error);
+      throw error;
+    }
 
     // Get public URL
-    const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+    const { data: { publicUrl } } = supabase.storage
+      .from(process.env.SUPABASE_BUCKET_NAME)
+      .getPublicUrl(filePath);
 
-    // Clean up temp file
-    fs.unlinkSync(filePath);
+    // Delete temp file
+    try {
+      fs.unlinkSync(localPath);
+    } catch (e) {
+      console.warn('Could not delete temp file:', e.message);
+    }
 
     return publicUrl;
   } catch (error) {
-    // Clean up temp file on error
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
+    console.error('Error uploading to Supabase:', error);
     throw error;
+  }
+}
+
+async function getLatestEvaluationActual(sessionId, indicatorId) {
+  if (!db) return null;
+  try {
+    // Try both string and number for robust matching
+    const sessionIds = [sessionId, parseInt(sessionId)].filter(v => v !== null && !isNaN(v));
+    const indicatorIds = [indicatorId, parseInt(indicatorId)].filter(v => v !== null && !isNaN(v));
+
+    let allDocs = [];
+    for (const sid of sessionIds) {
+      for (const iid of indicatorIds) {
+        const snapshot = await db.collection('evaluations_actual')
+          .where('session_id', '==', sid)
+          .where('indicator_id', '==', iid)
+          .get();
+        snapshot.forEach(doc => allDocs.push({ id: doc.id, ...doc.data() }));
+      }
+    }
+
+    if (allDocs.length === 0) return null;
+
+    // Helper for robust timestamp comparison
+    const getTime = (val) => {
+      if (!val) return 0;
+      if (val instanceof Date) return val.getTime();
+      if (typeof val === 'string') return new Date(val).getTime();
+      if (val && typeof val === 'object') {
+        if (val.seconds) return val.seconds * 1000;
+        if (val._seconds) return val._seconds * 1000;
+        if (val.toDate && typeof val.toDate === 'function') return val.toDate().getTime();
+      }
+      return 0;
+    };
+
+    allDocs.sort((a, b) => getTime(b.created_at) - getTime(a.created_at));
+    return allDocs[0];
+  } catch (error) {
+    console.error('Error in getLatestEvaluationActual:', error);
+    return null;
   }
 }
 
@@ -148,6 +219,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     const { username, password, role } = req.body;
+    console.log(`Login attempt: user=${username}, role=${role}`);
 
     const roleMapping = {
       'system_admin': 1,
@@ -155,7 +227,8 @@ app.post('/api/login', async (req, res) => {
       'reporter': 3,
       'evaluator': 4,
       'external_evaluator': 5,
-      'executive': 6
+      'executive': 6,
+      'qa_admin': 7
     };
 
     const roleId = roleMapping[role];
@@ -578,10 +651,38 @@ app.get('/api/evaluations', async (req, res) => {
 });
 
 // ================= FILE HANDLING =================
-app.get('/api/view/:filename', (req, res) => {
-  // For Firebase Storage, redirect to the public URL
-  // This is a placeholder - in practice, you'd store the full URL in the database
-  res.status(404).json({ error: 'File viewing not implemented for Firebase Storage' });
+app.get('/api/view/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename;
+
+    // Search in Supabase Storage
+    const { data: files, error } = await supabase.storage
+      .from(process.env.SUPABASE_BUCKET_NAME)
+      .list('', {
+        search: filename
+      });
+
+    // If not found in root, we might need a more complex search if folders are used
+    // But since we have the public URL in metadata, the frontend should ideally use that
+
+    // For now, let's try to get a list from frequent folders if root fails
+    // However, Supabase list is not recursive. 
+
+    // A better way is to just generate the public URL directly if we know the bucket structure
+    // Our structure: evidence_actual/${session_id}/${indicator_id}/${file.filename}
+
+    // Since we don't have session_id/indicator_id here, we can't easily guess the path
+    // Let's rely on the frontend using the full URL from metadata
+
+    // But for backward compatibility with existing hardcoded /api/view/:filename links:
+    res.status(404).json({
+      error: 'โปรดใช้ URL โดยตรงจากระบบ หรือระบุเลข Session/Indicator',
+      note: 'ระบบเปลี่ยนไปใช้ Cloud Storage แล้ว ลิงก์แบบเดิมอาจไม่รองรับ'
+    });
+  } catch (error) {
+    console.error('Error viewing file:', error);
+    res.status(500).json({ error: 'เกิดข้อผิดพลาดในการเรียกดูไฟล์' });
+  }
 });
 
 // ================= EVALUATIONS HISTORY =================
@@ -653,6 +754,298 @@ app.get('/api/evaluations-actual/history', async (req, res) => {
   } catch (error) {
     console.error('Error fetching actual evaluations history:', error);
     res.status(500).json({ error: 'โหลดประวัติการประเมินผลไม่สำเร็จ', details: error.message });
+  }
+});
+app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const {
+      session_id,
+      indicator_id,
+      operation_result,
+      operation_score,
+      reference_score,
+      goal_achievement,
+      evidence_number,
+      evidence_name,
+      evidence_url,
+      comment,
+      major_name,
+      status,
+      keep_existing,
+      evidence_numbers,
+      evidence_names,
+      evidence_urls
+    } = req.body;
+
+    console.log('========== EVALUATION SAVE REQUEST ==========');
+    console.log('Received actual evaluation data:', {
+      session_id, indicator_id, operation_result, major_name
+    });
+    console.log('Files received from multer:', req.files?.length || 0);
+    console.log('evidence_numbers:', req.body.evidence_numbers);
+    console.log('evidence_names:', req.body.evidence_names);
+    console.log('evidence_urls:', req.body.evidence_urls);
+
+    // Handle multiple file uploads to local storage
+    const uploadedFiles = [];
+    if (req.files && req.files.length > 0) {
+      console.log('--- Starting file upload to local storage ---');
+      for (const file of req.files) {
+        console.log(`Processing file: ${file.originalname}, multer filename: ${file.filename}`);
+        try {
+          const destination = `evidence_actual/${session_id}/${indicator_id}/${file.filename}`;
+          const publicUrl = await uploadFileToFirebase(file.path, destination);
+          console.log(`✓ Saved to: ${publicUrl}`);
+          uploadedFiles.push({
+            filename: file.filename,
+            originalname: file.originalname,
+            url: publicUrl
+          });
+        } catch (uploadError) {
+          console.error(`File upload error for ${file.originalname}:`, uploadError);
+        }
+      }
+    }
+
+    // Prepare metadata for current request
+    let numbersParsed = [];
+    let namesParsed = [];
+    let urlsParsed = [];
+    try { if (evidence_numbers) numbersParsed = JSON.parse(evidence_numbers); } catch (e) { }
+    try { if (evidence_names) namesParsed = JSON.parse(evidence_names); } catch (e) { }
+    try { if (evidence_urls) urlsParsed = JSON.parse(evidence_urls); } catch (e) { }
+
+    let currentFiles = uploadedFiles.map(f => f.filename);
+    let currentMeta = {};
+
+    // 1. Assign meta to uploaded files
+    uploadedFiles.forEach((f, i) => {
+      currentMeta[f.filename] = {
+        number: numbersParsed[i] || null,
+        name: namesParsed[i] || null,
+        url: f.url
+      };
+    });
+
+    // 2. Handle URL-only entries
+    const fileCount = req.files ? req.files.length : 0;
+    for (let i = fileCount; i < numbersParsed.length || i < namesParsed.length || i < urlsParsed.length; i++) {
+      const urlKey = `url_${i}_${namesParsed[i] || 'evidence'}`;
+      currentMeta[urlKey] = {
+        number: numbersParsed[i] || null,
+        name: namesParsed[i] || null,
+        url: urlsParsed[i] || null
+      };
+      currentFiles.push(urlKey);
+    }
+
+    let finalFiles = currentFiles;
+    let finalMeta = currentMeta;
+
+    // 3. Merge with existing if requested
+    if (String(keep_existing).toLowerCase() === 'true') {
+      const latest = await getLatestEvaluationActual(session_id, indicator_id);
+      if (latest) {
+        let prevFiles = [];
+        let prevMeta = {};
+        try {
+          prevFiles = typeof latest.evidence_files_json === 'string'
+            ? JSON.parse(latest.evidence_files_json || '[]')
+            : (latest.evidence_files_json || []);
+        } catch (e) { }
+        try {
+          prevMeta = typeof latest.evidence_meta_json === 'string'
+            ? JSON.parse(latest.evidence_meta_json || '{}')
+            : (latest.evidence_meta_json || {});
+        } catch (e) { }
+
+        // Filter out any duplicates if same filename survives (unlikely with multer hashes but good practice)
+        finalFiles = [...new Set([...prevFiles, ...currentFiles])];
+        finalMeta = { ...prevMeta, ...currentMeta };
+      }
+    }
+
+    console.log('--- Constructed file data ---');
+    console.log('uploadedFiles:', uploadedFiles);
+    console.log('finalFiles array:', finalFiles);
+    console.log('finalMeta object:', JSON.stringify(finalMeta, null, 2));
+
+    const evaluationData = {
+      session_id: session_id || null,
+      indicator_id: indicator_id || null,
+      operation_result: operation_result || null,
+      operation_score: operation_score ? parseFloat(operation_score) : null,
+      reference_score: reference_score ? parseFloat(reference_score) : null,
+      goal_achievement: goal_achievement || null,
+      evidence_number: evidence_number || null,
+      evidence_name: evidence_name || null,
+      evidence_url: evidence_url || null,
+      comment: comment || null,
+      evidence_file: finalFiles[0] || null,
+      evidence_files_json: JSON.stringify(finalFiles),
+      evidence_meta_json: JSON.stringify(finalMeta),
+      status: status || 'submitted',
+      major_name: major_name || null,
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    console.log('--- Saving to Firestore ---');
+    console.log('evidence_files_json:', evaluationData.evidence_files_json);
+    console.log('evidence_meta_json:', evaluationData.evidence_meta_json);
+
+    const docRef = await db.collection('evaluations_actual').add(evaluationData);
+    console.log('✓ Saved to Firestore with ID:', docRef.id);
+    console.log('========== END SAVE REQUEST ==========');
+    res.json({ success: true, id: docRef.id });
+  } catch (error) {
+    console.error('Error saving actual evaluation:', error);
+    res.status(500).json({ error: 'บันทึกการประเมินผลไม่สำเร็จ', details: error.message });
+  }
+});
+
+app.post('/api/evaluations-actual/append-files', upload.array('evidence_files', 10), async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const { session_id, indicator_id, major_name, evidence_numbers, evidence_names, evidence_urls } = req.body;
+
+    if (!session_id || !indicator_id) {
+      return res.status(400).json({ error: 'ต้องระบุ session_id และ indicator_id' });
+    }
+
+    // Find latest evaluation using index-free helper
+    const latest = await getLatestEvaluationActual(session_id, indicator_id);
+    let docId = null;
+    let existingFiles = [];
+    let existingMeta = {};
+
+    if (latest) {
+      docId = latest.id;
+      try { existingFiles = JSON.parse(latest.evidence_files_json || '[]'); } catch (e) { }
+      try { existingMeta = JSON.parse(latest.evidence_meta_json || '{}'); } catch (e) { }
+    }
+
+    // Upload new files
+    const newFiles = [];
+    let numbersParsed = [];
+    let namesParsed = [];
+    let urlsParsed = [];
+    try { if (evidence_numbers) numbersParsed = JSON.parse(evidence_numbers); } catch (e) { }
+    try { if (evidence_names) namesParsed = JSON.parse(evidence_names); } catch (e) { }
+    try { if (evidence_urls) urlsParsed = JSON.parse(evidence_urls); } catch (e) { }
+
+    if (req.files && req.files.length > 0) {
+      for (let i = 0; i < req.files.length; i++) {
+        const file = req.files[i];
+        try {
+          const destination = `evidence_actual/${session_id}/${indicator_id}/${file.filename}`;
+          const publicUrl = await uploadFileToFirebase(file.path, destination);
+          newFiles.push(file.filename);
+          existingMeta[file.filename] = {
+            number: numbersParsed[i] || null,
+            name: namesParsed[i] || null,
+            url: publicUrl
+          };
+        } catch (uploadError) {
+          console.error(`File upload error for ${file.originalname}:`, uploadError);
+        }
+      }
+    }
+
+    // Handle URL-only entries in append
+    const fileCount = req.files ? req.files.length : 0;
+    for (let i = fileCount; i < numbersParsed.length || i < namesParsed.length || i < urlsParsed.length; i++) {
+      const urlKey = `url_${i}_${namesParsed[i] || 'evidence'}`;
+      existingMeta[urlKey] = {
+        number: numbersParsed[i] || null,
+        name: namesParsed[i] || null,
+        url: urlsParsed[i] || null
+      };
+      newFiles.push(urlKey);
+    }
+
+    const mergedFiles = [...new Set([...existingFiles, ...newFiles])];
+    const updateData = {
+      evidence_files_json: JSON.stringify(mergedFiles),
+      evidence_meta_json: JSON.stringify(existingMeta),
+      evidence_file: mergedFiles[0] || null,
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (docId) {
+      await db.collection('evaluations_actual').doc(docId).update(updateData);
+      res.json({ success: true, id: docId, files: mergedFiles });
+    } else {
+      // Create new if not exists
+      const newData = {
+        ...updateData,
+        session_id,
+        indicator_id,
+        major_name: major_name || null,
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'submitted'
+      };
+      const newDoc = await db.collection('evaluations_actual').add(newData);
+      res.json({ success: true, id: newDoc.id, files: mergedFiles });
+    }
+  } catch (error) {
+    console.error('Error appending files:', error);
+    res.status(500).json({ error: 'เพิ่มไฟล์ไม่สำเร็จ', details: error.message });
+  }
+});
+
+app.post('/api/evaluations-actual/remove-file', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const { session_id, indicator_id, filename } = req.body;
+
+    if (!session_id || !indicator_id || !filename) {
+      return res.status(400).json({ error: 'ต้องระบุ session_id, indicator_id และ filename' });
+    }
+
+    // Find latest evaluation using index-free helper
+    const latest = await getLatestEvaluationActual(session_id, indicator_id);
+    if (!latest) {
+      return res.status(404).json({ error: 'ไม่พบรายการที่ต้องการลบไฟล์' });
+    }
+
+    let files = [];
+    let meta = {};
+    try { files = JSON.parse(latest.evidence_files_json || '[]'); } catch (e) { }
+    try { meta = JSON.parse(latest.evidence_meta_json || '{}'); } catch (e) { }
+
+    const updatedFiles = files.filter(f => f !== filename);
+    if (meta[filename]) delete meta[filename];
+
+    await db.collection('evaluations_actual').doc(latest.id).update({
+      evidence_files_json: JSON.stringify(updatedFiles),
+      evidence_meta_json: JSON.stringify(meta),
+      evidence_file: updatedFiles[0] || null,
+      updated_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Try to delete from Firebase Storage
+    try {
+      const destination = `evidence_actual/${session_id}/${indicator_id}/${filename}`;
+      await bucket.file(destination).delete();
+      console.log(`Deleted file from storage: ${destination}`);
+    } catch (storageError) {
+      console.warn(`Could not delete file from storage (it might have been deleted already): ${filename}`);
+    }
+
+    res.json({ success: true, files: updatedFiles });
+  } catch (error) {
+    console.error('Error removing file:', error);
+    res.status(500).json({ error: 'ลบไฟล์ไม่สำเร็จ', details: error.message });
   }
 });
 

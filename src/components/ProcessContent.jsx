@@ -1,45 +1,5 @@
 // src/components/ProcessContent.jsx
-import React from 'react';
-import DefineComponentSection from './Quality/DefineComponentSection';
-import ManageComponentSection from './Quality/ManageComponentSection';
-import ReportSection from './ReportSection';
-import ResultsContent from './ResultsContent';
-
-export default function ProcessContent({ hasPermission, user }) {
-  // ฟังก์ชันสำหรับแสดงส่วนการทำงานตาม role
-  const renderWorkflowContent = () => {
-    if (!user || !user.role) {
-      return <div className="p-8 text-center">กำลังโหลดข้อมูล...</div>;
-    }
-
-    switch (user.role) {
-      case 'admin': // role_id: 1
-        return <DefineComponentSection />;
-      case 'staff': // role_id: 2
-        return <ManageComponentSection />;
-      case 'evaluator': // role_id: 3
-        return (
-          <>
-            <ReportSection />
-            <ResultsContent />
-          </>
-        );
-      case 'external_evaluator': // role_id: 4
-        return <ResultsContent />;
-      case 'dev': // role_id: 5 - สามารถดูทุกหน้าได้
-        return (
-          <>
-            <DefineComponentSection />
-            <ManageComponentSection />
-            <ReportSection />
-            <ResultsContent />
-          </>
-        );
-      default:
-        return <div className="p-8 text-center">ไม่พบสิทธิ์การใช้งานสำหรับบทบาท: {user.role}</div>;
-    }
-  };
-
+export default function ProcessContent({ hasPermission }) {
   return (
     <div className="space-y-8">
       {/* ส่วนขั้นตอนการประเมิน */}
@@ -73,12 +33,6 @@ export default function ProcessContent({ hasPermission, user }) {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* ส่วนเครื่องมือการทำงาน */}
-      <div>
-        <h3 className="text-2xl font-bold text-gray-900 mb-6">เครื่องมือการประเมิน</h3>
-        {renderWorkflowContent()}
       </div>
     </div>
   );

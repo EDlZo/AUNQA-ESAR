@@ -18,13 +18,13 @@ export default function Header({
   if (currentUser) {
     const role = currentUser.role;
 
-    // แดชบอร์ด (Admin, Executive, SAR Manager)
-    if (['system_admin', 'executive', 'sar_manager'].includes(role)) {
+    // แดชบอร์ด (Admin, Executive, SAR Manager, QA Admin)
+    if (['system_admin', 'executive', 'sar_manager', 'qa_admin'].includes(role)) {
       navigation.push({ name: 'แดชบอร์ด', tab: 'dashboard' });
     }
 
-    // จัดการองค์ประกอบพื้นฐาน (Admin เท่านั้น)
-    if (role === 'system_admin') {
+    // จัดการองค์ประกอบพื้นฐาน (Admin, QA Admin)
+    if (['system_admin', 'qa_admin'].includes(role)) {
       navigation.push({ name: 'จัดการองค์ประกอบ', tab: 'programs', active: isManageFlowActive });
     }
 
@@ -40,8 +40,8 @@ export default function Header({
 
     // ประเมิน (Evaluator, External Evaluator, SAR Manager, Admin)
     if (['system_admin', 'sar_manager', 'evaluator', 'external_evaluator'].includes(role)) {
+      navigation.push({ name: 'ผลการประเมิน', tab: 'committee' });
     }
-    navigation.push({ name: 'ผลการประเมิน', tab: 'committee' });
 
     // รายงานและสรุป (ทุกคน)
     navigation.push({ name: 'สรุปผล', tab: 'summary' });

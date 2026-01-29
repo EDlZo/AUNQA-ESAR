@@ -19,6 +19,7 @@
     "install-deps": "npm install --legacy-peer-deps"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.93.2",
     "@tailwindcss/vite": "^4.1.11",
     "chart.js": "^4.5.0",
     "cors": "^2.8.5",
