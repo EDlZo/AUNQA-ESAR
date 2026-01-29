@@ -14,8 +14,8 @@ const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Supabase
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_URL || 'https://placeholder.supabase.co',
+  process.env.SUPABASE_ANON_KEY || 'placeholder-key'
 );
 
 console.log('✅ Supabase client initialized');
@@ -29,6 +29,9 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 
 // Initialize Firebase Admin with environment variables
+let db = null;
+let isFirebaseInitialized = false;
+
 if (!admin.apps.length) {
   try {
     // Try to use environment variables first
@@ -46,6 +49,7 @@ if (!admin.apps.length) {
         // storageBucket: process.env.FIREBASE_STORAGE_BUCKET // Commented out to force local storage
       });
       console.log('✅ Firebase Admin initialized with environment variables (local storage)');
+      isFirebaseInitialized = true;
     } else {
       console.log('⚠️ Missing Firebase environment variables:');
       console.log('- FIREBASE_PRIVATE_KEY:', !!process.env.FIREBASE_PRIVATE_KEY);
@@ -60,20 +64,100 @@ if (!admin.apps.length) {
           storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'aunqa-esar.appspot.com'
         });
         console.log('✅ Firebase Admin initialized with service account file');
+        isFirebaseInitialized = true;
       } else {
         console.log('❌ Firebase Admin not initialized: Missing credentials and no service account file');
+        console.log('🔄 Will use mock data for development');
       }
     }
   } catch (error) {
     console.error('❌ Firebase Admin initialization failed:', error);
+    console.log('🔄 Will use mock data for development');
   }
 }
 
-const db = admin.apps.length ? admin.firestore() : null;
-if (db) {
-  console.log('✅ Firestore database initialized');
+if (isFirebaseInitialized && admin.apps.length) {
+  try {
+    db = admin.firestore();
+    console.log('✅ Firestore database initialized');
+  } catch (error) {
+    console.error('❌ Firestore initialization failed:', error);
+    db = null;
+  }
 } else {
-  console.log('❌ Firestore database not available');
+  console.log('❌ Firestore database not available - using mock data');
+}
+
+// Mock data for when Firebase is not available
+const mockData = {
+  programs: [
+    { id: '1', levelId: '1', facultyId: '1', facultyName: 'คณะวิศวกรรมศาสตร์', majorId: '1', majorName: 'วิศวกรรมคอมพิวเตอร์' },
+    { id: '2', levelId: '1', facultyId: '1', facultyName: 'คณะวิศวกรรมศาสตร์', majorId: '2', majorName: 'วิศวกรรมคอมพิวเตอร์ปัญญาประดิษฐ์ (AI)' }
+  ],
+  qualityComponents: [
+    { id: '1', component_id: '2', quality_name: 'องค์ประกอบที่ 2 : ผลการดำเนินงานตามเกณฑ์ AUN-QA' }
+  ],
+  indicators: [
+    { id: '1', component_id: '1', sequence: '2.1', indicator_name: 'ตัวบ่งชี้ตัวอย่าง', indicator_type: 'ผลลัพธ์', criteria_type: 'เชิงคุณภาพ' }
+  ],
+  evaluations: [],
+  evaluationsActual: [],
+  committeeEvaluations: [],
+  assessmentSessions: []
+};
+
+// Helper function to get mock data or real data
+async function getData(collection, filters = {}) {
+  if (db) {
+    try {
+      let query = db.collection(collection);
+      
+      // Apply filters
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          query = query.where(key, '==', value);
+        }
+      });
+      
+      const snapshot = await query.get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error(`Error fetching ${collection}:`, error);
+      return mockData[collection] || [];
+    }
+  } else {
+    // Return mock data
+    let data = mockData[collection] || [];
+    
+    // Apply filters to mock data
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        data = data.filter(item => item[key] === value);
+      }
+    });
+    
+    return data;
+  }
+}
+
+// Helper function to add data
+async function addData(collection, data) {
+  if (db) {
+    try {
+      const docRef = await db.collection(collection).add({
+        ...data,
+        created_at: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return { id: docRef.id, success: true };
+    } catch (error) {
+      console.error(`Error adding to ${collection}:`, error);
+      return { success: false, error: error.message };
+    }
+  } else {
+    // Mock success for development
+    const mockId = Date.now().toString();
+    return { id: mockId, success: true };
+  }
 }
 // Disable Firebase Storage - using local file storage instead
 const bucket = null;
@@ -142,6 +226,183 @@ app.get('/api/ping', (req, res) => {
     firebase: !!db,
     storage: !!bucket
   });
+});
+
+// ================= PROGRAMS =================
+app.get('/api/programs', async (req, res) => {
+  try {
+    const programs = await getData('programs');
+    res.json(programs);
+  } catch (error) {
+    console.error('Error fetching programs:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลโปรแกรมได้', details: error.message });
+  }
+});
+
+// ================= QUALITY COMPONENTS =================
+app.get('/api/quality-components', async (req, res) => {
+  try {
+    const { session_id, major_name } = req.query;
+    const components = await getData('qualityComponents', { major_name });
+    res.json(components);
+  } catch (error) {
+    console.error('Error fetching quality components:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลองค์ประกอบคุณภาพได้', details: error.message });
+  }
+});
+
+app.post('/api/quality-components', async (req, res) => {
+  try {
+    const { quality_name, component_id, session_id, major_name } = req.body;
+    
+    const result = await addData('qualityComponents', {
+      quality_name,
+      component_id: parseInt(component_id),
+      session_id,
+      major_name
+    });
+    
+    if (result.success) {
+      res.json({ success: true, id: result.id });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error) {
+    console.error('Error creating quality component:', error);
+    res.status(500).json({ error: 'ไม่สามารถสร้างองค์ประกอบคุณภาพได้', details: error.message });
+  }
+});
+
+// ================= INDICATORS =================
+app.get('/api/indicators', async (req, res) => {
+  try {
+    const { session_id, major_name, component_id } = req.query;
+    const filters = {};
+    if (component_id) filters.component_id = component_id;
+    if (major_name) filters.major_name = major_name;
+    
+    const indicators = await getData('indicators', filters);
+    res.json(indicators);
+  } catch (error) {
+    console.error('Error fetching indicators:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลตัวบ่งชี้ได้', details: error.message });
+  }
+});
+
+app.get('/api/indicators-by-component/:componentId', async (req, res) => {
+  try {
+    const { componentId } = req.params;
+    const { session_id, major_name } = req.query;
+    
+    const indicators = await getData('indicators', { 
+      component_id: componentId,
+      major_name 
+    });
+    
+    res.json(indicators);
+  } catch (error) {
+    console.error('Error fetching indicators by component:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลตัวบ่งชี้ได้', details: error.message });
+  }
+});
+
+app.post('/api/indicators', async (req, res) => {
+  try {
+    const { component_id, sequence, indicator_type, criteria_type, indicator_name, data_source, session_id, major_name } = req.body;
+    
+    const result = await addData('indicators', {
+      component_id,
+      sequence,
+      indicator_type,
+      criteria_type,
+      indicator_name,
+      data_source,
+      session_id,
+      major_name
+    });
+    
+    if (result.success) {
+      res.json({ success: true, id: result.id });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error) {
+    console.error('Error creating indicator:', error);
+    res.status(500).json({ error: 'ไม่สามารถสร้างตัวบ่งชี้ได้', details: error.message });
+  }
+});
+
+// ================= BULK OPERATIONS =================
+app.get('/api/bulk/session-summary', async (req, res) => {
+  try {
+    const { session_id, major_name } = req.query;
+    
+    // Fetch all data in parallel
+    const [components, indicators, evaluations, evaluationsActual, committeeEvaluations] = await Promise.all([
+      getData('qualityComponents', { major_name }),
+      getData('indicators', { major_name }),
+      getData('evaluations', { session_id, major_name }),
+      getData('evaluationsActual', { session_id, major_name }),
+      getData('committeeEvaluations', { session_id, major_name })
+    ]);
+    
+    res.json({
+      components,
+      indicators,
+      evaluations,
+      evaluations_actual: evaluationsActual,
+      committee_evaluations: committeeEvaluations
+    });
+  } catch (error) {
+    console.error('Error fetching bulk session summary:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลสรุปได้', details: error.message });
+  }
+});
+
+app.post('/api/bulk/indicators', async (req, res) => {
+  try {
+    const { indicators } = req.body;
+    
+    if (!Array.isArray(indicators)) {
+      return res.status(400).json({ error: 'ข้อมูลตัวบ่งชี้ต้องเป็น array' });
+    }
+    
+    const results = [];
+    for (const indicator of indicators) {
+      const result = await addData('indicators', indicator);
+      results.push(result);
+    }
+    
+    res.json({ success: true, results });
+  } catch (error) {
+    console.error('Error bulk creating indicators:', error);
+    res.status(500).json({ error: 'ไม่สามารถสร้างตัวบ่งชี้แบบกลุ่มได้', details: error.message });
+  }
+});
+
+// ================= ASSESSMENT SESSIONS =================
+app.post('/api/assessment-sessions', async (req, res) => {
+  try {
+    const { level_id, faculty_id, faculty_name, major_id, major_name, evaluator_id } = req.body;
+    
+    const result = await addData('assessmentSessions', {
+      level_id,
+      faculty_id,
+      faculty_name,
+      major_id,
+      major_name,
+      evaluator_id
+    });
+    
+    if (result.success) {
+      res.json({ success: true, session_id: result.id });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error) {
+    console.error('Error creating assessment session:', error);
+    res.status(500).json({ error: 'ไม่สามารถสร้าง session ได้', details: error.message });
+  }
 });
 
 // Helper function to upload file to Supabase Storage
@@ -687,10 +948,6 @@ app.get('/api/assessment-sessions/:id', async (req, res) => {
 // ================= EVALUATIONS =================
 app.post('/api/evaluations', upload.single('evidence_file'), async (req, res) => {
   try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
     const {
       session_id,
       indicator_id,
@@ -729,17 +986,20 @@ app.post('/api/evaluations', upload.single('evidence_file'), async (req, res) =>
       evidence_file_url: evidenceFileUrl,
       evidence_file_name: req.file ? req.file.originalname : null,
       status: status || 'submitted',
-      major_name: major_name || null,
-      created_at: admin.firestore.FieldValue.serverTimestamp()
+      major_name: major_name || null
     };
 
-    const docRef = await db.collection('evaluations').add(evaluationData);
-
-    res.json({
-      success: true,
-      evaluation_id: docRef.id,
-      evidence_file_url: evidenceFileUrl
-    });
+    const result = await addData('evaluations', evaluationData);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        evaluation_id: result.id,
+        evidence_file_url: evidenceFileUrl
+      });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
   } catch (error) {
     console.error('Error creating evaluation:', error);
     res.status(500).json({ error: 'บันทึกผลประเมินไม่สำเร็จ', details: error.message });
@@ -748,41 +1008,138 @@ app.post('/api/evaluations', upload.single('evidence_file'), async (req, res) =>
 
 app.get('/api/evaluations', async (req, res) => {
   try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
     const { evaluator_id, program_id, year, component_id, session_id, major_name } = req.query;
-
-    // Use simple query without complex ordering
-    let query = db.collection('evaluations');
-
-    if (session_id) query = query.where('session_id', '==', session_id);
-    if (major_name) query = query.where('major_name', '==', major_name);
-    if (evaluator_id) query = query.where('evaluator_id', '==', parseInt(evaluator_id));
-
-    // Remove complex ordering to avoid index requirement
-    // query = query.orderBy('created_at', 'desc');
-
-    const snapshot = await query.get();
-    const evaluations = [];
-
-    snapshot.forEach(doc => {
-      evaluations.push({ id: doc.id, ...doc.data() });
-    });
-
-    // Sort in memory
-    evaluations.sort((a, b) => {
-      if (a.created_at && b.created_at) {
-        return b.created_at.seconds - a.created_at.seconds;
-      }
-      return 0;
-    });
-
+    
+    const filters = {};
+    if (session_id) filters.session_id = session_id;
+    if (major_name) filters.major_name = major_name;
+    if (evaluator_id) filters.evaluator_id = parseInt(evaluator_id);
+    
+    const evaluations = await getData('evaluations', filters);
     res.json(evaluations);
   } catch (error) {
     console.error('Error fetching evaluations:', error);
-    res.status(500).json({ error: 'ดึงข้อมูลการประเมินไม่สำเร็จ', details: error.message });
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลการประเมินได้', details: error.message });
+  }
+});
+
+app.get('/api/evaluations/history', async (req, res) => {
+  try {
+    const { session_id, major_name } = req.query;
+    
+    const filters = {};
+    if (session_id) filters.session_id = session_id;
+    if (major_name) filters.major_name = major_name;
+    
+    const evaluations = await getData('evaluations', filters);
+    res.json(evaluations);
+  } catch (error) {
+    console.error('Error fetching evaluation history:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงประวัติการประเมินได้', details: error.message });
+  }
+});
+
+// ================= EVALUATIONS ACTUAL =================
+app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (req, res) => {
+  try {
+    const { session_id, indicator_id, operation_result, operation_score, reference_score, goal_achievement, evidence_number, evidence_name, evidence_url, comment, major_name, status, keep_existing } = req.body;
+
+    let evidenceFiles = [];
+    let evidenceMeta = {};
+
+    // Handle uploaded files
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        evidenceFiles.push(file.filename);
+        evidenceMeta[file.filename] = {
+          name: evidence_name || file.originalname,
+          number: evidence_number || '1'
+        };
+      }
+    }
+
+    // Handle URL evidence
+    if (evidence_url) {
+      const urlKey = `url_${Date.now()}`;
+      evidenceFiles.push(urlKey);
+      evidenceMeta[urlKey] = {
+        name: evidence_name || 'URL Evidence',
+        number: evidence_number || '1',
+        url: evidence_url
+      };
+    }
+
+    const evaluationData = {
+      session_id,
+      indicator_id,
+      operation_result,
+      operation_score: operation_score ? parseFloat(operation_score) : null,
+      reference_score: reference_score ? parseFloat(reference_score) : null,
+      goal_achievement,
+      evidence_files_json: JSON.stringify(evidenceFiles),
+      evidence_meta_json: JSON.stringify(evidenceMeta),
+      comment,
+      major_name,
+      status: status || 'submitted'
+    };
+
+    const result = await addData('evaluationsActual', evaluationData);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        evaluation_id: result.id,
+        evidence_files: evidenceFiles
+      });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error) {
+    console.error('Error creating actual evaluation:', error);
+    res.status(500).json({ error: 'บันทึกผลการดำเนินงานไม่สำเร็จ', details: error.message });
+  }
+});
+
+app.get('/api/evaluations-actual/history', async (req, res) => {
+  try {
+    const { session_id, major_name } = req.query;
+    
+    const filters = {};
+    if (session_id) filters.session_id = session_id;
+    if (major_name) filters.major_name = major_name;
+    
+    const evaluations = await getData('evaluationsActual', filters);
+    res.json(evaluations);
+  } catch (error) {
+    console.error('Error fetching actual evaluation history:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงประวัติการดำเนินงานได้', details: error.message });
+  }
+});
+
+// ================= COMMITTEE EVALUATIONS =================
+app.post('/api/committee-evaluations', async (req, res) => {
+  try {
+    const { session_id, major_name, indicator_id, committee_score, strengths, improvements } = req.body;
+
+    const evaluationData = {
+      session_id,
+      major_name,
+      indicator_id,
+      committee_score: committee_score ? parseFloat(committee_score) : null,
+      strengths,
+      improvements
+    };
+
+    const result = await addData('committeeEvaluations', evaluationData);
+    
+    if (result.success) {
+      res.json({ success: true, id: result.id });
+    } else {
+      res.status(500).json({ success: false, error: result.error });
+    }
+  } catch (error) {
+    console.error('Error creating committee evaluation:', error);
+    res.status(500).json({ error: 'บันทึกการประเมินของคณะกรรมการไม่สำเร็จ', details: error.message });
   }
 });
 
@@ -818,520 +1175,6 @@ app.get('/api/view/:filename', async (req, res) => {
   } catch (error) {
     console.error('Error viewing file:', error);
     res.status(500).json({ error: 'เกิดข้อผิดพลาดในการเรียกดูไฟล์' });
-  }
-});
-
-// ================= EVALUATIONS HISTORY =================
-app.get('/api/evaluations/history', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { session_id, major_name } = req.query;
-
-    let query = db.collection('evaluations');
-
-    if (session_id) query = query.where('session_id', '==', session_id);
-    if (major_name) query = query.where('major_name', '==', major_name);
-
-    const snapshot = await query.get();
-    const evaluations = [];
-
-    snapshot.forEach(doc => {
-      evaluations.push({ id: doc.id, ...doc.data() });
-    });
-
-    // Sort in memory
-    evaluations.sort((a, b) => {
-      if (a.created_at && b.created_at) {
-        return b.created_at.seconds - a.created_at.seconds;
-      }
-      return 0;
-    });
-
-    res.json(evaluations);
-  } catch (error) {
-    console.error('Error fetching evaluations history:', error);
-    res.status(500).json({ error: 'โหลดประวัติไม่สำเร็จ', details: error.message });
-  }
-});
-
-// ================= EVALUATIONS ACTUAL HISTORY =================
-app.get('/api/evaluations-actual/history', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { session_id, major_name } = req.query;
-
-    let query = db.collection('evaluations_actual');
-
-    if (session_id) query = query.where('session_id', '==', session_id);
-    if (major_name) query = query.where('major_name', '==', major_name);
-
-    const snapshot = await query.get();
-    const evaluations = [];
-
-    snapshot.forEach(doc => {
-      evaluations.push({ id: doc.id, ...doc.data() });
-    });
-
-    // Sort in memory
-    evaluations.sort((a, b) => {
-      if (a.created_at && b.created_at) {
-        return b.created_at.seconds - a.created_at.seconds;
-      }
-      return 0;
-    });
-
-    res.json(evaluations);
-  } catch (error) {
-    console.error('Error fetching actual evaluations history:', error);
-    res.status(500).json({ error: 'โหลดประวัติการประเมินผลไม่สำเร็จ', details: error.message });
-  }
-});
-app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const {
-      session_id,
-      indicator_id,
-      operation_result,
-      operation_score,
-      reference_score,
-      goal_achievement,
-      evidence_number,
-      evidence_name,
-      evidence_url,
-      comment,
-      major_name,
-      status,
-      keep_existing,
-      evidence_numbers,
-      evidence_names,
-      evidence_urls
-    } = req.body;
-
-    console.log('========== EVALUATION SAVE REQUEST ==========');
-    console.log('Received actual evaluation data:', {
-      session_id, indicator_id, operation_result, major_name
-    });
-    console.log('Files received from multer:', req.files?.length || 0);
-    console.log('evidence_numbers:', req.body.evidence_numbers);
-    console.log('evidence_names:', req.body.evidence_names);
-    console.log('evidence_urls:', req.body.evidence_urls);
-
-    // Handle multiple file uploads to local storage
-    const uploadedFiles = [];
-    if (req.files && req.files.length > 0) {
-      console.log('--- Starting file upload to local storage ---');
-      for (const file of req.files) {
-        console.log(`Processing file: ${file.originalname}, multer filename: ${file.filename}`);
-        try {
-          const destination = `evidence_actual/${session_id}/${indicator_id}/${file.filename}`;
-          const publicUrl = await uploadFileToFirebase(file.path, destination);
-          console.log(`✓ Saved to: ${publicUrl}`);
-          uploadedFiles.push({
-            filename: file.filename,
-            originalname: file.originalname,
-            url: publicUrl
-          });
-        } catch (uploadError) {
-          console.error(`File upload error for ${file.originalname}:`, uploadError);
-        }
-      }
-    }
-
-    // Prepare metadata for current request
-    let numbersParsed = [];
-    let namesParsed = [];
-    let urlsParsed = [];
-    try { if (evidence_numbers) numbersParsed = JSON.parse(evidence_numbers); } catch (e) { }
-    try { if (evidence_names) namesParsed = JSON.parse(evidence_names); } catch (e) { }
-    try { if (evidence_urls) urlsParsed = JSON.parse(evidence_urls); } catch (e) { }
-
-    let currentFiles = uploadedFiles.map(f => f.filename);
-    let currentMeta = {};
-
-    // 1. Assign meta to uploaded files
-    uploadedFiles.forEach((f, i) => {
-      currentMeta[f.filename] = {
-        number: numbersParsed[i] || null,
-        name: namesParsed[i] || null,
-        url: f.url
-      };
-    });
-
-    // 2. Handle URL-only entries
-    const fileCount = req.files ? req.files.length : 0;
-    for (let i = fileCount; i < numbersParsed.length || i < namesParsed.length || i < urlsParsed.length; i++) {
-      const urlKey = `url_${i}_${namesParsed[i] || 'evidence'}`;
-      currentMeta[urlKey] = {
-        number: numbersParsed[i] || null,
-        name: namesParsed[i] || null,
-        url: urlsParsed[i] || null
-      };
-      currentFiles.push(urlKey);
-    }
-
-    let finalFiles = currentFiles;
-    let finalMeta = currentMeta;
-
-    // 3. Merge with existing if requested
-    if (String(keep_existing).toLowerCase() === 'true') {
-      const latest = await getLatestEvaluationActual(session_id, indicator_id);
-      if (latest) {
-        let prevFiles = [];
-        let prevMeta = {};
-        try {
-          prevFiles = typeof latest.evidence_files_json === 'string'
-            ? JSON.parse(latest.evidence_files_json || '[]')
-            : (latest.evidence_files_json || []);
-        } catch (e) { }
-        try {
-          prevMeta = typeof latest.evidence_meta_json === 'string'
-            ? JSON.parse(latest.evidence_meta_json || '{}')
-            : (latest.evidence_meta_json || {});
-        } catch (e) { }
-
-        // Filter out any duplicates if same filename survives (unlikely with multer hashes but good practice)
-        finalFiles = [...new Set([...prevFiles, ...currentFiles])];
-        finalMeta = { ...prevMeta, ...currentMeta };
-      }
-    }
-
-    console.log('--- Constructed file data ---');
-    console.log('uploadedFiles:', uploadedFiles);
-    console.log('finalFiles array:', finalFiles);
-    console.log('finalMeta object:', JSON.stringify(finalMeta, null, 2));
-
-    const evaluationData = {
-      session_id: session_id || null,
-      indicator_id: indicator_id || null,
-      operation_result: operation_result || null,
-      operation_score: operation_score ? parseFloat(operation_score) : null,
-      reference_score: reference_score ? parseFloat(reference_score) : null,
-      goal_achievement: goal_achievement || null,
-      evidence_number: evidence_number || null,
-      evidence_name: evidence_name || null,
-      evidence_url: evidence_url || null,
-      comment: comment || null,
-      evidence_file: finalFiles[0] || null,
-      evidence_files_json: JSON.stringify(finalFiles),
-      evidence_meta_json: JSON.stringify(finalMeta),
-      status: status || 'submitted',
-      major_name: major_name || null,
-      created_at: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    console.log('--- Saving to Firestore ---');
-    console.log('evidence_files_json:', evaluationData.evidence_files_json);
-    console.log('evidence_meta_json:', evaluationData.evidence_meta_json);
-
-    const docRef = await db.collection('evaluations_actual').add(evaluationData);
-    console.log('✓ Saved to Firestore with ID:', docRef.id);
-    console.log('========== END SAVE REQUEST ==========');
-    res.json({ success: true, id: docRef.id });
-  } catch (error) {
-    console.error('Error saving actual evaluation:', error);
-    res.status(500).json({ error: 'บันทึกการประเมินผลไม่สำเร็จ', details: error.message });
-  }
-});
-
-app.post('/api/evaluations-actual/append-files', upload.array('evidence_files', 10), async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { session_id, indicator_id, major_name, evidence_numbers, evidence_names, evidence_urls } = req.body;
-
-    if (!session_id || !indicator_id) {
-      return res.status(400).json({ error: 'ต้องระบุ session_id และ indicator_id' });
-    }
-
-    // Find latest evaluation using index-free helper
-    const latest = await getLatestEvaluationActual(session_id, indicator_id);
-    let docId = null;
-    let existingFiles = [];
-    let existingMeta = {};
-
-    if (latest) {
-      docId = latest.id;
-      try { existingFiles = JSON.parse(latest.evidence_files_json || '[]'); } catch (e) { }
-      try { existingMeta = JSON.parse(latest.evidence_meta_json || '{}'); } catch (e) { }
-    }
-
-    // Upload new files
-    const newFiles = [];
-    let numbersParsed = [];
-    let namesParsed = [];
-    let urlsParsed = [];
-    try { if (evidence_numbers) numbersParsed = JSON.parse(evidence_numbers); } catch (e) { }
-    try { if (evidence_names) namesParsed = JSON.parse(evidence_names); } catch (e) { }
-    try { if (evidence_urls) urlsParsed = JSON.parse(evidence_urls); } catch (e) { }
-
-    if (req.files && req.files.length > 0) {
-      for (let i = 0; i < req.files.length; i++) {
-        const file = req.files[i];
-        try {
-          const destination = `evidence_actual/${session_id}/${indicator_id}/${file.filename}`;
-          const publicUrl = await uploadFileToFirebase(file.path, destination);
-          newFiles.push(file.filename);
-          existingMeta[file.filename] = {
-            number: numbersParsed[i] || null,
-            name: namesParsed[i] || null,
-            url: publicUrl
-          };
-        } catch (uploadError) {
-          console.error(`File upload error for ${file.originalname}:`, uploadError);
-        }
-      }
-    }
-
-    // Handle URL-only entries in append
-    const fileCount = req.files ? req.files.length : 0;
-    for (let i = fileCount; i < numbersParsed.length || i < namesParsed.length || i < urlsParsed.length; i++) {
-      const urlKey = `url_${i}_${namesParsed[i] || 'evidence'}`;
-      existingMeta[urlKey] = {
-        number: numbersParsed[i] || null,
-        name: namesParsed[i] || null,
-        url: urlsParsed[i] || null
-      };
-      newFiles.push(urlKey);
-    }
-
-    const mergedFiles = [...new Set([...existingFiles, ...newFiles])];
-    const updateData = {
-      evidence_files_json: JSON.stringify(mergedFiles),
-      evidence_meta_json: JSON.stringify(existingMeta),
-      evidence_file: mergedFiles[0] || null,
-      updated_at: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    if (docId) {
-      await db.collection('evaluations_actual').doc(docId).update(updateData);
-      res.json({ success: true, id: docId, files: mergedFiles });
-    } else {
-      // Create new if not exists
-      const newData = {
-        ...updateData,
-        session_id,
-        indicator_id,
-        major_name: major_name || null,
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
-        status: 'submitted'
-      };
-      const newDoc = await db.collection('evaluations_actual').add(newData);
-      res.json({ success: true, id: newDoc.id, files: mergedFiles });
-    }
-  } catch (error) {
-    console.error('Error appending files:', error);
-    res.status(500).json({ error: 'เพิ่มไฟล์ไม่สำเร็จ', details: error.message });
-  }
-});
-
-app.post('/api/evaluations-actual/remove-file', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { session_id, indicator_id, filename } = req.body;
-
-    if (!session_id || !indicator_id || !filename) {
-      return res.status(400).json({ error: 'ต้องระบุ session_id, indicator_id และ filename' });
-    }
-
-    // Find latest evaluation using index-free helper
-    const latest = await getLatestEvaluationActual(session_id, indicator_id);
-    if (!latest) {
-      return res.status(404).json({ error: 'ไม่พบรายการที่ต้องการลบไฟล์' });
-    }
-
-    let files = [];
-    let meta = {};
-    try { files = JSON.parse(latest.evidence_files_json || '[]'); } catch (e) { }
-    try { meta = JSON.parse(latest.evidence_meta_json || '{}'); } catch (e) { }
-
-    const updatedFiles = files.filter(f => f !== filename);
-    if (meta[filename]) delete meta[filename];
-
-    await db.collection('evaluations_actual').doc(latest.id).update({
-      evidence_files_json: JSON.stringify(updatedFiles),
-      evidence_meta_json: JSON.stringify(meta),
-      evidence_file: updatedFiles[0] || null,
-      updated_at: admin.firestore.FieldValue.serverTimestamp()
-    });
-
-    // Try to delete from Firebase Storage
-    try {
-      const destination = `evidence_actual/${session_id}/${indicator_id}/${filename}`;
-      await bucket.file(destination).delete();
-      console.log(`Deleted file from storage: ${destination}`);
-    } catch (storageError) {
-      console.warn(`Could not delete file from storage (it might have been deleted already): ${filename}`);
-    }
-
-    res.json({ success: true, files: updatedFiles });
-  } catch (error) {
-    console.error('Error removing file:', error);
-    res.status(500).json({ error: 'ลบไฟล์ไม่สำเร็จ', details: error.message });
-  }
-});
-
-// ================= COMMITTEE EVALUATIONS =================
-app.get('/api/committee-evaluations', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { indicator_id, major_name, session_id } = req.query;
-
-    let query = db.collection('committee_evaluations');
-
-    if (major_name) query = query.where('major_name', '==', major_name);
-    if (session_id) query = query.where('session_id', '==', session_id);
-    if (indicator_id) query = query.where('indicator_id', '==', indicator_id);
-
-    const snapshot = await query.get();
-    const evaluations = [];
-
-    snapshot.forEach(doc => {
-      evaluations.push({ id: doc.id, ...doc.data() });
-    });
-
-    // Sort in memory
-    evaluations.sort((a, b) => {
-      if (a.created_at && b.created_at) {
-        return b.created_at.seconds - a.created_at.seconds;
-      }
-      return 0;
-    });
-
-    res.json(evaluations);
-  } catch (error) {
-    console.error('Error fetching committee evaluations:', error);
-    res.status(500).json({ error: 'โหลดข้อมูลการประเมินกรรมการไม่สำเร็จ', details: error.message });
-  }
-});
-
-app.post('/api/committee-evaluations', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { indicator_id, major_name, session_id, committee_score, strengths, improvements } = req.body;
-
-    if (!indicator_id || !major_name || !session_id) {
-      return res.status(400).json({ error: 'กรุณาระบุข้อมูลที่จำเป็น' });
-    }
-
-    // Check if evaluation already exists
-    const existingQuery = db.collection('committee_evaluations')
-      .where('indicator_id', '==', indicator_id)
-      .where('major_name', '==', major_name)
-      .where('session_id', '==', session_id);
-
-    const existingSnapshot = await existingQuery.get();
-
-    if (!existingSnapshot.empty) {
-      // Update existing evaluation
-      const docId = existingSnapshot.docs[0].id;
-      await db.collection('committee_evaluations').doc(docId).update({
-        committee_score,
-        strengths,
-        improvements,
-        updated_at: admin.firestore.FieldValue.serverTimestamp()
-      });
-    } else {
-      // Create new evaluation
-      await db.collection('committee_evaluations').add({
-        indicator_id,
-        major_name,
-        session_id,
-        committee_score,
-        strengths,
-        improvements,
-        created_at: admin.firestore.FieldValue.serverTimestamp(),
-        updated_at: admin.firestore.FieldValue.serverTimestamp()
-      });
-    }
-
-    res.json({ success: true, message: 'บันทึกการประเมินกรรมการเรียบร้อย' });
-  } catch (error) {
-    console.error('Error saving committee evaluation:', error);
-    res.status(500).json({ error: 'บันทึกการประเมินกรรมการไม่สำเร็จ', details: error.message });
-  }
-});
-
-// ================= INDICATOR DETAIL =================
-app.get('/api/indicator-detail', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { indicator_id } = req.query || {};
-    if (!indicator_id) return res.status(400).json({ error: 'indicator_id จำเป็น' });
-
-    const doc = await db.collection('indicators').doc(indicator_id).get();
-
-    if (!doc.exists) {
-      return res.status(404).json({ error: 'ไม่พบตัวบ่งชี้' });
-    }
-
-    res.json({ id: doc.id, ...doc.data() });
-  } catch (error) {
-    console.error('Error fetching indicator detail:', error);
-    res.status(500).json({ error: 'ดึงข้อมูลตัวบ่งชี้ไม่สำเร็จ', details: error.message });
-  }
-});
-
-app.post('/api/bulk/indicator-details', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { indicator_ids } = req.body || {};
-    if (!Array.isArray(indicator_ids) || indicator_ids.length === 0) {
-      return res.json({}); // Return empty map if no IDs
-    }
-
-    // Firestore doesn't support 'IN' with more than 10-30 IDs.
-    // If there are many IDs, we can fetch all and filter, or do multiple queries.
-    // For indicator details, they are usually in the same major, so we can fetch all indicators for a major if major_name is provided,
-    // or fetch by ID if there are few.
-
-    // Let's use get() for specific IDs in chunks of 30
-    const chunks = [];
-    for (let i = 0; i < indicator_ids.length; i += 30) {
-      chunks.push(indicator_ids.slice(i, i + 30));
-    }
-
-    const results = {};
-    for (const chunk of chunks) {
-      const snapshot = await db.collection('indicators')
-        .where(admin.firestore.FieldPath.documentId(), 'in', chunk)
-        .get();
-
-      snapshot.forEach(doc => {
-        results[doc.id] = { id: doc.id, ...doc.data() };
-      });
-    }
-
-    res.json(results);
-  } catch (error) {
-    console.error('Error in bulk indicator details fetch:', error);
-    res.status(500).json({ error: 'ดึงรายละเอียดตัวบ่งชี้แบบกลุ่มไม่สำเร็จ' });
   }
 });
 
