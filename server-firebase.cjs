@@ -39,8 +39,8 @@ if (!admin.apps.length) {
   }
 }
 
-const db = admin.firestore ? admin.firestore() : null;
-const bucket = admin.storage ? admin.storage().bucket() : null;
+const db = admin.apps.length ? admin.firestore() : null;
+const bucket = (admin.apps.length && admin.storage) ? admin.storage().bucket() : null;
 
 // Collections
 const firebaseConfig = {
