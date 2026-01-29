@@ -26,13 +26,17 @@ if (!admin.apps.length) {
       });
       console.log('✅ Firebase Admin initialized with environment variables');
     } else {
-      // Fallback to service account file
-      const serviceAccount = require('./firebase-service-account.json');
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'aunqa-esar.appspot.com'
-      });
-      console.log('✅ Firebase Admin initialized with service account file');
+      // Fallback to service account file (Only in development)
+      if (process.env.NODE_ENV !== 'production' && fs.existsSync('./firebase-service-account.json')) {
+        const serviceAccount = require('./firebase-service-account.json');
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+          storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'aunqa-esar.appspot.com'
+        });
+        console.log('✅ Firebase Admin initialized with service account file');
+      } else {
+        console.log('⚠️ Firebase Admin not initialized: Missing credentials');
+      }
     }
   } catch (error) {
     console.error('❌ Firebase Admin initialization failed:', error);
