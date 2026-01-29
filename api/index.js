@@ -1,3 +1,3 @@
-const app = require('../server-firebase.cjs');
+import app from '../server-firebase.cjs';
 
-module.exports = app;
+export default app;
