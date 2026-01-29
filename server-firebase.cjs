@@ -4,6 +4,7 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 require('dotenv').config();
 
 // Firebase Admin SDK
@@ -21,11 +22,15 @@ const supabase = createClient(
 console.log('✅ Supabase client initialized');
 console.log('📦 Bucket:', process.env.SUPABASE_BUCKET_NAME);
 
-// Create uploads directory if it doesn't exist
+// Create uploads directory if it doesn't exist (only in non-Vercel environment)
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  console.log('📁 Created uploads directory');
+if (!process.env.VERCEL && !fs.existsSync(UPLOADS_DIR)) {
+  try {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    console.log('📁 Created uploads directory');
+  } catch (err) {
+    console.error('❌ Failed to create uploads directory:', err.message);
+  }
 }
 
 // Initialize Firebase Admin with environment variables
@@ -209,10 +214,8 @@ const firebaseConfig = {
 // Multer setup for temporary file handling (before uploading to Firebase Storage)
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    if (!fs.existsSync('temp-uploads')) {
-      fs.mkdirSync('temp-uploads');
-    }
-    cb(null, 'temp-uploads/');
+    const tempDir = os.tmpdir();
+    cb(null, tempDir);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
