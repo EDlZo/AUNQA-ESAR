@@ -24,8 +24,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
-          firebase: ['firebase', 'firebase-admin']
+          vendor: ['react', 'react-dom']
         }
       }
     }
