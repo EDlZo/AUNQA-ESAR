@@ -242,12 +242,44 @@ app.get('/api/programs', async (req, res) => {
 // ================= QUALITY COMPONENTS =================
 app.get('/api/quality-components', async (req, res) => {
   try {
-    const { session_id, major_name } = req.query;
-    const components = await getData('qualityComponents', { major_name });
+    if (!db) {
+      // Use mock data when Firebase is not available
+      const { session_id, major_name } = req.query || {};
+      const components = await getData('qualityComponents', { major_name });
+      return res.json(components);
+    }
+
+    const { session_id, major_name } = req.query || {};
+
+    // Use simple query without complex ordering to avoid index requirements
+    let query = db.collection('quality_components');
+
+    if (major_name) {
+      query = query.where('major_name', '==', major_name);
+    }
+
+    // Remove ordering to avoid index requirement
+    // query = query.orderBy('created_at', 'desc');
+
+    const snapshot = await query.get();
+    const components = [];
+
+    snapshot.forEach(doc => {
+      components.push({ id: doc.id, ...doc.data() });
+    });
+
+    // Sort in memory instead
+    components.sort((a, b) => {
+      if (a.created_at && b.created_at) {
+        return b.created_at.seconds - a.created_at.seconds;
+      }
+      return 0;
+    });
+
     res.json(components);
   } catch (error) {
     console.error('Error fetching quality components:', error);
-    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลองค์ประกอบคุณภาพได้', details: error.message });
+    res.status(500).json({ error: 'ดึงองค์ประกอบไม่สำเร็จ', details: error.message });
   }
 });
 
@@ -335,27 +367,67 @@ app.post('/api/indicators', async (req, res) => {
 // ================= BULK OPERATIONS =================
 app.get('/api/bulk/session-summary', async (req, res) => {
   try {
+    if (!db) {
+      // Use mock data when Firebase is not available
+      const { session_id, major_name } = req.query;
+      if (!major_name) return res.status(400).json({ error: 'กรุณาระบุ major_name' });
+
+      console.log(`[BULK] Fetching session summary for major: ${major_name}, session: ${session_id} (using mock data)`);
+
+      const [components, evaluations, evaluationsActual, committeeEvaluations, indicators] = await Promise.all([
+        getData('qualityComponents', { major_name }),
+        getData('evaluations', { session_id, major_name }),
+        getData('evaluationsActual', { session_id, major_name }),
+        getData('committeeEvaluations', { session_id, major_name }),
+        getData('indicators', { major_name })
+      ]);
+
+      return res.json({
+        components,
+        evaluations,
+        evaluations_actual: evaluationsActual,
+        committee_evaluations: committeeEvaluations,
+        indicators
+      });
+    }
+
     const { session_id, major_name } = req.query;
-    
-    // Fetch all data in parallel
-    const [components, indicators, evaluations, evaluationsActual, committeeEvaluations] = await Promise.all([
-      getData('qualityComponents', { major_name }),
-      getData('indicators', { major_name }),
-      getData('evaluations', { session_id, major_name }),
-      getData('evaluationsActual', { session_id, major_name }),
-      getData('committeeEvaluations', { session_id, major_name })
+    if (!major_name) return res.status(400).json({ error: 'กรุณาระบุ major_name' });
+
+    console.log(`[BULK] Fetching session summary for major: ${major_name}, session: ${session_id}`);
+
+    // Parallel fetch using Promise.all
+    const [compSnap, evalSnap, evalActualSnap, commSnap, indSnap] = await Promise.all([
+      db.collection('quality_components').where('major_name', '==', major_name).get(),
+      session_id ? db.collection('evaluations').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
+      session_id ? db.collection('evaluations_actual').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
+      session_id ? db.collection('committee_evaluations').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
+      db.collection('indicators').where('major_name', '==', major_name).get()
     ]);
-    
+
+    const components = compSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const evaluations = evalSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const evaluations_actual = evalActualSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const committee_evaluations = commSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const indicators = indSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Sort indicators
+    indicators.sort((a, b) => {
+      const seqA = String(a.sequence || '');
+      const seqB = String(b.sequence || '');
+      return seqA.localeCompare(seqB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
     res.json({
       components,
-      indicators,
       evaluations,
-      evaluations_actual: evaluationsActual,
-      committee_evaluations: committeeEvaluations
+      evaluations_actual,
+      committee_evaluations,
+      indicators
     });
   } catch (error) {
-    console.error('Error fetching bulk session summary:', error);
-    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลสรุปได้', details: error.message });
+    console.error('Error in session summary batch:', error);
+    res.status(500).json({ error: 'ดึงข้อมูลสรุปไม่สำเร็จ', details: error.message });
   }
 });
 
@@ -537,113 +609,6 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// ================= QUALITY COMPONENTS =================
-app.get('/api/quality-components', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { session_id, major_name } = req.query || {};
-
-    // Use simple query without complex ordering to avoid index requirements
-    let query = db.collection('quality_components');
-
-    if (major_name) {
-      query = query.where('major_name', '==', major_name);
-    }
-
-    // Remove ordering to avoid index requirement
-    // query = query.orderBy('created_at', 'desc');
-
-    const snapshot = await query.get();
-    const components = [];
-
-    snapshot.forEach(doc => {
-      components.push({ id: doc.id, ...doc.data() });
-    });
-
-    // Sort in memory instead
-    components.sort((a, b) => {
-      if (a.created_at && b.created_at) {
-        return b.created_at.seconds - a.created_at.seconds;
-      }
-      return 0;
-    });
-
-    res.json(components);
-  } catch (error) {
-    console.error('Error fetching quality components:', error);
-    res.status(500).json({ error: 'ดึงองค์ประกอบไม่สำเร็จ', details: error.message });
-  }
-});
-
-app.post('/api/quality-components', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { componentId, qualityName, session_id, major_name } = req.body || {};
-
-    if (!qualityName) {
-      return res.status(400).json({ error: 'กรุณากรอกชื่อองค์ประกอบ' });
-    }
-
-    const componentData = {
-      component_id: componentId || null,
-      quality_name: qualityName,
-      session_id: session_id || null,
-      major_name: major_name || null,
-      created_at: admin.firestore.FieldValue.serverTimestamp(),
-      updated_at: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    const docRef = await db.collection('quality_components').add(componentData);
-
-    res.json({ success: true, id: docRef.id });
-  } catch (error) {
-    console.error('Error creating quality component:', error);
-    res.status(500).json({ error: 'บันทึกองค์ประกอบไม่สำเร็จ', details: error.message });
-  }
-});
-
-app.delete('/api/quality-components/:id', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    await db.collection('quality_components').doc(req.params.id).delete();
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error deleting quality component:', error);
-    res.status(500).json({ error: 'ลบองค์ประกอบไม่สำเร็จ', details: error.message });
-  }
-});
-
-app.patch('/api/quality-components/:id', async (req, res) => {
-  try {
-    if (!db) {
-      return res.status(500).json({ error: 'Firebase not initialized' });
-    }
-
-    const { componentId, qualityName } = req.body || {};
-
-    const updateData = {
-      component_id: componentId || null,
-      quality_name: qualityName,
-      updated_at: admin.firestore.FieldValue.serverTimestamp()
-    };
-
-    await db.collection('quality_components').doc(req.params.id).update(updateData);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error updating quality component:', error);
-    res.status(500).json({ error: 'แก้ไของค์ประกอบไม่สำเร็จ', details: error.message });
-  }
-});
-
 // ================= INDICATORS =================
 app.get('/api/indicators/:id', async (req, res) => {
   try {
@@ -815,50 +780,6 @@ app.post('/api/bulk/indicators-by-components', async (req, res) => {
   } catch (error) {
     console.error('Error in bulk indicators fetch:', error);
     res.status(500).json({ error: 'ดึงข้อมูลตัวบ่งชี้แบบกลุ่มไม่สำเร็จ' });
-  }
-});
-
-// ดึงข้อมูลสรุปทั้งหมดในครั้งเดียว (Dashboard / Assessment / Summary)
-app.get('/api/bulk/session-summary', async (req, res) => {
-  try {
-    if (!db) return res.status(500).json({ error: 'Firebase not initialized' });
-    const { session_id, major_name } = req.query;
-    if (!major_name) return res.status(400).json({ error: 'กรุณาระบุ major_name' });
-
-    console.log(`[BULK] Fetching session summary for major: ${major_name}, session: ${session_id}`);
-
-    // Parallel fetch using Promise.all
-    const [compSnap, evalSnap, evalActualSnap, commSnap, indSnap] = await Promise.all([
-      db.collection('quality_components').where('major_name', '==', major_name).get(),
-      session_id ? db.collection('evaluations').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
-      session_id ? db.collection('evaluations_actual').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
-      session_id ? db.collection('committee_evaluations').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
-      db.collection('indicators').where('major_name', '==', major_name).get()
-    ]);
-
-    const components = compSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const evaluations = evalSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const evaluations_actual = evalActualSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const committee_evaluations = commSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const indicators = indSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-    // Sort indicators
-    indicators.sort((a, b) => {
-      const seqA = String(a.sequence || '');
-      const seqB = String(b.sequence || '');
-      return seqA.localeCompare(seqB, undefined, { numeric: true, sensitivity: 'base' });
-    });
-
-    res.json({
-      components,
-      evaluations,
-      evaluations_actual,
-      committee_evaluations,
-      indicators
-    });
-  } catch (error) {
-    console.error('Error in session summary batch:', error);
-    res.status(500).json({ error: 'ดึงข้อมูลสรุปไม่สำเร็จ', details: error.message });
   }
 });
 
