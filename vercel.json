@@ -3,11 +3,11 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/server-firebase.cjs"
+      "dest": "/api/index.js"
     },
     {
       "src": "/uploads/(.*)",
-      "dest": "/server-firebase.cjs"
+      "dest": "/api/index.js"
     },
     {
       "src": "/(.*\\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot))",
@@ -18,11 +18,8 @@
       "dest": "/dist/index.html"
     }
   ],
-  "env": {
-    "NODE_ENV": "production"
-  },
   "functions": {
-    "server-firebase.cjs": {
+    "api/index.js": {
       "maxDuration": 30
     }
   }

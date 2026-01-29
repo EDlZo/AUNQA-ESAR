@@ -94,9 +94,9 @@ app.use((req, res, next) => {
 
 // Health check
 app.get('/api/ping', (req, res) => {
-  res.json({ 
-    ok: true, 
-    pid: process.pid, 
+  res.json({
+    ok: true,
+    pid: process.pid,
     cwd: process.cwd(),
     firebase: !!db,
     storage: !!bucket
@@ -108,7 +108,7 @@ async function uploadFileToFirebase(filePath, destination) {
   if (!bucket) {
     throw new Error('Firebase Storage not initialized');
   }
-  
+
   try {
     const [file] = await bucket.upload(filePath, {
       destination: destination,
@@ -116,16 +116,16 @@ async function uploadFileToFirebase(filePath, destination) {
         cacheControl: 'public, max-age=31536000',
       },
     });
-    
+
     // Make file publicly accessible
     await file.makePublic();
-    
+
     // Get public URL
     const publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
-    
+
     // Clean up temp file
     fs.unlinkSync(filePath);
-    
+
     return publicUrl;
   } catch (error) {
     // Clean up temp file on error
@@ -165,19 +165,19 @@ app.post('/api/login', async (req, res) => {
       .where('email', '==', username)
       .where('password', '==', password)
       .where('role_id', '==', roleId);
-    
+
     const snapshot = await query.get();
 
     if (snapshot.empty) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'ชื่อผู้ใช้ รหัสผ่าน หรือ Role ไม่ถูกต้อง' 
+      return res.status(401).json({
+        success: false,
+        message: 'ชื่อผู้ใช้ รหัสผ่าน หรือ Role ไม่ถูกต้อง'
       });
     }
 
     const userDoc = snapshot.docs[0];
     const userData = { id: userDoc.id, ...userDoc.data() };
-    
+
     res.json({ success: true, user: userData });
   } catch (error) {
     console.error('Login error:', error);
@@ -193,24 +193,24 @@ app.get('/api/quality-components', async (req, res) => {
     }
 
     const { session_id, major_name } = req.query || {};
-    
+
     // Use simple query without complex ordering to avoid index requirements
     let query = db.collection('quality_components');
-    
+
     if (major_name) {
       query = query.where('major_name', '==', major_name);
     }
-    
+
     // Remove ordering to avoid index requirement
     // query = query.orderBy('created_at', 'desc');
-    
+
     const snapshot = await query.get();
     const components = [];
-    
+
     snapshot.forEach(doc => {
       components.push({ id: doc.id, ...doc.data() });
     });
-    
+
     // Sort in memory instead
     components.sort((a, b) => {
       if (a.created_at && b.created_at) {
@@ -218,7 +218,7 @@ app.get('/api/quality-components', async (req, res) => {
       }
       return 0;
     });
-    
+
     res.json(components);
   } catch (error) {
     console.error('Error fetching quality components:', error);
@@ -233,7 +233,7 @@ app.post('/api/quality-components', async (req, res) => {
     }
 
     const { componentId, qualityName, session_id, major_name } = req.body || {};
-    
+
     if (!qualityName) {
       return res.status(400).json({ error: 'กรุณากรอกชื่อองค์ประกอบ' });
     }
@@ -248,7 +248,7 @@ app.post('/api/quality-components', async (req, res) => {
     };
 
     const docRef = await db.collection('quality_components').add(componentData);
-    
+
     res.json({ success: true, id: docRef.id });
   } catch (error) {
     console.error('Error creating quality component:', error);
@@ -277,7 +277,7 @@ app.patch('/api/quality-components/:id', async (req, res) => {
     }
 
     const { componentId, qualityName } = req.body || {};
-    
+
     const updateData = {
       component_id: componentId || null,
       quality_name: qualityName,
@@ -300,11 +300,11 @@ app.get('/api/indicators/:id', async (req, res) => {
     }
 
     const doc = await db.collection('indicators').doc(req.params.id).get();
-    
+
     if (!doc.exists) {
       return res.status(404).json({ error: 'ไม่พบข้อมูลตัวบ่งชี้' });
     }
-    
+
     res.json({ id: doc.id, ...doc.data() });
   } catch (error) {
     console.error('Error fetching indicator:', error);
@@ -318,15 +318,15 @@ app.post('/api/indicators', async (req, res) => {
       return res.status(500).json({ error: 'Firebase not initialized' });
     }
 
-    const { 
-      component_id, 
-      sequence, 
-      indicator_type, 
-      criteria_type, 
-      indicator_name, 
-      data_source, 
-      session_id, 
-      major_name 
+    const {
+      component_id,
+      sequence,
+      indicator_type,
+      criteria_type,
+      indicator_name,
+      data_source,
+      session_id,
+      major_name
     } = req.body || {};
 
     const indicatorData = {
@@ -372,26 +372,26 @@ app.get('/api/indicators-by-component/:componentId', async (req, res) => {
 
     const { componentId } = req.params;
     const { session_id, major_name } = req.query || {};
-    
+
     console.log(`🔍 Looking for indicators with component_id: ${componentId} (type: ${typeof componentId})`);
-    
+
     // Try both string and number versions of component_id
     const queries = [
       db.collection('indicators').where('component_id', '==', componentId),
       db.collection('indicators').where('component_id', '==', parseInt(componentId)),
       db.collection('indicators').where('component_id', '==', componentId.toString())
     ];
-    
+
     let allIndicators = [];
-    
+
     for (const query of queries) {
       try {
         let currentQuery = query;
-        
+
         if (major_name) {
           currentQuery = currentQuery.where('major_name', '==', major_name);
         }
-        
+
         const snapshot = await currentQuery.get();
         snapshot.forEach(doc => {
           const data = { id: doc.id, ...doc.data() };
@@ -404,16 +404,16 @@ app.get('/api/indicators-by-component/:componentId', async (req, res) => {
         console.log(`Query failed: ${queryError.message}`);
       }
     }
-    
+
     // Sort in memory by sequence
     allIndicators.sort((a, b) => {
       const seqA = a.sequence || '';
       const seqB = b.sequence || '';
       return seqA.localeCompare(seqB);
     });
-    
+
     console.log(`✅ Found ${allIndicators.length} indicators for component_id: ${componentId}`);
-    
+
     res.json(allIndicators);
   } catch (error) {
     console.error('Error fetching indicators by component:', error);
@@ -429,7 +429,7 @@ app.post('/api/assessment-sessions', async (req, res) => {
     }
 
     const { level_id, faculty_id, faculty_name, major_id, major_name, evaluator_id } = req.body || {};
-    
+
     if (!level_id) {
       return res.status(400).json({ error: 'level_id จำเป็น' });
     }
@@ -459,11 +459,11 @@ app.get('/api/assessment-sessions/:id', async (req, res) => {
     }
 
     const doc = await db.collection('assessment_sessions').doc(req.params.id).get();
-    
+
     if (!doc.exists) {
       return res.status(404).json({ error: 'ไม่พบเซสชัน' });
     }
-    
+
     res.json({ id: doc.id, ...doc.data() });
   } catch (error) {
     console.error('Error fetching assessment session:', error);
@@ -478,21 +478,21 @@ app.post('/api/evaluations', upload.single('evidence_file'), async (req, res) =>
       return res.status(500).json({ error: 'Firebase not initialized' });
     }
 
-    const { 
-      session_id, 
-      indicator_id, 
-      program_id, 
-      year, 
-      evaluator_id, 
-      score, 
-      target_value, 
-      comment, 
-      status, 
-      major_name 
+    const {
+      session_id,
+      indicator_id,
+      program_id,
+      year,
+      evaluator_id,
+      score,
+      target_value,
+      comment,
+      status,
+      major_name
     } = req.body;
 
     let evidenceFileUrl = null;
-    
+
     // Upload file to Firebase Storage if provided
     if (req.file && bucket) {
       try {
@@ -521,11 +521,11 @@ app.post('/api/evaluations', upload.single('evidence_file'), async (req, res) =>
     };
 
     const docRef = await db.collection('evaluations').add(evaluationData);
-    
-    res.json({ 
-      success: true, 
-      evaluation_id: docRef.id, 
-      evidence_file_url: evidenceFileUrl 
+
+    res.json({
+      success: true,
+      evaluation_id: docRef.id,
+      evidence_file_url: evidenceFileUrl
     });
   } catch (error) {
     console.error('Error creating evaluation:', error);
@@ -540,24 +540,24 @@ app.get('/api/evaluations', async (req, res) => {
     }
 
     const { evaluator_id, program_id, year, component_id, session_id, major_name } = req.query;
-    
+
     // Use simple query without complex ordering
     let query = db.collection('evaluations');
-    
+
     if (session_id) query = query.where('session_id', '==', session_id);
     if (major_name) query = query.where('major_name', '==', major_name);
     if (evaluator_id) query = query.where('evaluator_id', '==', parseInt(evaluator_id));
-    
+
     // Remove complex ordering to avoid index requirement
     // query = query.orderBy('created_at', 'desc');
-    
+
     const snapshot = await query.get();
     const evaluations = [];
-    
+
     snapshot.forEach(doc => {
       evaluations.push({ id: doc.id, ...doc.data() });
     });
-    
+
     // Sort in memory
     evaluations.sort((a, b) => {
       if (a.created_at && b.created_at) {
@@ -565,7 +565,7 @@ app.get('/api/evaluations', async (req, res) => {
       }
       return 0;
     });
-    
+
     res.json(evaluations);
   } catch (error) {
     console.error('Error fetching evaluations:', error);
@@ -588,19 +588,19 @@ app.get('/api/evaluations/history', async (req, res) => {
     }
 
     const { session_id, major_name } = req.query;
-    
+
     let query = db.collection('evaluations');
-    
+
     if (session_id) query = query.where('session_id', '==', session_id);
     if (major_name) query = query.where('major_name', '==', major_name);
-    
+
     const snapshot = await query.get();
     const evaluations = [];
-    
+
     snapshot.forEach(doc => {
       evaluations.push({ id: doc.id, ...doc.data() });
     });
-    
+
     // Sort in memory
     evaluations.sort((a, b) => {
       if (a.created_at && b.created_at) {
@@ -608,7 +608,7 @@ app.get('/api/evaluations/history', async (req, res) => {
       }
       return 0;
     });
-    
+
     res.json(evaluations);
   } catch (error) {
     console.error('Error fetching evaluations history:', error);
@@ -624,19 +624,19 @@ app.get('/api/evaluations-actual/history', async (req, res) => {
     }
 
     const { session_id, major_name } = req.query;
-    
+
     let query = db.collection('evaluations_actual');
-    
+
     if (session_id) query = query.where('session_id', '==', session_id);
     if (major_name) query = query.where('major_name', '==', major_name);
-    
+
     const snapshot = await query.get();
     const evaluations = [];
-    
+
     snapshot.forEach(doc => {
       evaluations.push({ id: doc.id, ...doc.data() });
     });
-    
+
     // Sort in memory
     evaluations.sort((a, b) => {
       if (a.created_at && b.created_at) {
@@ -644,7 +644,7 @@ app.get('/api/evaluations-actual/history', async (req, res) => {
       }
       return 0;
     });
-    
+
     res.json(evaluations);
   } catch (error) {
     console.error('Error fetching actual evaluations history:', error);
@@ -662,18 +662,18 @@ app.get('/api/committee-evaluations', async (req, res) => {
     const { indicator_id, major_name, session_id } = req.query;
 
     let query = db.collection('committee_evaluations');
-    
+
     if (major_name) query = query.where('major_name', '==', major_name);
     if (session_id) query = query.where('session_id', '==', session_id);
     if (indicator_id) query = query.where('indicator_id', '==', indicator_id);
 
     const snapshot = await query.get();
     const evaluations = [];
-    
+
     snapshot.forEach(doc => {
       evaluations.push({ id: doc.id, ...doc.data() });
     });
-    
+
     // Sort in memory
     evaluations.sort((a, b) => {
       if (a.created_at && b.created_at) {
@@ -681,7 +681,7 @@ app.get('/api/committee-evaluations', async (req, res) => {
       }
       return 0;
     });
-    
+
     res.json(evaluations);
   } catch (error) {
     console.error('Error fetching committee evaluations:', error);
@@ -706,7 +706,7 @@ app.post('/api/committee-evaluations', async (req, res) => {
       .where('indicator_id', '==', indicator_id)
       .where('major_name', '==', major_name)
       .where('session_id', '==', session_id);
-    
+
     const existingSnapshot = await existingQuery.get();
 
     if (!existingSnapshot.empty) {
@@ -748,13 +748,13 @@ app.get('/api/indicator-detail', async (req, res) => {
 
     const { indicator_id, session_id, major_name } = req.query || {};
     if (!indicator_id) return res.status(400).json({ error: 'indicator_id จำเป็น' });
-    
+
     const doc = await db.collection('indicators').doc(indicator_id).get();
-    
+
     if (!doc.exists) {
       return res.status(404).json({ error: 'ไม่พบตัวบ่งชี้' });
     }
-    
+
     res.json({ id: doc.id, ...doc.data() });
   } catch (error) {
     console.error('Error fetching indicator detail:', error);
@@ -764,9 +764,11 @@ app.get('/api/indicator-detail', async (req, res) => {
 
 // ================= START SERVER =================
 const PORT = process.env.PORT || 3002;
-app.listen(PORT, () => {
-  console.log(`Firebase server running on port ${PORT}`);
-  console.log('Note: Add Firebase service account key to enable full functionality');
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Firebase server running on port ${PORT}`);
+    console.log('Note: Add Firebase service account key to enable full functionality');
+  });
+}
 
 module.exports = app;
