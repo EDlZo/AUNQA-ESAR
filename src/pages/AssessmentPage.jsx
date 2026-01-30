@@ -23,9 +23,34 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
       if (!selectedProgram) return;
       setLoading(true);
       try {
-        const sessionId = localStorage.getItem('assessment_session_id') || Math.floor(Date.now() / 1000).toString();
-        localStorage.setItem('assessment_session_id', sessionId);
         const majorName = selectedProgram.majorName || selectedProgram.major_name || '';
+        let sessionId = localStorage.getItem('assessment_session_id');
+
+        // If session ID is missing, try to recover the latest one for this major from backend
+        if (!sessionId) {
+          console.log(`🔍 Attempting to recover latest session for: ${majorName}`);
+          try {
+            const recoveryRes = await fetch(`${BASE_URL}/api/assessment-sessions/latest?major_name=${encodeURIComponent(majorName)}`);
+            if (recoveryRes.ok) {
+              const recoveryData = await recoveryRes.json();
+              if (recoveryData.session_id) {
+                sessionId = recoveryData.session_id;
+                console.log(`✅ Recovered session: ${sessionId}`);
+                localStorage.setItem('assessment_session_id', sessionId);
+              }
+            }
+          } catch (recoveryError) {
+            console.warn('Session recovery failed:', recoveryError);
+          }
+        }
+
+        // If still no session ID, generate a new one
+        if (!sessionId) {
+          sessionId = Math.floor(Date.now() / 1000).toString();
+          localStorage.setItem('assessment_session_id', sessionId);
+          console.log(`🆕 Created new session: ${sessionId}`);
+        }
+
         const qs = new URLSearchParams({ session_id: sessionId, major_name: majorName }).toString();
 
         // ใช้ Bulk endpoint ดึงข้อมูลทั้งหมดในครั้งเดียว
@@ -123,7 +148,7 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
           {assessmentMode === 'criteria' ? 'กำหนดค่าเป้าหมาย' : 'ผลการดำเนินการ'}
         </h1>
         <p className="text-gray-600 mt-1">
-          {assessmentMode === 'criteria' 
+          {assessmentMode === 'criteria'
             ? 'กำหนดค่าเป้าหมายและคะแนนประเมินตนเองสำหรับแต่ละตัวบ่งชี้'
             : 'บันทึกผลการดำเนินงานและหลักฐานอ้างอิงสำหรับแต่ละตัวบ่งชี้'}
         </p>
@@ -137,14 +162,14 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
           {selectedProgram?.facultyName ? <span className="ml-1 text-gray-500">({selectedProgram.facultyName})</span> : null}
         </div>
         <button
-          onClick={() => { 
-            try { 
-              localStorage.removeItem('selectedProgramContext'); 
-              localStorage.removeItem('assessment_session_id'); 
+          onClick={() => {
+            try {
+              localStorage.removeItem('selectedProgramContext');
+              localStorage.removeItem('assessment_session_id');
             } catch { }
-            setSelectedProgram(null); 
-            setShowComponents(false); 
-            setSelectedComponent(null); 
+            setSelectedProgram(null);
+            setShowComponents(false);
+            setSelectedComponent(null);
           }}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
         >
@@ -168,13 +193,13 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
               {assessmentMode === 'criteria' ? 'ขั้นตอนการกำหนดค่าเป้าหมาย' : 'ขั้นตอนการบันทึกผลการดำเนินงาน'}
             </h2>
             <p className="text-gray-600 text-sm">
-              {assessmentMode === 'criteria' 
+              {assessmentMode === 'criteria'
                 ? 'ทำตามขั้นตอนเพื่อกำหนดเป้าหมายให้ครบทุกตัวบ่งชี้'
                 : 'ทำตามขั้นตอนเพื่อบันทึกผลการดำเนินงานให้ครบทุกตัวบ่งชี้'}
             </p>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
@@ -190,7 +215,7 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
                 {assessmentMode === 'criteria' ? 'กำหนดเป้าหมาย' : 'บันทึกผลการดำเนินงาน'}
               </h3>
               <p className="text-sm text-gray-600">
-                {assessmentMode === 'criteria' 
+                {assessmentMode === 'criteria'
                   ? 'กำหนดค่าเป้าหมายและคะแนนประเมินตนเองสำหรับแต่ละตัวบ่งชี้'
                   : 'บันทึกผลการดำเนินงานและอัปโหลดหลักฐานอ้างอิง'}
               </p>

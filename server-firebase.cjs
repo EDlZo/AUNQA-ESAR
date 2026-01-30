@@ -584,6 +584,72 @@ app.post('/api/assessment-sessions', async (req, res) => {
   }
 });
 
+app.get('/api/assessment-sessions/latest', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const { major_name, evaluator_id } = req.query;
+    if (!major_name) {
+      return res.status(400).json({ error: 'major_name จำเป็น' });
+    }
+
+    console.log(`🔍 Looking for latest session for major: ${major_name}`);
+
+    // Prefer finding sessions that ALREADY have evaluation data
+    const evalSnap = await db.collection('evaluations_actual')
+      .where('major_name', '==', major_name)
+      .get();
+
+    if (!evalSnap.empty) {
+      const evals = evalSnap.docs.map(doc => doc.data());
+      // Sort in-memory to avoid index requirement
+      evals.sort((a, b) => {
+        const getTime = (val) => {
+          if (!val) return 0;
+          if (val.seconds) return val.seconds * 1000;
+          if (val._seconds) return val._seconds * 1000;
+          if (val.toDate) return val.toDate().getTime();
+          if (typeof val === 'string') return new Date(val).getTime();
+          return 0;
+        };
+        return getTime(b.created_at) - getTime(a.created_at);
+      });
+      console.log(`✅ Found session with data: ${evals[0].session_id}`);
+      return res.json({ session_id: String(evals[0].session_id) });
+    }
+
+    // Fallback to assessment_sessions if no evaluation data exists yet
+    let query = db.collection('assessment_sessions')
+      .where('major_name', '==', major_name);
+
+    const snapshot = await query.get();
+    if (snapshot.empty) {
+      return res.json({ session_id: null });
+    }
+
+    const sessions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Sort by created_at in memory
+    sessions.sort((a, b) => {
+      const getTime = (val) => {
+        if (!val) return 0;
+        if (val.seconds) return val.seconds * 1000;
+        if (val._seconds) return val._seconds * 1000;
+        if (typeof val === 'string') return new Date(val).getTime();
+        return 0;
+      };
+      return getTime(b.created_at) - getTime(a.created_at);
+    });
+
+    res.json({ session_id: sessions[0].id });
+  } catch (error) {
+    console.error('Error fetching latest session:', error);
+    res.status(500).json({ error: 'ดึงข้อมูลเซสชันล่าสุดไม่สำเร็จ', details: error.message });
+  }
+});
+
 // Helper function to upload file to Supabase Storage
 async function uploadFileToFirebase(localPath, destination) {
   try {

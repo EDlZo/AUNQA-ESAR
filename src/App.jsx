@@ -137,35 +137,37 @@ export default function App() {
               <ProgramSelection
                 onComplete={(sel) => {
                   try { localStorage.setItem('selectedProgramContext', JSON.stringify(sel)); } catch { }
-                  // Reuse existing session if same major, otherwise create new
-                  try {
-                    const existingSessionId = localStorage.getItem('assessment_session_id') || '';
-                    const prevSelRaw = localStorage.getItem('selectedProgramContext');
-                    const prevSel = prevSelRaw ? JSON.parse(prevSelRaw) : null;
-                    const sameMajor = prevSel && prevSel.majorName === sel.majorName;
-                    if (existingSessionId && sameMajor) {
-                      setActiveTab('manage');
-                      return;
-                    }
-                  } catch { }
+                  const majorName = sel.majorName || sel.major_name || '';
 
-                  fetch('/api/assessment-sessions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      level_id: sel.levelId,
-                      faculty_id: sel.facultyId,
-                      faculty_name: sel.facultyName,
-                      major_id: sel.majorId,
-                      major_name: sel.majorName,
-                      evaluator_id: currentUser?.user_id || null,
+                  // Try recovery first
+                  fetch(`/api/assessment-sessions/latest?major_name=${encodeURIComponent(majorName)}`)
+                    .then(r => r.json())
+                    .then(recoveryData => {
+                      if (recoveryData && recoveryData.session_id) {
+                        try { localStorage.setItem('assessment_session_id', String(recoveryData.session_id)); } catch { }
+                        setActiveTab('manage');
+                      } else {
+                        // Create new if recovery fails
+                        fetch('/api/assessment-sessions', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            level_id: sel.levelId,
+                            faculty_id: sel.facultyId,
+                            faculty_name: sel.facultyName,
+                            major_id: sel.majorId,
+                            major_name: majorName,
+                            evaluator_id: currentUser?.user_id || null,
+                          })
+                        }).then(r => r.json()).then(data => {
+                          if (data && data.session_id) {
+                            try { localStorage.setItem('assessment_session_id', String(data.session_id)); } catch { }
+                          }
+                          setActiveTab('manage');
+                        }).catch(() => setActiveTab('manage'));
+                      }
                     })
-                  }).then(r => r.json()).then(data => {
-                    if (data && data.session_id) {
-                      try { localStorage.setItem('assessment_session_id', String(data.session_id)); } catch { }
-                    }
-                    setActiveTab('manage');
-                  }).catch(() => setActiveTab('manage'));
+                    .catch(() => setActiveTab('manage'));
                 }}
               />
             </div>
@@ -191,35 +193,37 @@ export default function App() {
                     onComplete={(s) => {
                       try { localStorage.setItem('selectedProgramContext', JSON.stringify(s)); } catch { }
                       setSelectedProgram(s);
-                      // Reuse existing session if same major, otherwise create new
-                      try {
-                        const existingSessionId = localStorage.getItem('assessment_session_id') || '';
-                        const prevSelRaw = localStorage.getItem('selectedProgramContext');
-                        const prevSel = prevSelRaw ? JSON.parse(prevSelRaw) : null;
-                        const sameMajor = prevSel && prevSel.majorName === s.majorName;
-                        if (existingSessionId && sameMajor) {
-                          setActiveTab('manage');
-                          return;
-                        }
-                      } catch { }
+                      const majorName = s.majorName || s.major_name || '';
 
-                      fetch('/api/assessment-sessions', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          level_id: s.levelId,
-                          faculty_id: s.facultyId,
-                          faculty_name: s.facultyName,
-                          major_id: s.majorId,
-                          major_name: s.majorName,
-                          evaluator_id: currentUser?.user_id || null,
+                      // Try recovery first
+                      fetch(`/api/assessment-sessions/latest?major_name=${encodeURIComponent(majorName)}`)
+                        .then(r => r.json())
+                        .then(recoveryData => {
+                          if (recoveryData && recoveryData.session_id) {
+                            try { localStorage.setItem('assessment_session_id', String(recoveryData.session_id)); } catch { }
+                            setActiveTab('manage');
+                          } else {
+                            // Create new if recovery fails
+                            fetch('/api/assessment-sessions', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                level_id: s.levelId,
+                                faculty_id: s.facultyId,
+                                faculty_name: s.facultyName,
+                                major_id: s.majorId,
+                                major_name: majorName,
+                                evaluator_id: currentUser?.user_id || null,
+                              })
+                            }).then(r => r.json()).then(data => {
+                              if (data && data.session_id) {
+                                try { localStorage.setItem('assessment_session_id', String(data.session_id)); } catch { }
+                              }
+                              setActiveTab('manage');
+                            }).catch(() => setActiveTab('manage'));
+                          }
                         })
-                      }).then(r => r.json()).then(data => {
-                        if (data && data.session_id) {
-                          try { localStorage.setItem('assessment_session_id', String(data.session_id)); } catch { }
-                        }
-                        setActiveTab('manage');
-                      }).catch(() => setActiveTab('manage'));
+                        .catch(() => setActiveTab('manage'));
                     }}
                   />
                 </div>
@@ -262,7 +266,7 @@ export default function App() {
                     <p className="text-gray-600 text-sm">ทำตามขั้นตอนเพื่อจัดการข้อมูลองค์ประกอบและตัวบ่งชี้ให้ครบถ้วน</p>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="flex items-start gap-3">
                     <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>

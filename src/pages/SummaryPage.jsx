@@ -28,15 +28,36 @@ export default function SummaryPage({ currentUser }) {
 
   useEffect(() => {
     const fetchAllSummaryData = async () => {
-      const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
-      if (!sessionId || !major) return;
+      if (!major) return;
+
+      let sessionId = localStorage.getItem('assessment_session_id');
+
+      // If session ID is missing, try to recover the latest one for this major from backend
+      if (!sessionId) {
+        console.log(`🔍 Attempting to recover latest session for summary: ${major}`);
+        try {
+          const recoveryRes = await fetch(`${BASE_URL}/api/assessment-sessions/latest?major_name=${encodeURIComponent(major)}`);
+          if (recoveryRes.ok) {
+            const recoveryData = await recoveryRes.json();
+            if (recoveryData.session_id) {
+              sessionId = recoveryData.session_id;
+              console.log(`✅ Recovered session for summary: ${sessionId}`);
+              localStorage.setItem('assessment_session_id', sessionId);
+            }
+          }
+        } catch (recoveryError) {
+          console.warn('Session recovery failed in summary:', recoveryError);
+        }
+      }
+
+      if (!sessionId) return;
 
       setLoading(true);
       try {
         const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
         const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
-        
+
         if (res.ok) {
           const data = await res.json();
           const {
@@ -146,12 +167,12 @@ export default function SummaryPage({ currentUser }) {
   if (detailIndicator) {
     const crit = criteriaMap[String(detailIndicator.id)] || {};
     const committee = committeeMap[String(detailIndicator.id)] || {};
-    
+
     return (
       <div className="container mx-auto px-4">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-          <button 
+          <button
             onClick={() => { setDetailIndicator(null); setDetailEvaluation(null); }}
             className="hover:text-gray-700 transition-colors"
           >
@@ -197,11 +218,11 @@ export default function SummaryPage({ currentUser }) {
                         };
                         return getTime(b.created_at) - getTime(a.created_at);
                       })[0];
-                    
+
                     if (!latestRecord || !latestRecord.created_at) {
                       return 'ยังไม่มีข้อมูล';
                     }
-                    
+
                     try {
                       const date = new Date(latestRecord.created_at);
                       if (isNaN(date.getTime())) {
@@ -209,7 +230,7 @@ export default function SummaryPage({ currentUser }) {
                       }
                       return date.toLocaleDateString('th-TH', {
                         year: 'numeric',
-                        month: 'long', 
+                        month: 'long',
                         day: 'numeric',
                         hour: '2-digit',
                         minute: '2-digit'
@@ -265,7 +286,7 @@ export default function SummaryPage({ currentUser }) {
                   </div>
                   <h3 className="text-lg font-bold text-green-900">ผลการดำเนินงาน</h3>
                 </div>
-                
+
                 <div className="space-y-4">
                   <div className="bg-white/60 rounded-xl p-4 border border-green-200/50">
                     <div className="grid grid-cols-2 gap-4 text-sm">
@@ -279,7 +300,7 @@ export default function SummaryPage({ currentUser }) {
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="bg-white/60 rounded-xl p-4 border border-green-200/50">
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
@@ -305,13 +326,13 @@ export default function SummaryPage({ currentUser }) {
                   </div>
                   <h3 className="text-lg font-bold text-blue-900">คะแนนประเมิน</h3>
                 </div>
-                
+
                 <div className="space-y-4">
                   <div className="bg-white/60 rounded-xl p-4 border border-blue-200/50">
                     <div className="text-blue-600 font-medium text-sm mb-2">คะแนนประเมิน (กรรมการ)</div>
                     <div className="text-blue-900 font-bold text-2xl">{committee.committee_score || '-'}</div>
                   </div>
-                  
+
                   <div className="bg-white/60 rounded-xl p-4 border border-blue-200/50">
                     <div className="text-blue-600 font-medium text-sm mb-2">Strengths (จุดแข็ง)</div>
                     <div className="text-blue-900 text-sm">
@@ -322,7 +343,7 @@ export default function SummaryPage({ currentUser }) {
                       )}
                     </div>
                   </div>
-                  
+
                   <div className="bg-white/60 rounded-xl p-4 border border-blue-200/50">
                     <div className="text-blue-600 font-medium text-sm mb-2">Areas for Improvement</div>
                     <div className="text-blue-900 text-sm">
@@ -347,7 +368,7 @@ export default function SummaryPage({ currentUser }) {
                 </div>
                 <h3 className="text-lg font-bold text-gray-900">รายการหลักฐานอ้างอิง</h3>
               </div>
-              
+
               {(() => {
                 // ดึงข้อมูลหลักฐานจาก detailEvaluation
                 const evidenceFiles = [];
@@ -531,7 +552,7 @@ export default function SummaryPage({ currentUser }) {
               <p className="text-gray-600 text-sm">ทำตามขั้นตอนเพื่อดูสรุปผลการดำเนินงานและการประเมิน</p>
             </div>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
@@ -607,7 +628,7 @@ export default function SummaryPage({ currentUser }) {
           </div>
         </div>
       )}
-      
+
 
       {/* Indicators Table */}
       {viewComponent && (
@@ -671,7 +692,7 @@ export default function SummaryPage({ currentUser }) {
                     const latest = rows.find(r => String(r.indicator_id) === String(ind.id));
                     const crit = criteriaMap[String(ind.id)] || {};
                     const committee = committeeMap[String(ind.id)] || {};
-                    
+
                     return (
                       <tr key={ind.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 text-center text-sm font-semibold text-gray-900 border-r border-gray-200">
@@ -699,9 +720,8 @@ export default function SummaryPage({ currentUser }) {
                         </td>
                         <td className="px-6 py-4 text-center text-sm border-r border-gray-200">
                           {latest && latest.goal_achievement ? (
-                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                              latest.goal_achievement === 'บรรลุ' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${latest.goal_achievement === 'บรรลุ' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
                               {latest.goal_achievement}
                             </span>
                           ) : '-'}
