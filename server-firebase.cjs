@@ -1221,6 +1221,136 @@ app.get('/api/evaluations-actual/history', async (req, res) => {
   }
 });
 
+// Append files to latest actual evaluation
+app.post('/api/evaluations-actual/append-files', upload.array('evidence_files', 10), async (req, res) => {
+  try {
+    const { session_id, indicator_id, major_name, evidence_number, evidence_name } = req.body;
+
+    if (!session_id || !indicator_id) {
+      return res.status(400).json({ error: 'ต้องระบุ session_id และ indicator_id' });
+    }
+
+    // Find latest evaluation for this indicator/session
+    const evaluations = await getData('evaluationsActual', { session_id, indicator_id });
+    // Sort by created_at desc (addData adds created_at)
+    evaluations.sort((a, b) => (b.created_at?._seconds || 0) - (a.created_at?._seconds || 0));
+
+    let targetEval = evaluations[0];
+    let isUpdate = true;
+
+    if (!targetEval) {
+      // If no evaluation exists, we'll create a new one (minimal)
+      targetEval = {
+        session_id,
+        indicator_id,
+        major_name,
+        evidence_files_json: '[]',
+        evidence_meta_json: '{}',
+        status: 'submitted'
+      };
+      isUpdate = false;
+    }
+
+    const files = Array.isArray(req.files) ? req.files : [];
+    const evidenceFiles = JSON.parse(targetEval.evidence_files_json || '[]');
+    const evidenceMeta = JSON.parse(targetEval.evidence_meta_json || '{}');
+
+    for (const file of files) {
+      evidenceFiles.push(file.filename);
+
+      let publicUrl = null;
+      try {
+        const destination = `evidence_actual/${session_id}/${indicator_id}/${file.filename}`;
+        publicUrl = await uploadFileToFirebase(file.path, destination);
+      } catch (uploadError) {
+        console.error(`Failed to upload ${file.filename} to Supabase:`, uploadError);
+      }
+
+      evidenceMeta[file.filename] = {
+        name: evidence_name || file.originalname,
+        number: evidence_number || '1',
+        url: publicUrl
+      };
+    }
+
+    const updatedData = {
+      ...targetEval,
+      evidence_files_json: JSON.stringify(evidenceFiles),
+      evidence_meta_json: JSON.stringify(evidenceMeta)
+    };
+
+    if (isUpdate) {
+      await db.collection('evaluations_actual').doc(targetEval.id).update({
+        evidence_files_json: updatedData.evidence_files_json,
+        evidence_meta_json: updatedData.evidence_meta_json
+      });
+    } else {
+      await addData('evaluationsActual', updatedData);
+    }
+
+    res.json({ success: true, files: evidenceFiles, meta: evidenceMeta });
+  } catch (error) {
+    console.error('Error appending files:', error);
+    res.status(500).json({ error: 'เพิ่มไฟล์ไม่สำเร็จ', details: error.message });
+  }
+});
+
+// Remove a single file from the latest actual evaluation
+app.post('/api/evaluations-actual/remove-file', async (req, res) => {
+  try {
+    const { session_id, indicator_id, filename } = req.body;
+
+    if (!session_id || !indicator_id || !filename) {
+      return res.status(400).json({ error: 'ต้องระบุ session_id, indicator_id และ filename' });
+    }
+
+    // Find latest evaluation for this indicator/session
+    const evaluations = await getData('evaluationsActual', { session_id, indicator_id });
+    evaluations.sort((a, b) => (b.created_at?._seconds || 0) - (a.created_at?._seconds || 0));
+
+    const targetEval = evaluations[0];
+    if (!targetEval) return res.status(404).json({ error: 'ไม่พบข้อมูลการประเมิน' });
+
+    let evidenceFiles = JSON.parse(targetEval.evidence_files_json || '[]');
+    let evidenceMeta = JSON.parse(targetEval.evidence_meta_json || '{}');
+
+    // Filter out the filename
+    const updatedFiles = evidenceFiles.filter(f => f !== filename);
+    if (evidenceMeta[filename]) {
+      delete evidenceMeta[filename];
+    }
+
+    // Update record
+    await db.collection('evaluations_actual').doc(targetEval.id).update({
+      evidence_files_json: JSON.stringify(updatedFiles),
+      evidence_meta_json: JSON.stringify(evidenceMeta)
+    });
+
+    // Attempt to delete from Supabase Storage (optional but good)
+    try {
+      const storagePath = `evidence_actual/${session_id}/${indicator_id}/${filename}`;
+      await supabase.storage.from(process.env.SUPABASE_BUCKET_NAME).remove([storagePath]);
+    } catch (e) {
+      console.warn('Could not delete file from Supabase storage:', e.message);
+    }
+
+    res.json({ success: true, files: updatedFiles });
+  } catch (error) {
+    console.error('Error removing file:', error);
+    res.status(500).json({ error: 'ลบไฟล์ไม่สำเร็จ', details: error.message });
+  }
+});
+
+// Alias for mistyped paths in frontend
+app.post('/api/evaluation_tual/remove-file', (req, res, next) => {
+  req.url = '/api/evaluations-actual/remove-file';
+  next();
+});
+app.post('/api/evaluation_tual/append-files', (req, res, next) => {
+  req.url = '/api/evaluations-actual/append-files';
+  next();
+});
+
 // ================= COMMITTEE EVALUATIONS =================
 app.post('/api/committee-evaluations', async (req, res) => {
   try {
