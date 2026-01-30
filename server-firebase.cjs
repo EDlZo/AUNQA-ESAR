@@ -1145,9 +1145,20 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
         evidenceFiles.push(file.filename);
+
+        let publicUrl = null;
+        try {
+          // Upload to Supabase Storage
+          const destination = `evidence_actual/${session_id}/${indicator_id}/${file.filename}`;
+          publicUrl = await uploadFileToFirebase(file.path, destination);
+        } catch (uploadError) {
+          console.error(`Failed to upload ${file.filename} to Supabase:`, uploadError);
+        }
+
         evidenceMeta[file.filename] = {
           name: evidence_name || file.originalname,
-          number: evidence_number || '1'
+          number: evidence_number || '1',
+          url: publicUrl // Save the Cloud Storage URL here
         };
       }
     }
@@ -1261,11 +1272,24 @@ app.get('/api/view/:filename', async (req, res) => {
     // Since we don't have session_id/indicator_id here, we can't easily guess the path
     // Let's rely on the frontend using the full URL from metadata
 
-    // But for backward compatibility with existing hardcoded /api/view/:filename links:
-    res.status(404).json({
-      error: 'โปรดใช้ URL โดยตรงจากระบบ หรือระบุเลข Session/Indicator',
-      note: 'ระบบเปลี่ยนไปใช้ Cloud Storage แล้ว ลิงก์แบบเดิมอาจไม่รองรับ'
-    });
+    // For backward compatibility with existing hardcoded /api/view/:filename links:
+    res.status(404).send(`
+      <html>
+        <body style="font-family: sans-serif; padding: 40px; text-align: center; color: #333;">
+          <h2 style="color: #1d4ed8;">ระบบเปลี่ยนไปใช้ Cloud Storage แล้ว</h2>
+          <p>ลิงก์ที่คุณกำลังเปิดอยู่นี้เป็นรูปแบบเก่า (Local Storage) ซึ่งปัจจุบันระบบได้ย้ายข้อมูลขึ้น Cloud (Supabase) เพื่อความเสถียรครับ</p>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; display: inline-block; margin-top: 20px;">
+            <p><strong>วิธีเปิดไฟล์:</strong></p>
+            <ol style="text-align: left; line-height: 1.6;">
+              <li>กลับไปที่หน้า <strong>"สรุปผล"</strong></li>
+              <li>เลือกตัวบ่งชี้ใหม่อีกครั้ง</li>
+              <li>ระบบจะอัปเดตลิงก์ในหน้าจอเป็นลิงก์ตรงจาก Cloud ให้โดยอัตโนมัติครับ</li>
+            </ol>
+          </div>
+          <p style="margin-top: 30px; font-size: 0.8rem; color: #94a3b8;">Filename: ${filename}</p>
+        </body>
+      </html>
+    `);
   } catch (error) {
     console.error('Error viewing file:', error);
     res.status(500).json({ error: 'เกิดข้อผิดพลาดในการเรียกดูไฟล์' });
