@@ -1272,21 +1272,35 @@ app.get('/api/view/:filename', async (req, res) => {
     // Since we don't have session_id/indicator_id here, we can't easily guess the path
     // Let's rely on the frontend using the full URL from metadata
 
-    // For backward compatibility with existing hardcoded /api/view/:filename links:
+    // For backward compatibility: Check if file exists locally in uploads directory
+    const publicLocalPath = path.join(UPLOADS_DIR, filename);
+    if (fs.existsSync(publicLocalPath)) {
+      return res.sendFile(publicLocalPath);
+    }
+
+    // Also check the specific session/indicator structure in uploads if it was ever used locally
+    // Our local structure often matches: uploads/evidence_actual/${session_id}/${indicator_id}/${file.filename}
+    // But since we only have 'filename' here, we'd need to recursive search if we really wanted to be thorough locals.
+
+    // For now, if not in root uploads, show the Cloud message
     res.status(404).send(`
       <html>
-        <body style="font-family: sans-serif; padding: 40px; text-align: center; color: #333;">
-          <h2 style="color: #1d4ed8;">ระบบเปลี่ยนไปใช้ Cloud Storage แล้ว</h2>
-          <p>ลิงก์ที่คุณกำลังเปิดอยู่นี้เป็นรูปแบบเก่า (Local Storage) ซึ่งปัจจุบันระบบได้ย้ายข้อมูลขึ้น Cloud (Supabase) เพื่อความเสถียรครับ</p>
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; display: inline-block; margin-top: 20px;">
-            <p><strong>วิธีเปิดไฟล์:</strong></p>
-            <ol style="text-align: left; line-height: 1.6;">
-              <li>กลับไปที่หน้า <strong>"สรุปผล"</strong></li>
-              <li>เลือกตัวบ่งชี้ใหม่อีกครั้ง</li>
-              <li>ระบบจะอัปเดตลิงก์ในหน้าจอเป็นลิงก์ตรงจาก Cloud ให้โดยอัตโนมัติครับ</li>
+        <body style="font-family: sans-serif; padding: 40px; text-align: center; color: #333; line-height: 1.6;">
+          <h2 style="color: #1d4ed8; margin-bottom: 20px;">หาไฟล์ไม่พบในระบบ Local</h2>
+          <p>ลิงก์ที่คุณกำลังเปิดเป็นรูปแบบเก่า (Local Storage) และไฟล์นี้ไม่มีอยู่ใน Server เครื่องนี้แล้วครับ</p>
+          
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 25px; border-radius: 16px; display: inline-block; margin-top: 20px; text-align: left; max-width: 500px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+            <p style="font-weight: 700; color: #1e293b; margin-top: 0;">วิธีแก้ไข:</p>
+            <ol style="margin-bottom: 0;">
+              <li><strong>ไฟล์ที่เพิ่งอัปโหลด:</strong> โปรดกลับไปที่หน้า "สรุปผล" ระบบจะใช้ลิงก์จาก Cloud Storage ให้โดยอัตโนมัติ</li>
+              <li><strong>ไฟล์เก่า:</strong> หากเป็นไฟล์ที่เคยอัปโหลดทิ้งไว้และหาไม่พบจริงๆ แนะนำให้ลองอัปโหลดใหม่อีกครั้งครับ ระบบใหม่จะเก็บไว้ใน Cloud ถาวรและปลอดภัยกว่าเดิมครับ</li>
             </ol>
           </div>
-          <p style="margin-top: 30px; font-size: 0.8rem; color: #94a3b8;">Filename: ${filename}</p>
+          
+          <p style="margin-top: 30px; font-size: 0.85rem; color: #94a3b8; font-family: monospace;">
+            Resource: ${filename}
+          </p>
+          <a href="javascript:history.back()" style="display: inline-block; margin-top: 20px; color: #3b82f6; text-decoration: none; font-weight: 500;">← ย้อนกลับ</a>
         </body>
       </html>
     `);
