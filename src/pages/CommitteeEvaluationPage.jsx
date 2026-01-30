@@ -58,7 +58,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
 
       console.log(`[BULK] Fetching committee data bundle for ${major}`);
       const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
-      
+
       if (res.ok) {
         const data = await res.json();
         const {
@@ -300,18 +300,24 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                           href={fileMeta.url || latest?.evidence_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-green-600 hover:text-green-800 underline cursor-pointer"
+                          className="inline-flex items-center px-3 py-1.5 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-xs font-medium"
                         >
-                          {filename.startsWith('url_') ? 'URL: เปิดลิงก์' : 'ไฟล์: เปิดไฟล์ (Cloud)'}
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          เปิด
                         </a>
                       ) : (
                         <a
                           href={`${BASE_URL}/api/view/${encodeURIComponent(filename)}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-blue-600 hover:text-blue-800 underline cursor-pointer"
+                          className="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-xs font-medium"
                         >
-                          ไฟล์: เปิดไฟล์
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          เปิด
                         </a>
                       )}
                     </td>
@@ -357,7 +363,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                   <Clock className="w-4 h-4" />
                   <span>บันทึกล่าสุด: {latest ? new Date(latest.created_at).toLocaleDateString('th-TH', {
                     year: 'numeric',
-                    month: 'long', 
+                    month: 'long',
                     day: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit'
@@ -531,14 +537,12 @@ export default function CommitteeEvaluationPage({ currentUser }) {
           {/* Footer Card */}
           <div className="bg-gray-50 border-t border-gray-100 px-8 py-6 flex items-center justify-between">
             <div className="flex items-center gap-2 text-gray-400 text-xs font-medium italic">
-              <ShieldCheck className="w-4 h-4" />
-              ระบบประเมินคุณภาพการศึกษา AUN-QA
+
             </div>
             <button
               className="px-6 py-2 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
               onClick={() => setEvaluatingIndicator(null)}
             >
-              กลับหน้ารายการ
             </button>
           </div>
         </div>
@@ -628,7 +632,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
               <p className="text-gray-600 text-sm">ทำตามขั้นตอนเพื่อประเมินผลการดำเนินงานให้ครบทุกตัวบ่งชี้</p>
             </div>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>

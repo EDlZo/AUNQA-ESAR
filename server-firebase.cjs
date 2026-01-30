@@ -128,21 +128,101 @@ async function getData(collection, filters = {}) {
 
       // Apply filters
       Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
+        if (value !== undefined && value !== null && value !== '') {
           // Type handling for specific fields
           let finalValue = value;
-          if (key === 'component_id' && typeof value === 'string' && !isNaN(value)) {
-            finalValue = Number(value);
+          if ((key === 'component_id' || key === 'session_id' || key === 'indicator_id') && typeof value === 'string' && !isNaN(value)) {
+            // For component_id we definitely want number
+            // For session_id and indicator_id, we usually want string but some legacy might be numbers.
+            // But we can only pick one. Let's stick with String for IDs as per our recent findings.
+            // If it's component_id, force Number.
+            if (key === 'component_id') finalValue = Number(value);
+            else finalValue = String(value);
           }
           query = query.where(key, '==', finalValue);
         }
       });
 
       const snapshot = await query.get();
-      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      // Auto-retry/Smart Resolution if no results
+      if (results.length === 0) {
+        console.log(`🔍 [getData] 0 results for ${normalizedCollection}, attempting resolution...`);
+
+        let retryNeeded = false;
+        let retryFilters = { ...filters };
+
+        // 1. Try Smart ID Resolution for indicator_id in evaluations_actual
+        if (normalizedCollection === 'evaluations_actual' && filters.indicator_id) {
+          try {
+            const inputId = filters.indicator_id;
+            // Case A: Input is Firestore Doc ID, database uses Legacy ID
+            const indDoc = await db.collection('indicators').doc(String(inputId)).get();
+            if (indDoc.exists && indDoc.data().id) {
+              console.log(`🧠 [SmartID] Resolved Firestore ID ${inputId} to Legacy ID ${indDoc.data().id}`);
+              retryFilters.indicator_id = String(indDoc.data().id);
+              retryNeeded = true;
+            } else {
+              // Case B: Input is Legacy ID, database uses Firestore Doc ID (Try to find Doc ID)
+              const indSnap = await db.collection('indicators').where('id', '==', isNaN(inputId) ? -1 : Number(inputId)).get();
+              if (!indSnap.empty) {
+                console.log(`🧠 [SmartID] Resolved Legacy ID ${inputId} to Firestore ID ${indSnap.docs[0].id}`);
+                retryFilters.indicator_id = indSnap.docs[0].id;
+                retryNeeded = true;
+              }
+            }
+          } catch (e) { console.warn('[SmartID] Resolution error:', e.message); }
+        }
+
+        // If resolution helped, try searching again with resolved IDs but ORIGINAL types for others
+        if (retryNeeded) {
+          console.log(`🔄 Retrying with Smart ID:`, retryFilters);
+          let retryQuery = db.collection(normalizedCollection);
+          Object.entries(retryFilters).forEach(([key, val]) => {
+            if (val !== undefined && val !== null && val !== '') {
+              // Preserve type for non-ID fields if they exist
+              retryQuery = retryQuery.where(key, '==', val);
+            }
+          });
+          const retrySnapshot = await retryQuery.get();
+          results = retrySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          if (results.length > 0) return results;
+        }
+
+        // 2. If still no results, try aggressive type-swapping for all ID fields
+        console.log(`🔄 Attempting type-swapping retry...`);
+        retryFilters = { ...filters };
+        let typeRetryNeeded = false;
+        Object.entries(filters).forEach(([key, value]) => {
+          if ((key === 'session_id' || key === 'indicator_id') && value !== undefined) {
+            // If currently string, try number; if number, try string
+            if (typeof value === 'string' && !isNaN(value) && value !== '') {
+              retryFilters[key] = Number(value);
+              typeRetryNeeded = true;
+            } else if (typeof value === 'number') {
+              retryFilters[key] = String(value);
+              typeRetryNeeded = true;
+            }
+          }
+        });
+
+        if (typeRetryNeeded) {
+          let typeQuery = db.collection(normalizedCollection);
+          Object.entries(retryFilters).forEach(([key, val]) => {
+            if (val !== undefined && val !== null && val !== '') {
+              typeQuery = typeQuery.where(key, '==', val);
+            }
+          });
+          const typeSnapshot = await typeQuery.get();
+          results = typeSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
+      }
+
+      return results;
     } catch (error) {
       console.error(`Error fetching ${normalizedCollection}:`, error);
-      return mockData[normalizedCollection] || [];
+      return [];
     }
   } else {
     // Return mock data
@@ -150,9 +230,13 @@ async function getData(collection, filters = {}) {
 
     // Apply filters to mock data
     Object.entries(filters).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
+      if (value !== undefined && value !== null && value !== '') { // Added value !== ''
         data = data.filter(item => {
           // Flexible type comparison for mock data
+          // For session_id and indicator_id, allow comparison as both string and number
+          if ((key === 'session_id' || key === 'indicator_id') && !isNaN(value)) {
+            return String(item[key]) === String(value) || Number(item[key]) === Number(value);
+          }
           return String(item[key]) === String(value);
         });
       }
@@ -248,7 +332,143 @@ console.log('📁 Serving uploads from:', UPLOADS_DIR);
 
 // Debug middleware
 app.use((req, res, next) => {
-  console.log(`[REQ] ${req.method} ${req.path}`);
+  console.log(`[REQ] [${new Date().toLocaleTimeString()}] ${req.method} ${req.path}`);
+  next();
+});
+
+// ================= FILE MANAGEMENT (Top Priority) =================
+// Append files to latest actual evaluation
+app.post('/api/evaluations-actual/append-files', upload.array('evidence_files', 10), async (req, res) => {
+  try {
+    console.log('➡️ [APPEND-FILES] Payload:', req.body);
+    const { session_id, indicator_id, major_name, evidence_number, evidence_name } = req.body;
+
+    if (!session_id || !indicator_id) {
+      return res.status(400).json({ error: 'ต้องระบุ session_id และ indicator_id' });
+    }
+
+    // Find latest evaluation for this indicator/session
+    console.log(`Searching for evaluations with session_id: ${session_id}, indicator_id: ${indicator_id}`);
+    const evaluations = await getData('evaluationsActual', { session_id, indicator_id });
+    console.log(`Found ${evaluations.length} evaluations`);
+
+    evaluations.sort((a, b) => {
+      const getT = (v) => v?.created_at?._seconds || v?.created_at?.seconds || 0;
+      return getT(b) - getT(a);
+    });
+
+    let targetEval = evaluations[0];
+    let isUpdate = true;
+
+    if (!targetEval) {
+      targetEval = {
+        session_id,
+        indicator_id,
+        major_name,
+        evidence_files_json: '[]',
+        evidence_meta_json: '{}',
+        status: 'submitted'
+      };
+      isUpdate = false;
+    }
+
+    const files = Array.isArray(req.files) ? req.files : [];
+    const evidenceFiles = JSON.parse(targetEval.evidence_files_json || '[]');
+    const evidenceMeta = JSON.parse(targetEval.evidence_meta_json || '{}');
+
+    for (const file of files) {
+      evidenceFiles.push(file.filename);
+      let publicUrl = null;
+      try {
+        const destination = `evidence_actual/${session_id}/${indicator_id}/${file.filename}`;
+        publicUrl = await uploadFileToFirebase(file.path, destination);
+      } catch (uploadError) { console.error(`Failed to upload ${file.filename}:`, uploadError); }
+
+      evidenceMeta[file.filename] = {
+        name: evidence_name || file.originalname,
+        number: evidence_number || '1',
+        url: publicUrl
+      };
+    }
+
+    const updatedData = {
+      ...targetEval,
+      evidence_files_json: JSON.stringify(evidenceFiles),
+      evidence_meta_json: JSON.stringify(evidenceMeta)
+    };
+
+    if (isUpdate) {
+      await db.collection('evaluations_actual').doc(targetEval.id).update({
+        evidence_files_json: updatedData.evidence_files_json,
+        evidence_meta_json: updatedData.evidence_meta_json
+      });
+    } else {
+      await addData('evaluationsActual', updatedData);
+    }
+
+    res.json({ success: true, files: evidenceFiles, meta: evidenceMeta });
+  } catch (error) {
+    console.error('Error appending files:', error);
+    res.status(500).json({ error: 'เพิ่มไฟล์ไม่สำเร็จ', details: error.message });
+  }
+});
+
+// Remove a single file from the latest actual evaluation
+app.post('/api/evaluations-actual/remove-file', async (req, res) => {
+  try {
+    console.log('➡️ [REMOVE-FILE] Payload:', req.body);
+    const { session_id, indicator_id, filename } = req.body;
+
+    if (!session_id || !indicator_id || !filename) {
+      return res.status(400).json({ error: 'ต้องระบุ session_id, indicator_id และ filename' });
+    }
+
+    console.log(`Searching for evaluations with session_id: ${session_id}, indicator_id: ${indicator_id}`);
+    const evaluations = await getData('evaluationsActual', { session_id, indicator_id });
+    console.log(`Found ${evaluations.length} evaluations`);
+
+    evaluations.sort((a, b) => {
+      const getT = (v) => v?.created_at?._seconds || v?.created_at?.seconds || 0;
+      return getT(b) - getT(a);
+    });
+
+    const targetEval = evaluations[0];
+    if (!targetEval) {
+      console.log('❌ No evaluation found for this indicator/session');
+      return res.status(404).json({ error: 'ไม่พบข้อมูลการประเมิน' });
+    }
+
+    console.log('✅ Found target evaluation:', targetEval.id);
+
+    let evidenceFiles = JSON.parse(targetEval.evidence_files_json || '[]');
+    let evidenceMeta = JSON.parse(targetEval.evidence_meta_json || '{}');
+    const updatedFiles = evidenceFiles.filter(f => f !== filename);
+    if (evidenceMeta[filename]) delete evidenceMeta[filename];
+
+    await db.collection('evaluations_actual').doc(targetEval.id).update({
+      evidence_files_json: JSON.stringify(updatedFiles),
+      evidence_meta_json: JSON.stringify(evidenceMeta)
+    });
+
+    try {
+      const storagePath = `evidence_actual/${session_id}/${indicator_id}/${filename}`;
+      await supabase.storage.from(process.env.SUPABASE_BUCKET_NAME).remove([storagePath]);
+    } catch (e) { console.warn('Supabase delete error:', e.message); }
+
+    res.json({ success: true, files: updatedFiles });
+  } catch (error) {
+    console.error('Error removing file:', error);
+    res.status(500).json({ error: 'ลบไฟล์ไม่สำเร็จ', details: error.message });
+  }
+});
+
+// Aliases for frontend typos
+app.post('/api/evaluation_tual/remove-file', (req, res, next) => {
+  req.url = '/api/evaluations-actual/remove-file';
+  next();
+});
+app.post('/api/evaluation_tual/append-files', (req, res, next) => {
+  req.url = '/api/evaluations-actual/append-files';
   next();
 });
 
@@ -1219,136 +1439,6 @@ app.get('/api/evaluations-actual/history', async (req, res) => {
     console.error('Error fetching actual evaluation history:', error);
     res.status(500).json({ error: 'ไม่สามารถดึงประวัติการดำเนินงานได้', details: error.message });
   }
-});
-
-// Append files to latest actual evaluation
-app.post('/api/evaluations-actual/append-files', upload.array('evidence_files', 10), async (req, res) => {
-  try {
-    const { session_id, indicator_id, major_name, evidence_number, evidence_name } = req.body;
-
-    if (!session_id || !indicator_id) {
-      return res.status(400).json({ error: 'ต้องระบุ session_id และ indicator_id' });
-    }
-
-    // Find latest evaluation for this indicator/session
-    const evaluations = await getData('evaluationsActual', { session_id, indicator_id });
-    // Sort by created_at desc (addData adds created_at)
-    evaluations.sort((a, b) => (b.created_at?._seconds || 0) - (a.created_at?._seconds || 0));
-
-    let targetEval = evaluations[0];
-    let isUpdate = true;
-
-    if (!targetEval) {
-      // If no evaluation exists, we'll create a new one (minimal)
-      targetEval = {
-        session_id,
-        indicator_id,
-        major_name,
-        evidence_files_json: '[]',
-        evidence_meta_json: '{}',
-        status: 'submitted'
-      };
-      isUpdate = false;
-    }
-
-    const files = Array.isArray(req.files) ? req.files : [];
-    const evidenceFiles = JSON.parse(targetEval.evidence_files_json || '[]');
-    const evidenceMeta = JSON.parse(targetEval.evidence_meta_json || '{}');
-
-    for (const file of files) {
-      evidenceFiles.push(file.filename);
-
-      let publicUrl = null;
-      try {
-        const destination = `evidence_actual/${session_id}/${indicator_id}/${file.filename}`;
-        publicUrl = await uploadFileToFirebase(file.path, destination);
-      } catch (uploadError) {
-        console.error(`Failed to upload ${file.filename} to Supabase:`, uploadError);
-      }
-
-      evidenceMeta[file.filename] = {
-        name: evidence_name || file.originalname,
-        number: evidence_number || '1',
-        url: publicUrl
-      };
-    }
-
-    const updatedData = {
-      ...targetEval,
-      evidence_files_json: JSON.stringify(evidenceFiles),
-      evidence_meta_json: JSON.stringify(evidenceMeta)
-    };
-
-    if (isUpdate) {
-      await db.collection('evaluations_actual').doc(targetEval.id).update({
-        evidence_files_json: updatedData.evidence_files_json,
-        evidence_meta_json: updatedData.evidence_meta_json
-      });
-    } else {
-      await addData('evaluationsActual', updatedData);
-    }
-
-    res.json({ success: true, files: evidenceFiles, meta: evidenceMeta });
-  } catch (error) {
-    console.error('Error appending files:', error);
-    res.status(500).json({ error: 'เพิ่มไฟล์ไม่สำเร็จ', details: error.message });
-  }
-});
-
-// Remove a single file from the latest actual evaluation
-app.post('/api/evaluations-actual/remove-file', async (req, res) => {
-  try {
-    const { session_id, indicator_id, filename } = req.body;
-
-    if (!session_id || !indicator_id || !filename) {
-      return res.status(400).json({ error: 'ต้องระบุ session_id, indicator_id และ filename' });
-    }
-
-    // Find latest evaluation for this indicator/session
-    const evaluations = await getData('evaluationsActual', { session_id, indicator_id });
-    evaluations.sort((a, b) => (b.created_at?._seconds || 0) - (a.created_at?._seconds || 0));
-
-    const targetEval = evaluations[0];
-    if (!targetEval) return res.status(404).json({ error: 'ไม่พบข้อมูลการประเมิน' });
-
-    let evidenceFiles = JSON.parse(targetEval.evidence_files_json || '[]');
-    let evidenceMeta = JSON.parse(targetEval.evidence_meta_json || '{}');
-
-    // Filter out the filename
-    const updatedFiles = evidenceFiles.filter(f => f !== filename);
-    if (evidenceMeta[filename]) {
-      delete evidenceMeta[filename];
-    }
-
-    // Update record
-    await db.collection('evaluations_actual').doc(targetEval.id).update({
-      evidence_files_json: JSON.stringify(updatedFiles),
-      evidence_meta_json: JSON.stringify(evidenceMeta)
-    });
-
-    // Attempt to delete from Supabase Storage (optional but good)
-    try {
-      const storagePath = `evidence_actual/${session_id}/${indicator_id}/${filename}`;
-      await supabase.storage.from(process.env.SUPABASE_BUCKET_NAME).remove([storagePath]);
-    } catch (e) {
-      console.warn('Could not delete file from Supabase storage:', e.message);
-    }
-
-    res.json({ success: true, files: updatedFiles });
-  } catch (error) {
-    console.error('Error removing file:', error);
-    res.status(500).json({ error: 'ลบไฟล์ไม่สำเร็จ', details: error.message });
-  }
-});
-
-// Alias for mistyped paths in frontend
-app.post('/api/evaluation_tual/remove-file', (req, res, next) => {
-  req.url = '/api/evaluations-actual/remove-file';
-  next();
-});
-app.post('/api/evaluation_tual/append-files', (req, res, next) => {
-  req.url = '/api/evaluations-actual/append-files';
-  next();
 });
 
 // ================= COMMITTEE EVALUATIONS =================
