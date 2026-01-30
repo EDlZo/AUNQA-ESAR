@@ -1253,29 +1253,49 @@ app.get('/api/view/:filename', async (req, res) => {
   try {
     const filename = req.params.filename;
 
-    // Search in Supabase Storage
-    const { data: files, error } = await supabase.storage
-      .from(process.env.SUPABASE_BUCKET_NAME)
-      .list('', {
-        search: filename
-      });
+    // 1. Try to find the file in evaluations (Legacy/Simple)
+    const evalSnap = await db.collection('evaluations')
+      .where('evidence_file_name', '==', filename)
+      .limit(1)
+      .get();
 
-    // If not found in root, we might need a more complex search if folders are used
-    // But since we have the public URL in metadata, the frontend should ideally use that
+    if (!evalSnap.empty && evalSnap.docs[0].data().evidence_file_url) {
+      console.log(`🔗 Redirecting to evaluation URL for: ${filename}`);
+      return res.redirect(evalSnap.docs[0].data().evidence_file_url);
+    }
 
-    // For now, let's try to get a list from frequent folders if root fails
-    // However, Supabase list is not recursive. 
+    // 2. Try to find the file in evaluations_actual (New system)
+    // Since filenames are in a JSON array, we have to search slightly differently or find by meta
+    // But filenames in evaluations_actual are often the 'key' in evidence_meta_json
+    // Firestore doesn't support searching inside JSON keys easily, so we might need a broader query
+    // or just assume if it's not in evaluations, it might be in actual.
 
-    // A better way is to just generate the public URL directly if we know the bucket structure
-    // Our structure: evidence_actual/${session_id}/${indicator_id}/${file.filename}
+    const actualSnap = await db.collection('evaluations_actual').get();
+    for (const doc of actualSnap.docs) {
+      const data = doc.data();
+      const meta = data.evidence_meta_json ? JSON.parse(data.evidence_meta_json) : {};
+      if (meta[filename] && meta[filename].url) {
+        console.log(`🔗 Redirecting to actual evaluation URL for: ${filename}`);
+        return res.redirect(meta[filename].url);
+      }
+    }
 
-    // Since we don't have session_id/indicator_id here, we can't easily guess the path
-    // Let's rely on the frontend using the full URL from metadata
-
-    // For backward compatibility: Check if file exists locally in uploads directory
+    // 3. Check if file exists locally in uploads directory as a fallback
     const publicLocalPath = path.join(UPLOADS_DIR, filename);
     if (fs.existsSync(publicLocalPath)) {
       return res.sendFile(publicLocalPath);
+    }
+
+    // 4. Search in Supabase Storage root as a last resort
+    const { data: files } = await supabase.storage
+      .from(process.env.SUPABASE_BUCKET_NAME)
+      .list('', { search: filename });
+
+    if (files && files.length > 0) {
+      const { data: { publicUrl } } = supabase.storage
+        .from(process.env.SUPABASE_BUCKET_NAME)
+        .getPublicUrl(files[0].name);
+      return res.redirect(publicUrl);
     }
 
     // Also check the specific session/indicator structure in uploads if it was ever used locally
