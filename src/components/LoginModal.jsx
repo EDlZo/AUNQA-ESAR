@@ -146,7 +146,6 @@ export default function LoginModal({ onLogin, onClose }) {
                 <option value="qa_admin">QA Admin</option>
                 <option value="sar_manager">SAR Manager</option>
                 <option value="reporter">Reporter</option>
-                <option value="evaluator">Evaluator</option>
                 <option value="external_evaluator">External Evaluator</option>
                 <option value="executive">Executive</option>
               </select>

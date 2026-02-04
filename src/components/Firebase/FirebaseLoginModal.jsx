@@ -6,7 +6,7 @@ const FirebaseLoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
   const [formData, setFormData] = useState({
     username: '',
     password: '',
-    role: 'evaluator'
+    role: 'reporter'
   });
   const [error, setError] = useState('');
   const { login, loading } = useAuth();
@@ -94,10 +94,8 @@ const FirebaseLoginModal = ({ isOpen, onClose, onLoginSuccess }) => {
               <option value="qa_admin">QA Admin</option>
               <option value="sar_manager">ผู้จัดการ SAR</option>
               <option value="reporter">ผู้รายงาน</option>
-              <option value="evaluator">ผู้ประเมิน</option>
               <option value="external_evaluator">ผู้ประเมินภายนอก</option>
               <option value="executive">ผู้บริหาร</option>
-              <option value="qa_admin">QA Admin</option>
             </select>
           </div>
 

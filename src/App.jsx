@@ -88,7 +88,6 @@ export default function App() {
     system_admin: { name: 'System Admin', color: 'bg-red-600', permissions: ['manage_structure', 'manage_users', 'view_all'] },
     sar_manager: { name: 'SAR Manager', color: 'bg-blue-600', permissions: ['select_criteria', 'set_targets', 'set_weights', 'manage_rounds', 'check_completeness', 'view_reports'] },
     reporter: { name: 'Reporter', color: 'bg-green-600', permissions: ['fill_results', 'upload_evidence', 'write_sar', 'edit_own_data'] },
-    evaluator: { name: 'Evaluator', color: 'bg-yellow-600', permissions: ['view_assigned', 'give_scores', 'give_feedback', 'view_own_eval'] },
     external_evaluator: { name: 'External Evaluator', color: 'bg-purple-600', permissions: ['view_assigned_limited', 'give_scores', 'give_feedback'] },
     executive: { name: 'Executive', color: 'bg-gray-600', permissions: ['view_summary', 'view_dashboard', 'compare_results'] },
     qa_admin: { name: 'QA Admin', color: 'bg-indigo-600', permissions: ['manage_structure', 'view_all', 'view_summary', 'view_dashboard', 'view_reports'] }
@@ -120,7 +119,7 @@ export default function App() {
 
   // Logic สำหรับแสดงเนื้อหาแต่ละ Tab
   const TabContent = () => {
-    if (!currentUser && activeTab !== 'about' && activeTab !== 'summary' && activeTab !== 'process' && activeTab !== 'results') {
+    if (!currentUser && !['about', 'summary', 'process', 'results'].includes(activeTab)) {
       return (
         <div className="text-center py-16">
           <div className="bg-white rounded-xl shadow-lg p-8 max-w-md mx-auto">
@@ -386,7 +385,8 @@ export default function App() {
       case 'summary':
         return <SummaryPage currentUser={currentUser} />;
       case 'committee':
-        if (!['system_admin', 'sar_manager', 'evaluator', 'external_evaluator'].includes(role)) {
+        // Only Executive, SAR Manager, External Evaluator, Admin, QA Admin can access
+        if (!['system_admin', 'sar_manager', 'executive', 'external_evaluator', 'qa_admin'].includes(role)) {
           return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
         }
         return <CommitteeEvaluationPage currentUser={currentUser} />;

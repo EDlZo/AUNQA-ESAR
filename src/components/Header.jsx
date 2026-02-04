@@ -28,8 +28,6 @@ export default function Header({
       navigation.push({ name: 'จัดการองค์ประกอบ', tab: 'programs', active: isManageFlowActive });
     }
 
-
-
     // กำหนดค่าเป้าหมาย (Admin, SAR Manager)
     if (['system_admin', 'sar_manager'].includes(role)) {
       navigation.push({ name: 'กำหนดค่าเป้าหมาย', tab: 'assessment_criteria' });
@@ -40,14 +38,17 @@ export default function Header({
       navigation.push({ name: 'ผลดำเนินงาน', tab: 'assessment_evaluation' });
     }
 
-    // ประเมิน (Evaluator, External Evaluator, SAR Manager, Admin)
-    if (['system_admin', 'sar_manager', 'evaluator', 'external_evaluator'].includes(role)) {
+    // ประเมิน (External Evaluator, SAR Manager, Admin)
+    if (['system_admin', 'sar_manager', 'external_evaluator'].includes(role)) {
       navigation.push({ name: 'ผลการประเมิน', tab: 'committee' });
     }
 
     // รายงานและสรุป (ทุกคน)
     navigation.push({ name: 'สรุปผล', tab: 'summary' });
     navigation.push({ name: 'รายงาน', tab: 'reports' });
+  } else {
+    // Guest Navigation
+    navigation.push({ name: 'สรุปผล', tab: 'summary' });
   }
 
   return (

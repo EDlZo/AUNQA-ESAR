@@ -28,7 +28,6 @@ export default function UserManagementPage({ setActiveTab }) {
         { id: 1, name: 'System Admin' },
         { id: 2, name: 'SAR Manager' },
         { id: 3, name: 'Reporter' },
-        { id: 4, name: 'Evaluator' },
         { id: 5, name: 'External Evaluator' },
         { id: 6, name: 'Executive' },
         { id: 7, name: 'QA Admin' }

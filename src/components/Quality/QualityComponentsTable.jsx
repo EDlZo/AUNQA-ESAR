@@ -1,5 +1,5 @@
-// src/components/QualityComponentsTable.jsx
 import React from 'react';
+import { Trash2 } from 'lucide-react';
 
 export default function QualityComponentsTable({
   items,
@@ -63,8 +63,11 @@ export default function QualityComponentsTable({
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
               ชื่อองค์ประกอบ
             </th>
-            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
               ตัวบ่งชี้
+            </th>
+            <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+              จัดการ
             </th>
           </tr>
         </thead>
@@ -81,9 +84,9 @@ export default function QualityComponentsTable({
                   {item.quality_name || item.qualityName}
                 </div>
               </td>
-              <td className="px-4 py-4 text-center">
+              <td className="px-4 py-4 text-center border-r border-gray-200">
                 <button
-                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm mr-2"
+                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all shadow-sm"
                   onClick={() => onIndicatorClick(item)}
                 >
                   <svg className="w-3.5 h-3.5 mr-1.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -91,16 +94,18 @@ export default function QualityComponentsTable({
                   </svg>
                   ตัวบ่งชี้
                 </button>
+              </td>
+              <td className="px-4 py-4 text-center whitespace-nowrap">
+                <div className="flex items-center justify-center gap-2">
 
-                <button
-                  onClick={() => onDeleteClick(item.id)}
-                  className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                  title="ลบองค์ประกอบ"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
+                  <button
+                    onClick={() => onDeleteClick(item.id)}
+                    className="group p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                    title="ลบองค์ประกอบ"
+                  >
+                    <Trash2 className="w-5 h-5 group-hover:scale-110" />
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

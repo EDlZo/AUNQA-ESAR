@@ -491,7 +491,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                 การประเมินโดยคณะกรรมการ
               </div>
 
-              {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
+              {['system_admin', 'external_evaluator'].includes(currentUser?.role) ? (
                 <div className="bg-indigo-50/30 rounded-2xl p-8 border border-indigo-100 space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
                     <div className="md:col-span-1">
@@ -870,7 +870,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                             ) : '-'}
                           </td>
                           <td className="px-4 py-4 text-center">
-                            {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
+                            {['system_admin', 'external_evaluator'].includes(currentUser?.role) ? (
                               <button
                                 onClick={() => setEvaluatingIndicator(ind)}
                                 className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all ${hasCommitteeScore
