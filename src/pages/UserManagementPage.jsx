@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Plus, Edit, Trash2, Search, X, Check, Shield, ArrowLeft } from 'lucide-react';
+import { BASE_URL } from '../config/api';
 
 export default function UserManagementPage({ setActiveTab }) {
     const [users, setUsers] = useState([]);
@@ -40,7 +41,7 @@ export default function UserManagementPage({ setActiveTab }) {
 
     const fetchUsers = async () => {
         try {
-            const res = await fetch('/api/users');
+            const res = await fetch(`${BASE_URL}/api/users`);
             if (res.ok) {
                 const data = await res.json();
                 setUsers(data);
@@ -54,7 +55,7 @@ export default function UserManagementPage({ setActiveTab }) {
 
     const fetchPrograms = async () => {
         try {
-            const res = await fetch('/api/programs');
+            const res = await fetch(`${BASE_URL}/api/programs`);
             if (res.ok) {
                 const data = await res.json();
                 setPrograms(data);
@@ -107,7 +108,7 @@ export default function UserManagementPage({ setActiveTab }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const url = editUser ? `/api/users/${editUser.id}` : '/api/users';
+            const url = editUser ? `${BASE_URL}/api/users/${editUser.id}` : `${BASE_URL}/api/users`;
             const method = editUser ? 'PUT' : 'POST';
 
             // Clean up data before sending
@@ -146,7 +147,7 @@ export default function UserManagementPage({ setActiveTab }) {
     const handleDelete = async (id) => {
         if (!window.confirm('คุณต้องการลบผู้ใช้งานนี้ใช่หรือไม่?')) return;
         try {
-            const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+            const res = await fetch(`${BASE_URL}/api/users/${id}`, { method: 'DELETE' });
             if (res.ok) {
                 fetchUsers();
             } else {

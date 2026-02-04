@@ -8,7 +8,7 @@ import {
 
 // Recursive Row Component for Level 2+ Accordion
 const IndicatorRow = ({ item, depth = 0, onEdit, onDelete, onAddSub }) => {
-    const [isExpanded, setIsExpanded] = useState(true);
+    const [isExpanded, setIsExpanded] = useState(false);
     const hasChildren = item.children && item.children.length > 0;
 
     const toggleExpand = (e) => {

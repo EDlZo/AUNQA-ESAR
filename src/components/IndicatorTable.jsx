@@ -780,7 +780,7 @@ export default function IndicatorTable({
                     <tr key={indicator.id} className="hover:bg-gray-50">
                       <td className="px-4 py-4 text-center text-sm font-semibold text-gray-900 border-r border-gray-200">
                         {!isSub ? (
-                          <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full text-sm font-bold shadow-sm">
+                          <span className="inline-flex items-center justify-center w-8 h-8 bg-red-600 text-white rounded-full text-sm font-bold shadow-sm">
                             {formatSequence(indicator.sequence)}
                           </span>
                         ) : (

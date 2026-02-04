@@ -27,6 +27,8 @@ import UserManagementPage from './pages/UserManagementPage';
 import SystemManagementPage from './pages/SystemManagementPage';
 import RoundManagementPage from './pages/RoundManagementPage';
 import DatabaseManagementPage from './pages/DatabaseManagementPage';
+import ProgramManagement from './components/Admin/ProgramManagement';
+import { BASE_URL } from './config/api';
 
 
 export default function App() {
@@ -58,7 +60,7 @@ export default function App() {
   useEffect(() => {
     const checkActiveRound = async () => {
       try {
-        const res = await fetch('/api/rounds');
+        const res = await fetch(`${BASE_URL}/api/rounds`);
         if (res.ok) {
           const rounds = await res.json();
           const active = rounds.find(r => r.is_active);
@@ -221,7 +223,7 @@ export default function App() {
                   const majorName = sel.majorName || sel.major_name || '';
 
                   // Try recovery first
-                  fetch(`/api/assessment-sessions/latest?major_name=${encodeURIComponent(majorName)}`)
+                  fetch(`${BASE_URL}/api/assessment-sessions/latest?major_name=${encodeURIComponent(majorName)}`)
                     .then(r => r.json())
                     .then(recoveryData => {
                       if (recoveryData && recoveryData.session_id) {
@@ -229,7 +231,7 @@ export default function App() {
                         setActiveTab('manage');
                       } else {
                         // Create new if recovery fails
-                        fetch('/api/assessment-sessions', {
+                        fetch(`${BASE_URL}/api/assessment-sessions`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
@@ -277,7 +279,7 @@ export default function App() {
                       const majorName = s.majorName || s.major_name || '';
 
                       // Try recovery first
-                      fetch(`/api/assessment-sessions/latest?major_name=${encodeURIComponent(majorName)}`)
+                      fetch(`${BASE_URL}/api/assessment-sessions/latest?major_name=${encodeURIComponent(majorName)}`)
                         .then(r => r.json())
                         .then(recoveryData => {
                           if (recoveryData && recoveryData.session_id) {
@@ -285,7 +287,7 @@ export default function App() {
                             setActiveTab('manage');
                           } else {
                             // Create new if recovery fails
-                            fetch('/api/assessment-sessions', {
+                            fetch(`${BASE_URL}/api/assessment-sessions`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({
@@ -422,6 +424,11 @@ export default function App() {
           return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
         }
         return <DatabaseManagementPage setActiveTab={setActiveTab} />;
+      case 'program_management':
+        if (role !== 'system_admin') {
+          return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+        }
+        return <ProgramManagement setActiveTab={setActiveTab} />;
       default:
         return null;
     }

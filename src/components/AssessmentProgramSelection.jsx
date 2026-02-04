@@ -4,14 +4,12 @@ const ASSESSMENT_PROGRAMS = [
   {
     id: 'computer-engineering',
     name: 'วิศวกรรมคอมพิวเตอร์',
-    faculty: 'คณะวิศวกรรมศาสตร์',
-    category: 'คอมพิวเตอร์'
+    faculty: 'คณะวิศวกรรมศาสตร์'
   },
   {
     id: 'computer-engineering-ai',
     name: 'วิศวกรรมคอมพิวเตอร์ปัญญาประดิษฐ์ (AI)',
-    faculty: 'คณะวิศวกรรมศาสตร์',
-    category: 'AI'
+    faculty: 'คณะวิศวกรรมศาสตร์'
   }
 ];
 
@@ -37,12 +35,12 @@ export default function AssessmentProgramSelection({ onProgramSelect }) {
 
   const handleSelectProgram = (program) => {
     console.log('🎯 AssessmentProgramSelection: Program selected:', program);
-    
+
     setSelectedProgram(program);
-    
+
     // บันทึกลง localStorage
     localStorage.setItem('assessmentSelectedProgram', JSON.stringify(program));
-    
+
     // ส่งข้อมูลไปยัง parent component
     if (onProgramSelect) {
       console.log('📤 Calling onProgramSelect...');
@@ -61,7 +59,7 @@ export default function AssessmentProgramSelection({ onProgramSelect }) {
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-6">เลือกสาขาที่ต้องการประเมิน</h2>
-      
+
       {/* แสดงผลการเลือก */}
       {selectedProgram && (
         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -98,9 +96,6 @@ export default function AssessmentProgramSelection({ onProgramSelect }) {
                   <h3 className="font-medium text-gray-900">{program.name}</h3>
                   <p className="text-sm text-gray-600">{program.faculty}</p>
                 </div>
-                <span className="px-2 py-1 text-xs rounded bg-blue-100 text-blue-700">
-                  {program.category}
-                </span>
               </div>
             </button>
           ))}

@@ -412,6 +412,86 @@ app.get('/api/ping', (req, res) => {
   });
 });
 
+// ================= LEVELS =================
+app.get('/api/levels', async (req, res) => {
+  try {
+    const levels = await getData('levels');
+    res.json(levels);
+  } catch (error) {
+    console.error('Error fetching levels:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลระดับได้' });
+  }
+});
+
+app.post('/api/levels', async (req, res) => {
+  try {
+    const result = await addData('levels', req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'เพิ่มระดับไม่สำเร็จ' });
+  }
+});
+
+app.patch('/api/levels/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.collection('levels').doc(id).update(req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'แก้ไขระดับไม่สำเร็จ' });
+  }
+});
+
+app.delete('/api/levels/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.collection('levels').doc(id).delete();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'ลบระดับไม่สำเร็จ' });
+  }
+});
+
+// ================= FACULTIES =================
+app.get('/api/faculties', async (req, res) => {
+  try {
+    const faculties = await getData('faculties');
+    res.json(faculties);
+  } catch (error) {
+    console.error('Error fetching faculties:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลคณะได้' });
+  }
+});
+
+app.post('/api/faculties', async (req, res) => {
+  try {
+    const result = await addData('faculties', req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'เพิ่มคณะไม่สำเร็จ' });
+  }
+});
+
+app.patch('/api/faculties/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.collection('faculties').doc(id).update(req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'แก้ไขคณะไม่สำเร็จ' });
+  }
+});
+
+app.delete('/api/faculties/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.collection('faculties').doc(id).delete();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'ลบคณะไม่สำเร็จ' });
+  }
+});
+
 // ================= PROGRAMS =================
 app.get('/api/programs', async (req, res) => {
   try {
@@ -420,6 +500,35 @@ app.get('/api/programs', async (req, res) => {
   } catch (error) {
     console.error('Error fetching programs:', error);
     res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลโปรแกรมได้', details: error.message });
+  }
+});
+
+app.post('/api/programs', async (req, res) => {
+  try {
+    const result = await addData('programs', req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'เพิ่มโปรแกรมไม่สำเร็จ' });
+  }
+});
+
+app.patch('/api/programs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.collection('programs').doc(id).update(req.body);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'แก้ไขโปรแกรมไม่สำเร็จ' });
+  }
+});
+
+app.delete('/api/programs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await db.collection('programs').doc(id).delete();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'ลบโปรแกรมไม่สำเร็จ' });
   }
 });
 
@@ -2018,6 +2127,20 @@ app.get('/api/admin/db-stats', async (req, res) => {
       const snap = await db.collection(col).count().get();
       stats[col] = snap.data().count;
     });
+
+    // Calculate Storage Size
+    let totalSizeBytes = 0;
+    if (bucket) {
+      try {
+        const [files] = await bucket.getFiles({ prefix: 'evidence/' });
+        files.forEach(file => {
+          totalSizeBytes += parseInt(file.metadata.size || 0);
+        });
+      } catch (storageError) {
+        console.error('Error calculating storage size:', storageError);
+      }
+    }
+    stats.file_storage = totalSizeBytes;
 
     await Promise.all(promises);
     res.json(stats);

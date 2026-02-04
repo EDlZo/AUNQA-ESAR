@@ -1,6 +1,7 @@
 // src/pages/RoundManagementPage.jsx
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Clock, Plus, Check, X, AlertCircle, Trash2, Edit2 } from 'lucide-react';
+import { BASE_URL } from '../config/api';
 
 export default function RoundManagementPage({ setActiveTab }) {
     const [rounds, setRounds] = useState([]);
@@ -23,7 +24,7 @@ export default function RoundManagementPage({ setActiveTab }) {
 
     const fetchRounds = async () => {
         try {
-            const res = await fetch('/api/rounds');
+            const res = await fetch(`${BASE_URL}/api/rounds`);
             if (res.ok) {
                 const data = await res.json();
                 setRounds(data);
@@ -65,14 +66,14 @@ export default function RoundManagementPage({ setActiveTab }) {
             let res;
             if (formData.id) {
                 // Update existing round
-                res = await fetch(`/api/rounds/${formData.id}`, {
+                res = await fetch(`${BASE_URL}/api/rounds/${formData.id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(formData)
                 });
             } else {
                 // Create new round
-                res = await fetch('/api/rounds', {
+                res = await fetch(`${BASE_URL}/api/rounds`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(formData)
@@ -97,7 +98,7 @@ export default function RoundManagementPage({ setActiveTab }) {
         if (!window.confirm(`คุณต้องการลบรอบ "${round.name}" ใช่หรือไม่? พึงระวังข้อมูลที่เกี่ยวข้องอาจได้รับผลกระทบ`)) return;
 
         try {
-            const res = await fetch(`/api/rounds/${round.id}`, {
+            const res = await fetch(`${BASE_URL}/api/rounds/${round.id}`, {
                 method: 'DELETE'
             });
 
@@ -122,7 +123,7 @@ export default function RoundManagementPage({ setActiveTab }) {
         }
 
         try {
-            const res = await fetch(`/api/rounds/${round.id}`, {
+            const res = await fetch(`${BASE_URL}/api/rounds/${round.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_active: isActive })
@@ -152,14 +153,14 @@ export default function RoundManagementPage({ setActiveTab }) {
                             กลับ
                         </button>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-                            <Clock className="w-8 h-8 mr-2 text-orange-600" />
+                            <Clock className="w-8 h-8 mr-2 text-blue-600" />
                             จัดการรอบประเมิน
                         </h1>
                         <p className="text-gray-600">กำหนดปีการศึกษาและจัดการสถานะรอบการประเมิน</p>
                     </div>
                     <button
                         onClick={handleOpenModal}
-                        className="bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-orange-700 transition"
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center hover:bg-blue-700 transition shadow-sm"
                     >
                         <Plus className="w-5 h-5 mr-1" />
                         เพิ่มรอบประเมิน
@@ -200,9 +201,9 @@ export default function RoundManagementPage({ setActiveTab }) {
                                             <select
                                                 value={round.is_active ? 'active' : 'inactive'}
                                                 onChange={(e) => handleStatusChange(round, e.target.value)}
-                                                className={`text-xs font-medium px-2.5 py-1 rounded-full border-0 cursor-pointer focus:ring-2 focus:ring-orange-500 ${round.is_active
-                                                        ? 'bg-green-100 text-green-800'
-                                                        : 'bg-gray-100 text-gray-800'
+                                                className={`text-xs font-medium px-2.5 py-1 rounded-full border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${round.is_active
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : 'bg-gray-100 text-gray-800'
                                                     }`}
                                             >
                                                 <option value="active" className="bg-white text-gray-900">เปิดใช้งาน</option>
@@ -243,7 +244,7 @@ export default function RoundManagementPage({ setActiveTab }) {
             {/* Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl max-w-md w-full p-6">
+                    <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold text-gray-900">{formData.id ? 'แก้ไขรอบประเมิน' : 'เพิ่มรอบประเมินใหม่'}</h2>
                             <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -257,7 +258,7 @@ export default function RoundManagementPage({ setActiveTab }) {
                                 <input
                                     type="text"
                                     required
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
                                     value={formData.year}
                                     onChange={e => setFormData({ ...formData, year: e.target.value })}
                                 />
@@ -267,7 +268,7 @@ export default function RoundManagementPage({ setActiveTab }) {
                                 <input
                                     type="text"
                                     required
-                                    className="w-full border rounded-lg px-3 py-2"
+                                    className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
                                     value={formData.name}
                                     onChange={e => setFormData({ ...formData, name: e.target.value })}
                                 />
@@ -277,7 +278,7 @@ export default function RoundManagementPage({ setActiveTab }) {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">วันที่เริ่มต้น</label>
                                     <input
                                         type="date"
-                                        className="w-full border rounded-lg px-3 py-2"
+                                        className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
                                         value={formData.start_date || ''}
                                         onChange={e => setFormData({ ...formData, start_date: e.target.value })}
                                     />
@@ -286,7 +287,7 @@ export default function RoundManagementPage({ setActiveTab }) {
                                     <label className="block text-sm font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
                                     <input
                                         type="date"
-                                        className="w-full border rounded-lg px-3 py-2"
+                                        className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
                                         value={formData.end_date || ''}
                                         onChange={e => setFormData({ ...formData, end_date: e.target.value })}
                                     />
@@ -306,8 +307,8 @@ export default function RoundManagementPage({ setActiveTab }) {
                             </div>
 
                             <div className="flex justify-end pt-4 gap-2">
-                                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg text-gray-600">ยกเลิก</button>
-                                <button type="submit" className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700">บันทึก</button>
+                                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-3 border rounded-lg text-gray-600 font-bold hover:bg-gray-50">ยกเลิก</button>
+                                <button type="submit" className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md">บันทึก</button>
                             </div>
                         </form>
                     </div>

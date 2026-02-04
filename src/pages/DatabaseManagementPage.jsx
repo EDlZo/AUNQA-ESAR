@@ -90,6 +90,15 @@ export default function DatabaseManagementPage({ setActiveTab }) {
         }
     };
 
+    const formatBytes = (bytes, decimals = 2) => {
+        if (!bytes || bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    };
+
     // --- Master Management Handlers ---
 
     const handleSaveComponent = async (formData) => {
@@ -280,7 +289,7 @@ export default function DatabaseManagementPage({ setActiveTab }) {
 
     const collectionCards = [
         { id: 'quality_components', label: 'องค์ประกอบคุณภาพ', description: 'กลุ่มคุณภาพและข้อกำหนดหลัก', icon: <Layers className="w-6 h-6" />, color: 'text-blue-600', bg: 'bg-blue-50' },
-        { id: 'indicators', label: 'ตัวบ่งชี้', description: 'ตัวชี้วัดในแต่ละองค์ประกอบ', icon: <Activity className="w-6 h-6" />, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+        { id: 'indicators', label: 'ตัวบ่งชี้', description: 'ตัวชี้วัดในแต่ละองค์ประกอบ', icon: <Activity className="w-6 h-6" />, color: 'text-blue-600', bg: 'bg-blue-50' },
         { id: 'evaluations', label: 'ข้อมูลการเขียน SAR', description: 'ข้อมูลเบื้องต้นและเนื้อหาการประเมิน', icon: <FileText className="w-6 h-6" />, color: 'text-emerald-600', bg: 'bg-emerald-50' },
         { id: 'evaluations_actual', label: 'รายการประเมิน & ไฟล์', description: 'ผลลัพธ์จริงๆ และไฟล์ประกอบหลักฐาน', icon: <CheckCircle className="w-6 h-6" />, color: 'text-teal-600', bg: 'bg-teal-50' },
         { id: 'committee_evaluations', label: 'การประเมินโดยกรรมการ', description: 'คะแนนและข้อเสนอแนะจากกรรมการ', icon: <Users className="w-6 h-6" />, color: 'text-purple-600', bg: 'bg-purple-50' },
@@ -289,7 +298,7 @@ export default function DatabaseManagementPage({ setActiveTab }) {
 
     const statCards = [
         { id: 'total_collections', label: 'คอลเลกชันทั้งหมด', value: '9 รายการ', icon: <Database className="w-5 h-5" /> },
-        { id: 'file_storage', label: 'พื้นที่ใช้งานไฟล์', value: 'N/A', icon: <HardDrive className="w-5 h-5" /> },
+        { id: 'file_storage', label: 'พื้นที่ใช้งานไฟล์', value: formatBytes(stats.file_storage || 0), icon: <HardDrive className="w-5 h-5" /> },
         { id: 'rounds', label: 'รอบประเมิน', value: `${stats.rounds || 0} ปี`, icon: <RefreshCw className="w-5 h-5" /> },
         { id: 'users', label: 'ผู้ใช้งานในระบบ', value: `${stats.users || 0} คน`, icon: <Users className="w-5 h-5" /> },
     ];
@@ -338,7 +347,7 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                         </button>
                         <button
                             onClick={() => setActiveSubTab('indicators')}
-                            className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeSubTab === 'indicators' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeSubTab === 'indicators' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                         >
                             ตัวบ่งชี้ (Indicators)
                         </button>
@@ -397,7 +406,7 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                         className="flex items-center text-gray-500 hover:text-gray-700 mb-4 transition-colors"
                     >
                         <ArrowLeft className="w-5 h-5 mr-1" />
-                        กลับไปหน้าจัดการระบบ
+                        กลับ
                     </button>
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -483,7 +492,7 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                                                 className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
                                             >
                                                 <Edit3 className="w-4 h-4" />
-                                                จัดการ Master
+                                                จัดการ
                                             </button>
                                         )}
                                         <button

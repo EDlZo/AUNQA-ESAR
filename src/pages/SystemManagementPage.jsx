@@ -1,6 +1,6 @@
 // src/pages/SystemManagementPage.jsx
 import React from 'react';
-import { Users, Settings, Clock, Shield, ChevronRight } from 'lucide-react';
+import { Users, Settings, Clock, Shield, ChevronRight, School } from 'lucide-react';
 
 export default function SystemManagementPage({ setActiveTab }) {
     const menus = [
@@ -21,6 +21,14 @@ export default function SystemManagementPage({ setActiveTab }) {
             action: () => setActiveTab('round_management')
         },
         {
+            id: 'program_management',
+            title: 'จัดการหน่วยงานและหลักสูตร',
+            description: 'เพิ่ม ลบ แก้ไขข้อมูลระดับการศึกษา คณะ และสาขาวิชา',
+            icon: <School className="w-8 h-8 text-blue-600" />,
+            color: 'bg-blue-50 text-blue-600',
+            action: () => setActiveTab('program_management')
+        },
+        {
             id: 'database_management',
             title: 'จัดการฐานข้อมูล',
             description: 'ตรวจสอบสถิติ ล้างข้อมูล และรีเซ็ตระบบฐานข้อมูล',
@@ -35,8 +43,8 @@ export default function SystemManagementPage({ setActiveTab }) {
             <div className="flex-1 container mx-auto px-4 py-8" style={{ backgroundColor: 'white' }}>
                 <div className="mb-8">
                     <div className="flex items-center gap-3 mb-2">
-                        <div className="p-2 bg-indigo-100 rounded-lg">
-                            <Shield className="w-6 h-6 text-indigo-600" />
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                            <Shield className="w-6 h-6 text-blue-600" />
                         </div>
                         <h1 className="text-2xl font-bold text-gray-900">จัดการระบบ (System Management)</h1>
                     </div>

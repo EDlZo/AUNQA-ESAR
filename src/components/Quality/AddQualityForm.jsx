@@ -208,7 +208,7 @@ export default function AddQualityForm({
                   onChange={handleComponentChange}
                   className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium mb-4"
                 >
-                  <option value="">-- ไม่ใช้แม่แบบ (กรอกข้อมูลเองด้านล่าง) --</option>
+                  <option value="">-- เลือกองค์ประกอบ --</option>
                   {Array.isArray(components) && components.length > 0 ? (
                     [...components]
                       .filter(item => item.component_id)
