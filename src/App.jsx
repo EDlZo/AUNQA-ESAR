@@ -399,7 +399,7 @@ export default function App() {
       case 'reports':
         return (
           <>
-            <ReportsPage />
+            <ReportsPage setActiveTab={setActiveTab} />
           </>
         );
       case 'dashboard':

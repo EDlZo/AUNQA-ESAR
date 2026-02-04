@@ -556,9 +556,10 @@ export default function IndicatorTable({
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-medium text-gray-900">เกณฑ์การประเมิน</h3>
           <button
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
+            className="flex items-center text-gray-500 hover:text-gray-700 mb-2 transition-colors"
             onClick={() => { setAssessIndicator(null); if (typeof onAssessingChange === 'function') { try { onAssessingChange(false); } catch { } } }}
           >
+            <ArrowLeft className="w-5 h-5 mr-1" />
             กลับ
           </button>
         </div>

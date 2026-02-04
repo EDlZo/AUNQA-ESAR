@@ -33,8 +33,8 @@ export default function Header({
       navigation.push({ name: 'กำหนดค่าเป้าหมาย', tab: 'assessment_criteria' });
     }
 
-    // ผลการดำเนินการ (Reporter, Admin)
-    if (['system_admin', 'reporter'].includes(role)) {
+    // ผลการดำเนินการ (Reporter, Admin, SAR Manager, QA Admin)
+    if (['system_admin', 'reporter', 'sar_manager', 'qa_admin'].includes(role)) {
       navigation.push({ name: 'ผลดำเนินงาน', tab: 'assessment_evaluation' });
     }
 
