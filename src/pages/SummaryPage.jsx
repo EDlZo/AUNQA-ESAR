@@ -69,7 +69,10 @@ export default function SummaryPage({ currentUser }) {
         // Actually, user wants "Year" view. So session_id from localStorage might be stale/wrong year.
         // We should IGNORE localStorage session_id here and trust Year + Major.
 
-        const qs = new URLSearchParams(qsObj).toString();
+        const qs = new URLSearchParams({
+          ...qsObj,
+          filter_approved_only: 'true'  // กรองเฉพาะผลดำเนินงานที่อนุมัติแล้ว
+        }).toString();
         const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
 
         if (res.ok) {

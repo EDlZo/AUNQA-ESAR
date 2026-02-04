@@ -65,7 +65,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram.majorName || selectedProgram.major_name;
-      const params = { session_id: sessionId, major_name: major };
+      const params = { session_id: sessionId, major_name: major, filter_approved_only: 'true' };
       if (activeYear) params.year = activeYear;
       const qs = new URLSearchParams(params).toString();
 
@@ -826,74 +826,84 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                   ) : viewIndicators.length === 0 ? (
                     <tr><td colSpan={7} className="text-center py-6 text-gray-400">ยังไม่มีตัวบ่งชี้</td></tr>
                   ) : (
-                    viewIndicators.map((ind) => {
-                      const actual = rows.find(r =>
-                        String(r.indicator_id) === String(ind.id) ||
-                        String(r.indicator_id) === String(ind.indicator_id) ||
-                        String(r.indicator_id) === String(ind.sequence)
-                      );
-                      const crit = getIndicatorData(ind, criteriaMap);
-                      const comm = getIndicatorData(ind, committeeMap);
-                      const hasCommitteeScore = !!comm?.committee_score;
+                    viewIndicators
+                      .filter((ind) => {
+                        // แสดงเฉพาะตัวบ่งชี้ที่มีผลดำเนินการที่ approved แล้ว
+                        const hasApprovedResult = rows.some(r =>
+                          String(r.indicator_id) === String(ind.id) ||
+                          String(r.indicator_id) === String(ind.indicator_id) ||
+                          String(r.indicator_id) === String(ind.sequence)
+                        );
+                        return hasApprovedResult;
+                      })
+                      .map((ind) => {
+                        const actual = rows.find(r =>
+                          String(r.indicator_id) === String(ind.id) ||
+                          String(r.indicator_id) === String(ind.indicator_id) ||
+                          String(r.indicator_id) === String(ind.sequence)
+                        );
+                        const crit = getIndicatorData(ind, criteriaMap);
+                        const comm = getIndicatorData(ind, committeeMap);
+                        const hasCommitteeScore = !!comm?.committee_score;
 
-                      return (
-                        <tr key={ind.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-4 text-center border-r border-gray-200">
-                            {String(ind.sequence).includes('.') ? (
-                              <span className="text-sm font-medium text-gray-600">{ind.sequence}</span>
-                            ) : (
-                              <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-xs font-bold shadow-sm">
-                                {ind.sequence}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-4 text-sm text-left border-r border-gray-200">
-                            <div className={(String(ind.sequence).includes('.') ? 'font-normal' : 'font-bold') + ' text-gray-900'}>
-                              {ind.indicator_name}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
-                            {crit?.target_value || '-'}
-                          </td>
-                          <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
-                            {crit?.score || '-'}
-                          </td>
-                          <td className="px-4 py-4 text-center text-sm border-r border-gray-200 font-medium">
-                            {actual ? `${actual.operation_score ?? '-'}` : '-'}
-                          </td>
-                          <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
-                            {actual && actual.goal_achievement ? (
-                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${actual.goal_achievement === 'บรรลุ' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                }`}>
-                                {actual.goal_achievement}
-                              </span>
-                            ) : '-'}
-                          </td>
-                          <td className="px-4 py-4 text-center">
-                            {['system_admin', 'external_evaluator'].includes(currentUser?.role) ? (
-                              <button
-                                onClick={() => setEvaluatingIndicator(ind)}
-                                className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all ${hasCommitteeScore
-                                  ? 'bg-green-600 text-white hover:bg-green-700'
-                                  : 'bg-blue-600 text-white hover:bg-blue-700'
-                                  }`}
-                              >
-                                {hasCommitteeScore ? <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> : <ClipboardCheck className="w-3.5 h-3.5 mr-1" />}
-                                ประเมินผล
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => setEvaluatingIndicator(ind)}
-                                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-all"
-                              >
-                                <Search className="w-3.5 h-3.5 mr-1" />
-                                รายละเอียด
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
+                        return (
+                          <tr key={ind.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-4 text-center border-r border-gray-200">
+                              {String(ind.sequence).includes('.') ? (
+                                <span className="text-sm font-medium text-gray-600">{ind.sequence}</span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-xs font-bold shadow-sm">
+                                  {ind.sequence}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-4 text-sm text-left border-r border-gray-200">
+                              <div className={(String(ind.sequence).includes('.') ? 'font-normal' : 'font-bold') + ' text-gray-900'}>
+                                {ind.indicator_name}
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
+                              {crit?.target_value || '-'}
+                            </td>
+                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
+                              {crit?.score || '-'}
+                            </td>
+                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200 font-medium">
+                              {actual ? `${actual.operation_score ?? '-'}` : '-'}
+                            </td>
+                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
+                              {actual && actual.goal_achievement ? (
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${actual.goal_achievement === 'บรรลุ' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  }`}>
+                                  {actual.goal_achievement}
+                                </span>
+                              ) : '-'}
+                            </td>
+                            <td className="px-4 py-4 text-center">
+                              {['system_admin', 'external_evaluator'].includes(currentUser?.role) ? (
+                                <button
+                                  onClick={() => setEvaluatingIndicator(ind)}
+                                  className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all ${hasCommitteeScore
+                                    ? 'bg-green-600 text-white hover:bg-green-700'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                    }`}
+                                >
+                                  {hasCommitteeScore ? <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> : <ClipboardCheck className="w-3.5 h-3.5 mr-1" />}
+                                  ประเมินผล
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setEvaluatingIndicator(ind)}
+                                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-all"
+                                >
+                                  <Search className="w-3.5 h-3.5 mr-1" />
+                                  รายละเอียด
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                   )}
                 </tbody>
               </table>

@@ -3,9 +3,10 @@ import React, { useState, useEffect } from 'react';
 import AssessmentFormModal from './AssessmentFormModal';
 import EvaluationFormModal from './EvaluationFormModal';
 import { BASE_URL } from '../config/api.js';
+import { ArrowLeft } from 'lucide-react';
 
 
-export default function AssessmentTable({ selectedComponent, indicators, selectedProgram, mode = 'criteria', onBack, sessionData, activeYear }) {
+export default function AssessmentTable({ selectedComponent, indicators, selectedProgram, currentUser, mode = 'criteria', onBack, sessionData, activeYear }) {
   const [evaluatedIndicators, setEvaluatedIndicators] = useState(new Set());
   const [assessingIndicator, setAssessingIndicator] = useState(null);
   const [flash, setFlash] = useState({ message: '', type: 'success' });
@@ -38,6 +39,15 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
     }
   }, [flash.message]);
 
+  // Local state to store evaluations, allowing updates without parent refresh
+  const [localSessionData, setLocalSessionData] = useState(sessionData || { evaluations: [], evaluationsActual: [] });
+
+  useEffect(() => {
+    if (sessionData) {
+      setLocalSessionData(sessionData);
+    }
+  }, [sessionData]);
+
   // ดึงข้อมูลสถานะการประเมิน (กรณีต้องการรีเฟรชหลังบันทึก)
   const fetchEvaluationStatus = async () => {
     if (!selectedComponent) return;
@@ -46,26 +56,30 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
       const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
       const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
 
-      const endpoint = mode === 'evaluation'
-        ? `${BASE_URL}/api/evaluations-actual/history`
-        : `${BASE_URL}/api/evaluations/history`;
+      // Fetch BOTH to update full state
+      const [evalRes, actualRes] = await Promise.all([
+        fetch(`${BASE_URL}/api/evaluations/history?${qs}`),
+        fetch(`${BASE_URL}/api/evaluations-actual/history?${qs}`)
+      ]);
 
-      let res = await fetch(`${endpoint}?${qs}`);
-      if (res.ok) {
-        let evaluations = await res.json();
-        let list = (Array.isArray(evaluations) ? evaluations : []).filter(ev => String(ev.session_id) === String(sessionId));
+      if (evalRes.ok && actualRes.ok) {
+        const evaluations = await evalRes.json();
+        const evaluationsActual = await actualRes.json();
 
+        // Update local state
+        setLocalSessionData({
+          evaluations: Array.isArray(evaluations) ? evaluations : [],
+          evaluationsActual: Array.isArray(evaluationsActual) ? evaluationsActual : []
+        });
+
+        // Update helper sets
+        const list = (mode === 'evaluation' ? evaluationsActual : evaluations).filter(ev => String(ev.session_id) === String(sessionId));
         const evaluatedIds = new Set(list.map(ev => String(ev.indicator_id)));
         setEvaluatedIndicators(evaluatedIds);
 
-        // ถ้าเป็นโหมดประเมินผล ให้ดึงเกณฑ์มาด้วยเพื่อเช็คความพร้อม
         if (mode === 'evaluation') {
-          const criteriaRes = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`);
-          if (criteriaRes.ok) {
-            const criteriaRows = await criteriaRes.json();
-            const criteriaIds = new Set(criteriaRows.filter(ev => String(ev.session_id) === String(sessionId)).map(ev => String(ev.indicator_id)));
-            setCriteriaCompletedIds(criteriaIds);
-          }
+          const criteriaIds = new Set(evaluations.filter(ev => String(ev.session_id) === String(sessionId)).map(ev => String(ev.indicator_id)));
+          setCriteriaCompletedIds(criteriaIds);
         }
       }
     } catch (error) {
@@ -99,10 +113,62 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
     setAssessingIndicator(null);
   };
 
+  const updateStatus = async (evaluationId, action, extraBody = {}) => {
+    try {
+      const url = `${BASE_URL}/api/evaluations-actual/${evaluationId}/${action}`;
+      console.log('Sending update to:', url);
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...extraBody,
+          [action === 'approve' ? 'approved_by' : 'rejected_by']: currentUser?.name || currentUser?.username
+        })
+      });
+      if (res.ok) {
+        setFlash({ message: action === 'approve' ? 'อนุมัติการประเมินเรียบร้อย' : (action === 'submit' ? 'ส่งตรวจประเมินเรียบร้อย' : 'ส่งกลับแก้ไขเรียบร้อย'), type: 'success' });
+        fetchEvaluationStatus();
+      } else {
+        const err = await res.json();
+        setFlash({ message: `เกิดข้อผิดพลาด: ${err.error}`, type: 'error' });
+      }
+    } catch (err) {
+      setFlash({ message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'error' });
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'approved': return <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">อนุมัติแล้ว</span>;
+      case 'pending_review': return <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full text-[10px] font-bold">รอการตรวจสอบ</span>;
+      case 'revision_requested': return <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-[10px] font-bold">ให้ปรับปรุง</span>;
+      case 'submitted':
+      case 'draft':
+      default: return <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-[10px] font-bold">ฉบับร่าง</span>;
+    }
+  };
+
   // หากกำลังประเมิน ให้แสดงฟอร์มประเมิน
   if (assessingIndicator) {
     // เลือกฟอร์มตาม mode
     const FormComponent = mode === 'evaluation' ? EvaluationFormModal : AssessmentFormModal;
+
+    // Determine ReadOnly Status
+    let readOnly = false;
+    if (mode === 'evaluation') {
+      const evalData = localSessionData?.evaluationsActual?.find(r => String(r.indicator_id) === String(assessingIndicator.id));
+      const isPending = evalData?.status === 'pending_review';
+      const isApproved = evalData?.status === 'approved';
+
+      // Managers reviewing pending items -> Read Only
+      if (isPending && ['sar_manager', 'qa_admin', 'system_admin'].includes(currentUser?.role)) {
+        readOnly = true;
+      }
+      // Approved items -> Read Only for everyone (uiness system admin override, but usually readonly)
+      if (isApproved && currentUser?.role !== 'system_admin') {
+        readOnly = true;
+      }
+    }
 
     return (
       <FormComponent
@@ -110,9 +176,10 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
         selectedProgram={selectedProgram}
         onComplete={handleAssessmentComplete}
         onCancel={handleAssessmentCancel}
-        allEvaluations={sessionData?.evaluations || []}
-        allEvaluationsActual={sessionData?.evaluationsActual || []}
+        allEvaluations={localSessionData?.evaluations || []}
+        allEvaluationsActual={localSessionData?.evaluationsActual || []}
         activeYear={activeYear}
+        readOnly={readOnly}
       />
     );
   }
@@ -140,8 +207,9 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
         {onBack && (
           <button
             onClick={onBack}
-            className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
+            className="flex items-center text-gray-500 hover:text-gray-700 mb-2 transition-colors"
           >
+            <ArrowLeft className="w-5 h-5 mr-1" />
             กลับ
           </button>
         )}
@@ -181,10 +249,10 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
                 ชนิดเกณฑ์มาตรฐาน
               </th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200">
-                สถานะการประเมิน
+                สถานะ
               </th>
               <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ประเมินผล
+                การจัดการ
               </th>
             </tr>
           </thead>
@@ -223,29 +291,105 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center text-sm border-r border-gray-200">
-                    {evaluatedIndicators.has(String(indicator.id)) ? (
-                      <span className="inline-flex items-center justify-center w-6 h-6 bg-green-500 text-white rounded-full text-sm font-bold">
-                        ✓
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center justify-center w-6 h-6 bg-red-500 text-white rounded-full text-sm font-bold">
-                        ✗
-                      </span>
-                    )}
+                    {(() => {
+                      const evalData = (mode === 'evaluation' ? localSessionData?.evaluationsActual : localSessionData?.evaluations)
+                        ?.find(r => String(r.indicator_id) === String(indicator.id));
+                      return (
+                        <div className="flex flex-col items-center gap-1">
+                          {evalData ? (
+                            <>
+                              <span className="inline-flex items-center justify-center w-6 h-6 bg-green-500 text-white rounded-full text-xs font-bold mb-1">✓</span>
+                              {getStatusBadge(evalData.status)}
+                              {evalData.status === 'revision_requested' && evalData.feedback && (
+                                <div className="text-[10px] text-red-600 italic mt-1 max-w-[120px] text-center">
+                                  "{evalData.feedback}"
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <span className="inline-flex items-center justify-center w-6 h-6 bg-red-500 text-white rounded-full text-xs font-bold">✗</span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    <button
-                      onClick={() => handleAssessClick(indicator)}
-                      className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white transition-colors whitespace-nowrap ${mode === 'evaluation'
-                        ? 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
-                        : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
-                        } focus:outline-none focus:ring-2 focus:ring-offset-2`}
-                    >
-                      {mode === 'evaluation'
-                        ? (evaluatedIndicators.has(String(indicator.id)) ? 'แก้ไขผลการดำเนินการ' : 'ผลการดำเนินการ')
-                        : (evaluatedIndicators.has(String(indicator.id)) ? 'แก้ไขการประเมิน' : 'เกณฑ์การประเมิน')
-                      }
-                    </button>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      {(() => {
+                        const evalData = (mode === 'evaluation' ? localSessionData?.evaluationsActual : localSessionData?.evaluations)
+                          ?.find(r => String(r.indicator_id) === String(indicator.id));
+
+                        const isApproved = evalData?.status === 'approved';
+                        const isPending = evalData?.status === 'pending_review';
+                        const canEdit = !isPending && !isApproved;
+                        const canReview = isPending && ['sar_manager', 'qa_admin', 'system_admin'].includes(currentUser?.role);
+
+                        return (
+                          <>
+                            <button
+                              onClick={() => handleAssessClick(indicator)}
+                              disabled={!canEdit && !canReview && currentUser?.role !== 'system_admin'}
+                              className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md text-white transition-colors whitespace-nowrap shadow-sm ${!canEdit && !canReview && currentUser?.role !== 'system_admin'
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : (mode === 'evaluation'
+                                  ? (canReview ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700')
+                                  : 'bg-green-600 hover:bg-green-700')
+                                }`}
+                            >
+                              {mode === 'evaluation'
+                                ? (canReview ? 'ตรวจสอบ' : (evalData ? 'แก้ไขผล' : 'บันทึกผล'))
+                                : (evalData ? 'แก้ไขเป้าหมาย' : 'กำหนดเป้าหมาย')
+                              }
+                            </button>
+
+                            {evalData && mode === 'evaluation' && (
+                              <>
+                                {/* Reporter: Submit Button */}
+                                {evalData.status !== 'pending_review' && evalData.status !== 'approved' && (currentUser?.role === 'reporter' || currentUser?.role === 'system_admin') && (
+                                  <button
+                                    onClick={() => {
+                                      const evalId = evalData.id || evalData._id;
+                                      if (evalId) updateStatus(evalId, 'submit');
+                                      else alert('ไม่พบรหัสการประเมิน กรุณารีเฟรชหน้าเว็บ');
+                                    }}
+                                    className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 shadow-sm"
+                                  >
+                                    ส่งตรวจ
+                                  </button>
+                                )}
+
+                                {/* Manager: Approve/Reject Buttons */}
+                                {evalData.status === 'pending_review' && (['sar_manager', 'qa_admin', 'system_admin'].includes(currentUser?.role)) && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        const evalId = evalData.id || evalData._id;
+                                        if (evalId) updateStatus(evalId, 'approve');
+                                      }}
+                                      className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-md hover:bg-emerald-700 shadow-sm"
+                                    >
+                                      อนุมัติ
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const evalId = evalData.id || evalData._id;
+                                        if (evalId) {
+                                          const fb = prompt('ระบุสิ่งที่ควรปรับปรุง:');
+                                          if (fb !== null) updateStatus(evalId, 'reject', { feedback: fb });
+                                        }
+                                      }}
+                                      className="px-3 py-1.5 bg-rose-600 text-white text-xs font-medium rounded-md hover:bg-rose-700 shadow-sm"
+                                    >
+                                      ส่งกลับแก้
+                                    </button>
+                                  </>
+                                )}
+                              </>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
                   </td>
                 </tr>
               ))

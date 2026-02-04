@@ -15,10 +15,11 @@ import {
   ShieldCheck,
   Link2,
   AlertCircle,
-  Clock
+  Clock,
+  ArrowLeft
 } from 'lucide-react';
 
-export default function EvaluationFormModal({ indicator, selectedProgram, onComplete, onCancel, allEvaluations, allEvaluationsActual, activeYear }) {
+export default function EvaluationFormModal({ indicator, selectedProgram, onComplete, onCancel, allEvaluations, allEvaluationsActual, activeYear, readOnly }) {
   // ข้อมูลจากการประเมินเกณฑ์ก่อนหน้า (target_value, score)
   const [criteriaData, setCriteriaData] = useState({ target_value: '', score: '' });
 
@@ -304,7 +305,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
       formData.append('evidence_url', evidenceUrl);
       formData.append('comment', comment);
       formData.append('major_name', major);
-      formData.append('status', 'submitted');
+      formData.append('status', 'draft');
       if (activeYear) formData.append('year', activeYear);
       // Keep previous files when submitting a new record (merge server-side)
       formData.append('keep_existing', 'true');
@@ -515,8 +516,9 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
         </div>
         <button
           onClick={onCancel}
-          className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
+          className="flex items-center text-gray-500 hover:text-gray-700 mb-2 transition-colors"
         >
+          <ArrowLeft className="w-5 h-5 mr-1" />
           กลับ
         </button>
       </div>
@@ -555,6 +557,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
                 placeholder="ระบุรายละเอียดผลลัพธ์ที่เกิดขึ้นจริงจากการดำเนินการ..."
                 ariaLabel="ผลการดำเนินงาน"
                 minHeight={200}
+                readOnly={readOnly}
               />
             </div>
           </div>
@@ -605,6 +608,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
                 onChange={(e) => setGoalAchievement(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
+                disabled={readOnly}
               >
                 <option value="">เลือกสถานะ...</option>
                 <option value="บรรลุ">บรรลุ</option>
@@ -621,13 +625,15 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
                 <Link2 className="w-4 h-4 text-indigo-600" />
                 หลักฐานอ้างอิง
               </span>
-              <button
-                type="button"
-                onClick={() => setShowEvidenceModal(true)}
-                className="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
-              >
-                <Plus className="w-3 h-3" /> เพิ่มหลักฐาน
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => setShowEvidenceModal(true)}
+                  className="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> เพิ่มหลักฐาน
+                </button>
+              )}
             </label>
 
             <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -666,13 +672,15 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <button
-                            type="button"
-                            onClick={() => file.isPending ? setPendingEvidenceFiles(prev => prev.filter((_, i) => i !== parseInt(file.filename.match(/pending_(\d+)_/)?.[1] || '0'))) : handleRemoveFile(file.filename)}
-                            className="text-red-400 hover:text-red-600 transition-colors"
-                          >
-                            <X className="w-4 h-4 mx-auto" />
-                          </button>
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              onClick={() => file.isPending ? setPendingEvidenceFiles(prev => prev.filter((_, i) => i !== parseInt(file.filename.match(/pending_(\d+)_/)?.[1] || '0'))) : handleRemoveFile(file.filename)}
+                              className="text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <X className="w-4 h-4 mx-auto" />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))
@@ -698,6 +706,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
                 placeholder="ระบุหมายเหตุหรือข้อเสนอแนะเพิ่มเติม (ถ้ามี)..."
                 ariaLabel="หมายเหตุ"
                 minHeight={100}
+                readOnly={readOnly}
               />
             </div>
           </div>
@@ -709,15 +718,17 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
               onClick={onCancel}
               className="px-6 py-2 bg-gray-200 text-gray-800 font-bold rounded hover:bg-gray-300 transition-colors flex-1"
             >
-              ยกเลิก
+              {readOnly ? 'ปิด' : 'ยกเลิก'}
             </button>
-            <button
-              type="submit"
-              disabled={loading || !operationResult}
-              className="px-6 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 transition-colors flex-1"
-            >
-              {loading ? 'กำลังบันทึก...' : 'บันทึกผลการดำเนินงาน'}
-            </button>
+            {!readOnly && (
+              <button
+                type="submit"
+                disabled={loading || !operationResult}
+                className="px-6 py-2 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50 transition-colors flex-1"
+              >
+                {loading ? 'กำลังบันทึก...' : 'บันทึกผลการดำเนินงาน'}
+              </button>
+            )}
           </div>
         </form>
 

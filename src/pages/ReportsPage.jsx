@@ -9,6 +9,7 @@ import {
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { generateAssessmentPDF, downloadPDF } from '../utils/pdfGenerator';
+import { ESARGenerator } from '../utils/esarGenerator';
 import { BASE_URL } from '../config/api.js';
 
 
@@ -60,8 +61,8 @@ export default function ReportsPage() {
         session_id: sessionId // Optional, might override year if backend logic prioritizes it. I should fix backend.
       }).toString();
 
-      // ดึงข้อมูลการประเมิน
-      const evaluationsResponse = await fetch(`/api/evaluations/history?${qs}`);
+      // ดึงข้อมูลการประเมิน (ผลการดำเนินงาน) - เฉพาะที่อนุมัติแล้ว
+      const evaluationsResponse = await fetch(`/api/evaluations-actual/history?${qs}&filter_approved_only=true`);
       const evaluationsData = await evaluationsResponse.json();
 
       // ดึงข้อมูลตัวบ่งชี้ (อาจต้องดึงทั้งหมดถ้าระบุปี)
@@ -400,6 +401,48 @@ export default function ReportsPage() {
     setShowDetailModal(false);
   };
 
+  const handleGenerateFullESAR = async () => {
+    try {
+      setRefreshing(true);
+      const sel = localStorage.getItem('selectedProgramContext');
+      const programData = sel ? JSON.parse(sel) : {};
+      const major = programData?.majorName || '';
+
+      // 1. Fetch data
+      const qs = new URLSearchParams({ year: selectedYear, major_name: major }).toString();
+
+      const [compRes, indRes, evalRes] = await Promise.all([
+        fetch(`/api/quality-components?${qs}`),
+        fetch(`/api/indicators?${qs}`),
+        fetch(`/api/evaluations-actual/history?${qs}`)
+      ]);
+
+      if (!compRes.ok || !indRes.ok || !evalRes.ok) throw new Error('Failed to fetch data for ESAR');
+
+      const components = await compRes.json();
+      const indicators = await indRes.json();
+      const evaluations = await evalRes.json();
+
+      // 2. Generate
+      const generator = new ESARGenerator({
+        program: programData,
+        year: selectedYear,
+        components,
+        indicators,
+        evaluations
+      });
+
+      const doc = await generator.generate();
+      doc.save(`Full_ESAR_${major}_${selectedYear}.pdf`);
+
+    } catch (error) {
+      console.error('Error generating full ESAR:', error);
+      alert('เกิดข้อผิดพลาดในการสร้างรายงาน: ' + error.message);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -422,7 +465,7 @@ export default function ReportsPage() {
               className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4 transition-colors"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
-              กลับไปหน้าแรกกับมา
+              กลับ
             </button>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">รายงานทั้งหมด</h1>
             <p className="text-gray-600">จัดการและดูรายงานการประเมินคุณภาพ AUN-QA</p>
@@ -452,6 +495,14 @@ export default function ReportsPage() {
             >
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               ส่งออก Excel
+            </button>
+            <button
+              onClick={handleGenerateFullESAR}
+              disabled={refreshing}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              รายงาน ESAR ฉบับเต็ม
             </button>
             <button
               onClick={() => setShowFilters(!showFilters)}
@@ -714,6 +765,31 @@ export default function ReportsPage() {
                           title="ดูไฟล์หลักฐาน"
                         >
                           <FileText className="w-4 h-4" />
+                        </button>
+                      )}
+                      {report.status === 'pending_review' && setActiveTab && (
+                        <button
+                          onClick={() => {
+                            // Set context for AssessmentPage
+                            const context = {
+                              majorName: report.department, // Assuming department holds major name
+                              year: new Date(report.date).getFullYear().toString() + 543 // Convert to Thai year if needed, or just use report year logic
+                            };
+                            // Better: use selectedYear from state which filters the reports?
+                            // Reports usually have a specific year field or date.
+                            // Let's use the current selectedYear if matches, or derive.
+                            // Simpler: Just rely on the user having selected the correct year in ReportsPage or pass explicit.
+                            // Actually, AssessmentPage reads 'selectedProgramContext'.
+                            localStorage.setItem('selectedProgramContext', JSON.stringify({
+                              majorName: report.department,
+                              facultyName: 'วิศวกรรมศาสตร์' // Default or fetch?
+                            }));
+                            setActiveTab('assessment_evaluation');
+                          }}
+                          className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="ตรวจสอบผลการดำเนินการ"
+                        >
+                          <Edit3 className="w-4 h-4" />
                         </button>
                       )}
                     </div>

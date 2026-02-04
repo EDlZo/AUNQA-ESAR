@@ -1094,9 +1094,15 @@ app.get('/api/bulk/session-summary', async (req, res) => {
 
     const components = compSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     const evaluations = evalSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const evaluations_actual = evalActualSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    let evaluations_actual = evalActualSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     const committee_evaluations = commSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     const indicators = indSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Filter approved only if requested
+    const { filter_approved_only } = req.query;
+    if (filter_approved_only === 'true') {
+      evaluations_actual = evaluations_actual.filter(eval => eval.status === 'approved');
+    }
 
     // Sort indicators
     indicators.sort((a, b) => {
@@ -1940,9 +1946,57 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
   }
 });
 
+// --- Workflow Endpoints ---
+app.post('/api/evaluations-actual/:id/submit', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!db) return res.json({ success: true }); // Mock success
+    await db.collection('evaluations_actual').doc(id).update({
+      status: 'pending_review',
+      submitted_at: admin.firestore.FieldValue.serverTimestamp()
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/evaluations-actual/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approved_by } = req.body;
+    if (!db) return res.json({ success: true });
+    await db.collection('evaluations_actual').doc(id).update({
+      status: 'approved',
+      approved_at: admin.firestore.FieldValue.serverTimestamp(),
+      approved_by: approved_by || 'Manager'
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/evaluations-actual/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { feedback, rejected_by } = req.body;
+    if (!db) return res.json({ success: true });
+    await db.collection('evaluations_actual').doc(id).update({
+      status: 'revision_requested',
+      feedback: feedback || '',
+      rejected_at: admin.firestore.FieldValue.serverTimestamp(),
+      rejected_by: rejected_by || 'Manager'
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/evaluations-actual/history', async (req, res) => {
   try {
-    const { session_id, major_name, year } = req.query;
+    const { session_id, major_name, year, filter_approved_only } = req.query;
 
     let targetSessionIds = [];
     if (session_id) {
@@ -1980,7 +2034,13 @@ app.get('/api/evaluations-actual/history', async (req, res) => {
     }
 
     const snapshot = await query.get();
-    const evaluations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    let evaluations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Filter approved only if requested
+    if (filter_approved_only === 'true') {
+      evaluations = evaluations.filter(eval => eval.status === 'approved');
+    }
+
     res.json(evaluations);
   } catch (error) {
     console.error('Error fetching actual evaluation history:', error);
