@@ -1,6 +1,7 @@
-// src/components/Quality/AddQualityForm.jsx
 import React, { useState, useEffect } from 'react';
 import { BASE_URL } from '../../config/api.js';
+import { Plus, Edit2, Trash2, Settings } from 'lucide-react';
+import MasterComponentForm from '../Admin/MasterComponentForm';
 
 
 export default function AddQualityForm({
@@ -16,26 +17,23 @@ export default function AddQualityForm({
   const [loading, setLoading] = useState(true);
   const [selectedComponent, setSelectedComponent] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showMasterForm, setShowMasterForm] = useState(false);
+  const [editingMaster, setEditingMaster] = useState(null);
+  const [localTemplateId, setLocalTemplateId] = useState('');
+  const [rounds, setRounds] = useState([]);
+  const [programs, setPrograms] = useState([]);
 
   // ฟังก์ชันสำหรับดึงข้อมูลองค์ประกอบจาก API
-  const fetchComponents = async (forceRefresh = false) => {
+  const fetchComponents = async () => {
     setLoading(true);
     try {
-      console.log('กำลังดึงข้อมูลองค์ประกอบ...');
-      const sessionId = localStorage.getItem('assessment_session_id') || '';
-      const sel = localStorage.getItem('selectedProgramContext');
-      const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
-      const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      const response = await fetch(`${BASE_URL}/api/quality-components?${qs}`);
+      console.log('ดึงข้อมูลแม่แบบองค์ประกอบจาก:', `${BASE_URL}/api/master-quality-components`);
+      const response = await fetch(`${BASE_URL}/api/master-quality-components`);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log('ข้อมูลที่ได้รับจาก API:', data);
-      // เก็บข้อมูลในหน่วยความจำ
-      if (forceRefresh) {
-        sessionStorage.setItem('existingComponents', JSON.stringify(data));
-      }
+      console.log('ได้รับข้อมูลแม่แบบ:', data);
       setComponents(data);
     } catch (err) {
       console.error('เกิดข้อผิดพลาดในการดึงข้อมูลองค์ประกอบ:', err);
@@ -47,38 +45,76 @@ export default function AddQualityForm({
 
   // ดึงข้อมูลองค์ประกอบจาก API เฉพาะเมื่อโหลดครั้งแรกเท่านั้น
   useEffect(() => {
-    // ตรวจสอบว่ามีข้อมูลในหน่วยความจำหรือไม่
-    const cachedComponents = sessionStorage.getItem('existingComponents');
-
-    if (cachedComponents) {
-      // ใช้ข้อมูลจากหน่วยความจำ
-      setComponents(JSON.parse(cachedComponents));
-      setLoading(false);
-    } else {
-      // ถ้าไม่มีข้อมูลในหน่วยความจำ ให้ดึงจาก API
-      fetchComponents(true);
-    }
+    fetchComponents();
+    fetchMeta();
   }, []);
+
+  const fetchMeta = async () => {
+    try {
+      const [rRes, pRes] = await Promise.all([
+        fetch(`${BASE_URL}/api/rounds`),
+        fetch(`${BASE_URL}/api/programs`)
+      ]);
+      if (rRes.ok) setRounds(await rRes.json());
+      if (pRes.ok) setPrograms(await pRes.json());
+    } catch (err) { console.error('Error fetching meta:', err); }
+  };
+
+  const handleSaveMaster = async (formData) => {
+    try {
+      const method = editingMaster ? 'PATCH' : 'POST';
+      const url = editingMaster
+        ? `${BASE_URL}/api/master-quality-components/${editingMaster.id}`
+        : `${BASE_URL}/api/master-quality-components`;
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+      if (res.ok) {
+        setShowMasterForm(false);
+        setEditingMaster(null);
+        fetchComponents();
+      }
+    } catch (err) { console.error('Error saving master:', err); }
+  };
+
+  const handleDeleteMaster = async () => {
+    if (!selectedComponent) return;
+    if (!window.confirm('ยืนยันการลบแม่แบบองค์ประกอบนี้?')) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/master-quality-components/${selectedComponent.id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setComponentId('');
+        setSelectedComponent(null);
+        fetchComponents();
+      }
+    } catch (err) { console.error('Error deleting master:', err); }
+  };
 
   // ฟังก์ชันสำหรับรีเฟรชข้อมูล
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchComponents(true);
+    fetchComponents();
   };
 
   // เมื่อเลือกองค์ประกอบ ให้ตั้งค่าชื่อองค์ประกอบอัตโนมัติ
   const handleComponentChange = (e) => {
-    const selectedId = e.target.value;
-    setComponentId(selectedId);
+    const selectedTemplateId = e.target.value;
+    setLocalTemplateId(selectedTemplateId);
 
-    // หาองค์ประกอบที่เลือก
-    const comp = components.find(comp => comp.id == selectedId);
+    // หาองค์ประกอบที่เลือกจากแม่แบบ (ใช้ Firestore ID ในการหา)
+    const comp = components.find(comp => comp.id == selectedTemplateId);
     setSelectedComponent(comp);
 
     if (comp) {
       setQualityName(comp.quality_name || '');
+      // ส่งรหัสองค์ประกอบที่เป็นตัวเลข (เช่น 1, 2) กลับไปที่ parent
+      setComponentId(comp.component_id || '');
     } else {
       setQualityName('');
+      setComponentId('');
     }
   };
 
@@ -155,53 +191,58 @@ export default function AddQualityForm({
       )}
 
       <form onSubmit={onSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            องค์ประกอบ
-          </label>
-          {loading ? (
-            <div className="animate-pulse h-10 bg-gray-200 rounded-md"></div>
-          ) : (
-            <select
-              value={componentId}
-              onChange={handleComponentChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">-- เลือกองค์ประกอบ --</option>
-              {Array.isArray(components) && components.length > 0 ? (
-                [...components]
-                  .filter(item => item.component_id) // กรองเฉพาะรายการที่มี component_id
-                  .sort(sortComponents)
-                  .map((item) => (
-                    <option
-                      key={item.id}
-                      value={item.id}
-                    >
-                      {item.component_id} {item.quality_name ? `- ${item.quality_name}` : ''}
-                    </option>
-                  ))
+        <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 mb-4">
+          <div className="flex items-center justify-between mb-3">
+            <label className="block text-sm font-bold text-blue-800 uppercase">
+              เลือกองค์ประกอบจากแม่แบบ
+            </label>
+
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              {loading ? (
+                <div className="animate-pulse h-10 bg-gray-200 rounded-md"></div>
               ) : (
-                <option value="" disabled>ไม่พบข้อมูลองค์ประกอบ</option>
+                <select
+                  value={localTemplateId}
+                  onChange={handleComponentChange}
+                  className="w-full px-3 py-2 border border-blue-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium mb-4"
+                >
+                  <option value="">-- ไม่ใช้แม่แบบ (กรอกข้อมูลเองด้านล่าง) --</option>
+                  {Array.isArray(components) && components.length > 0 ? (
+                    [...components]
+                      .filter(item => item.component_id)
+                      .sort(sortComponents)
+                      .map((item) => (
+                        <option
+                          key={item.id}
+                          value={item.id}
+                        >
+                          {item.component_id}: {item.quality_name}
+                        </option>
+                      ))
+                  ) : (
+                    <option value="" disabled>ไม่มีข้อมูลแม่แบบ (กรุณาเพิ่มก่อน)</option>
+                  )}
+                </select>
               )}
-            </select>
+
+
+            </div>
+          </div>
+
+          {showMasterForm && (
+            <MasterComponentForm
+              item={editingMaster}
+              programs={programs}
+              rounds={rounds}
+              onSubmit={handleSaveMaster}
+              onCancel={() => { setShowMasterForm(false); setEditingMaster(null); }}
+            />
           )}
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            ชื่อองค์ประกอบคุณภาพ
-          </label>
-          <input
-            type="text"
-            value={selectedComponent ? (selectedComponent.quality_name || '') : qualityName}
-            onChange={(e) => setQualityName(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-100"
-            placeholder={selectedComponent ? '' : 'ชื่อองค์ประกอบจะถูกเติมให้อัตโนมัติเมื่อเลือกจากรายการด้านบน'}
-            readOnly
-            required
-          />
-        </div>
+
 
         <div className="flex gap-4">
           <button

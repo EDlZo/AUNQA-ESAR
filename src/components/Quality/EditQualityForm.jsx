@@ -18,7 +18,7 @@ export default function EditQualityForm({ item, onSave, onCancel }) {
     e.preventDefault();
     if (!qualityName || !componentId) return;
 
-    const updatedItem = { ...item, qualityName, componentId };
+    const updatedItem = { ...item, quality_name: qualityName, component_id: componentId };
 
     setIsVisible(false); // เริ่ม animation ปิด
     setTimeout(async () => {

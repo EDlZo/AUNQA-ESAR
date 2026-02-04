@@ -9,6 +9,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [components, setComponents] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [activeYear, setActiveYear] = useState(null);
   const [viewComponent, setViewComponent] = useState(null);
   const [viewIndicators, setViewIndicators] = useState([]);
   const [componentIndicatorsCount, setComponentIndicatorsCount] = useState({}); // componentId -> count of main indicators
@@ -29,13 +30,23 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     setSelectedProgram(null);
     setViewComponent(null);
     setViewIndicators([]);
+
+    // Fetch active round
+    fetch(`${BASE_URL}/api/rounds`)
+      .then(res => res.json())
+      .then(data => {
+        const active = data.find(r => r.is_active);
+        if (active) setActiveYear(active.year);
+        else if (data.length > 0) setActiveYear(data[0].year);
+      })
+      .catch(err => console.error('Failed to load rounds', err));
   }, []);
 
   useEffect(() => {
     if (selectedProgram) {
       fetchAllCommitteeData();
     }
-  }, [selectedProgram]);
+  }, [selectedProgram, activeYear]);
 
 
   // ตั้งค่า initial values เมื่อเลือกตัวบ่งชี้เพื่อประเมิน
@@ -54,7 +65,9 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram.majorName || selectedProgram.major_name;
-      const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
+      const params = { session_id: sessionId, major_name: major };
+      if (activeYear) params.year = activeYear;
+      const qs = new URLSearchParams(params).toString();
 
       console.log(`[BULK] Fetching committee data bundle for ${major}`);
       const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
@@ -90,22 +103,39 @@ export default function CommitteeEvaluationPage({ currentUser }) {
         });
         setCommitteeMap(commMap);
 
-        // Group indicators by component_id
+        // Group indicators by component_id (Agnostic mapping)
         const indMap = {};
         indicators.forEach(ind => {
           const cid = String(ind.component_id);
+          // Key by whatever is provided (Logical ID or Firestore ID)
           if (!indMap[cid]) indMap[cid] = [];
-          indMap[cid].push(ind);
+          if (!indMap[cid].some(existing => existing.id === ind.id)) {
+            indMap[cid].push(ind);
+          }
         });
+
+        // To be safe, also ensure we map by Firestore ID if indicators use logical ID
+        components.forEach(comp => {
+          const firestoreId = String(comp.id);
+          const logicalId = String(comp.component_id);
+
+          if (!indMap[firestoreId] && indMap[logicalId]) {
+            indMap[firestoreId] = indMap[logicalId];
+          } else if (indMap[firestoreId] && !indMap[logicalId]) {
+            indMap[logicalId] = indMap[firestoreId];
+          }
+        });
+
         setAllIndicatorsMap(indMap);
 
-        // Count main indicators per component
+        // Count main indicators per component (ID-agnostic)
         const countMap = {};
         components.forEach(comp => {
-          const mainCount = indicators.filter(ind =>
-            String(ind?.component_id) === String(comp.id) &&
-            !String(ind?.sequence ?? '').includes('.')
-          ).length;
+          const mainCount = indicators.filter(ind => {
+            const indCid = String(ind?.component_id);
+            const matches = (indCid === String(comp.id) || indCid === String(comp.component_id));
+            return matches && !String(ind?.sequence ?? '').includes('.');
+          }).length;
           countMap[comp.id] = mainCount;
         });
         setComponentIndicatorsCount(countMap);
@@ -133,6 +163,17 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     }
   };
 
+  // Helper for ID-agnostic lookup
+  const getIndicatorData = (indicator, dataMap) => {
+    if (!indicator) return {};
+    return (
+      dataMap[String(indicator.id)] ||
+      dataMap[String(indicator.indicator_id)] ||
+      dataMap[String(indicator.sequence)] ||
+      {}
+    );
+  };
+
   const handleViewIndicators = async (component) => {
     setViewComponent(component);
     const compId = String(component.id);
@@ -147,8 +188,12 @@ export default function CommitteeEvaluationPage({ currentUser }) {
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const major = selectedProgram.majorName || selectedProgram.major_name;
+      const params = { session_id: sessionId, major_name: major };
+      if (activeYear) params.year = activeYear;
+      const qs = new URLSearchParams(params).toString();
+
       const response = await fetch(
-        `${BASE_URL}/api/indicators-by-component/${encodeURIComponent(component.id)}?session_id=${sessionId}&major_name=${encodeURIComponent(major)}`
+        `${BASE_URL}/api/indicators-by-component/${encodeURIComponent(component.id)}?${qs}`
       );
       if (response.ok) {
         const data = await response.json();
@@ -189,6 +234,7 @@ export default function CommitteeEvaluationPage({ currentUser }) {
       const body = {
         session_id: sessionId,
         major_name: major,
+        year: activeYear, // Add year to committee evaluation
         indicator_id: evaluatingIndicator.id,
         committee_score: editorScore,
         strengths: editorStrengths,
@@ -684,8 +730,8 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loading ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center">
-                        <div className="inline-flex items-center text-sm text-gray-500">
+                      <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                        <div className="inline-flex items-center text-sm">
                           <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -696,9 +742,12 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                     </tr>
                   ) : components.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-12 text-center text-gray-400">
-                        <Search className="mx-auto h-12 w-12 text-gray-300 mb-2" />
-                        <p>ยังไม่มีองค์ประกอบ</p>
+                      <td colSpan={4} className="px-4 py-16 text-center text-gray-400">
+                        <div className="bg-gray-50/50 p-8 flex flex-col items-center">
+                          <Search className="h-14 w-14 text-gray-200 mb-4" />
+                          <p className="text-gray-500 font-medium text-lg">ไม่พบข้อมูลองค์ประกอบคุณภาพ</p>
+                          <p className="text-gray-400 text-sm mt-1">กรุณากำหนดเกณฑ์และเพิ่มองค์ประกอบคุณภาพในปีกิจกรรมที่เลือก</p>
+                        </div>
                       </td>
                     </tr>
                   ) : (
@@ -777,71 +826,74 @@ export default function CommitteeEvaluationPage({ currentUser }) {
                   ) : viewIndicators.length === 0 ? (
                     <tr><td colSpan={7} className="text-center py-6 text-gray-400">ยังไม่มีตัวบ่งชี้</td></tr>
                   ) : (
-                    viewIndicators
-                      // แสดงเฉพาะตัวบ่งชี้ที่มีผลการดำเนินการแล้ว (อิงจากหน้าผลการดำเนินการ)
-                      .filter((ind) => rows.some(r => String(r.indicator_id) === String(ind.id)))
-                      .map((ind) => {
-                        const actual = rows.find(r => String(r.indicator_id) === String(ind.id));
-                        const hasCommitteeScore = !!committeeMap[String(ind.id)]?.committee_score;
+                    viewIndicators.map((ind) => {
+                      const actual = rows.find(r =>
+                        String(r.indicator_id) === String(ind.id) ||
+                        String(r.indicator_id) === String(ind.indicator_id) ||
+                        String(r.indicator_id) === String(ind.sequence)
+                      );
+                      const crit = getIndicatorData(ind, criteriaMap);
+                      const comm = getIndicatorData(ind, committeeMap);
+                      const hasCommitteeScore = !!comm?.committee_score;
 
-                        return (
-                          <tr key={ind.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-4 text-center border-r border-gray-200">
-                              {String(ind.sequence).includes('.') ? (
-                                <span className="text-sm font-medium text-gray-600">{ind.sequence}</span>
-                              ) : (
-                                <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-xs font-bold shadow-sm">
-                                  {ind.sequence}
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-4 py-4 text-sm text-left border-r border-gray-200">
-                              <div className={(String(ind.sequence).includes('.') ? 'font-normal' : 'font-bold') + ' text-gray-900'}>
-                                {ind.indicator_name}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
-                              {criteriaMap[String(ind.id)]?.target_value || '-'}
-                            </td>
-                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
-                              {criteriaMap[String(ind.id)]?.score || '-'}
-                            </td>
-                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200 font-medium">
-                              {actual ? `${actual.operation_score ?? '-'}` : '-'}
-                            </td>
-                            <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
-                              {actual && actual.goal_achievement ? (
-                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${actual.goal_achievement === 'บรรลุ' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                                  }`}>
-                                  {actual.goal_achievement}
-                                </span>
-                              ) : '-'}
-                            </td>
-                            <td className="px-4 py-4 text-center">
-                              {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
-                                <button
-                                  onClick={() => setEvaluatingIndicator(ind)}
-                                  className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all ${hasCommitteeScore
-                                    ? 'bg-green-600 text-white hover:bg-green-700'
-                                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                                    }`}
-                                >
-                                  {hasCommitteeScore ? <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> : <ClipboardCheck className="w-3.5 h-3.5 mr-1" />}
-                                  ประเมินผล
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => setEvaluatingIndicator(ind)}
-                                  className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-all"
-                                >
-                                  <Search className="w-3.5 h-3.5 mr-1" />
-                                  รายละเอียด
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
+                      return (
+                        <tr key={ind.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-4 text-center border-r border-gray-200">
+                            {String(ind.sequence).includes('.') ? (
+                              <span className="text-sm font-medium text-gray-600">{ind.sequence}</span>
+                            ) : (
+                              <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-xs font-bold shadow-sm">
+                                {ind.sequence}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-sm text-left border-r border-gray-200">
+                            <div className={(String(ind.sequence).includes('.') ? 'font-normal' : 'font-bold') + ' text-gray-900'}>
+                              {ind.indicator_name}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
+                            {crit?.target_value || '-'}
+                          </td>
+                          <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
+                            {crit?.score || '-'}
+                          </td>
+                          <td className="px-4 py-4 text-center text-sm border-r border-gray-200 font-medium">
+                            {actual ? `${actual.operation_score ?? '-'}` : '-'}
+                          </td>
+                          <td className="px-4 py-4 text-center text-sm border-r border-gray-200">
+                            {actual && actual.goal_achievement ? (
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${actual.goal_achievement === 'บรรลุ' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                }`}>
+                                {actual.goal_achievement}
+                              </span>
+                            ) : '-'}
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            {['system_admin', 'evaluator', 'external_evaluator'].includes(currentUser?.role) ? (
+                              <button
+                                onClick={() => setEvaluatingIndicator(ind)}
+                                className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md shadow-sm transition-all ${hasCommitteeScore
+                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  : 'bg-blue-600 text-white hover:bg-blue-700'
+                                  }`}
+                              >
+                                {hasCommitteeScore ? <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> : <ClipboardCheck className="w-3.5 h-3.5 mr-1" />}
+                                ประเมินผล
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setEvaluatingIndicator(ind)}
+                                className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 shadow-sm transition-all"
+                              >
+                                <Search className="w-3.5 h-3.5 mr-1" />
+                                รายละเอียด
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

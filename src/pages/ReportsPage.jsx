@@ -25,6 +25,22 @@ export default function ReportsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [rounds, setRounds] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
+
+  // Fetch rounds on mount
+  useEffect(() => {
+    fetch('/api/rounds')
+      .then(res => res.json())
+      .then(data => {
+        setRounds(data);
+        const active = data.find(r => r.is_active);
+        if (active) setSelectedYear(active.year);
+        else if (data.length > 0) setSelectedYear(data[0].year);
+        else setSelectedYear('legacy');
+      })
+      .catch(err => console.error('Failed to load rounds', err));
+  }, []);
 
   // ดึงข้อมูลรายงานจาก API จริง
   const fetchReports = async () => {
@@ -35,19 +51,30 @@ export default function ReportsPage() {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const sel = localStorage.getItem('selectedProgramContext');
       const major = sel ? (JSON.parse(sel)?.majorName || '') : '';
-      const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
 
-      // ดึงข้อมูลการประเมินทั้งหมด
+      let qs = '';
+      // Use selectedYear if available
+      qs = new URLSearchParams({
+        year: selectedYear,
+        major_name: major,
+        session_id: sessionId // Optional, might override year if backend logic prioritizes it. I should fix backend.
+      }).toString();
+
+      // ดึงข้อมูลการประเมิน
       const evaluationsResponse = await fetch(`/api/evaluations/history?${qs}`);
       const evaluationsData = await evaluationsResponse.json();
 
-      // ดึงข้อมูลตัวบ่งชี้
+      // ดึงข้อมูลตัวบ่งชี้ (อาจต้องดึงทั้งหมดถ้าระบุปี)
       const indicatorsResponse = await fetch(`/api/quality-components?${qs}`);
       const indicatorsData = await indicatorsResponse.json();
 
       // สร้างรายงานจากข้อมูลจริง
       const reportsData = evaluationsData.map((evaluation, index) => {
-        const indicator = indicatorsData.find(ind => ind.id === evaluation.indicator_id);
+        const indicator = indicatorsData.find(ind =>
+          String(ind.id) === String(evaluation.indicator_id) ||
+          String(ind.indicator_id) === String(evaluation.indicator_id) ||
+          String(ind.sequence) === String(evaluation.indicator_id)
+        );
         const score = parseFloat(evaluation.score) || 0;
 
         // ดึงหัวข้อ AUN-QA แบบเต็ม
@@ -125,7 +152,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     fetchReports();
-  }, []);
+  }, [selectedYear]);
 
   // กำหนดประเภทรายงานจากข้อมูลจริง
   const getReportType = (qualityType) => {
@@ -409,6 +436,16 @@ export default function ReportsPage() {
               <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'กำลังรีเฟรช...' : 'รีเฟรช'}
             </button>
+            <select
+              className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(e.target.value)}
+            >
+              {rounds.map(r => (
+                <option key={r.id} value={r.year}>{r.name} {r.is_active ? '(Active)' : ''}</option>
+              ))}
+              <option value="legacy">ข้อมูลเก่า (Legacy)</option>
+            </select>
             <button
               onClick={handleExportExcel}
               className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"

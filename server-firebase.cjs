@@ -129,97 +129,26 @@ async function getData(collection, filters = {}) {
       // Apply filters
       Object.entries(filters).forEach(([key, value]) => {
         if (value !== undefined && value !== null && value !== '') {
-          // Type handling for specific fields
-          let finalValue = value;
-          if ((key === 'component_id' || key === 'session_id' || key === 'indicator_id') && typeof value === 'string' && !isNaN(value)) {
-            // For component_id we definitely want number
-            // For session_id and indicator_id, we usually want string but some legacy might be numbers.
-            // But we can only pick one. Let's stick with String for IDs as per our recent findings.
-            // If it's component_id, force Number.
-            if (key === 'component_id') finalValue = Number(value);
-            else finalValue = String(value);
+          // Optimization: If it's an ID field, search for both String and Number versions in one query
+          if (key === 'session_id' || key === 'indicator_id' || key === 'component_id') {
+            const possibleValues = new Set();
+            possibleValues.add(String(value));
+            if (!isNaN(value)) possibleValues.add(Number(value));
+
+            const valuesArray = Array.from(possibleValues);
+            if (valuesArray.length > 1) {
+              query = query.where(key, 'in', valuesArray);
+            } else {
+              query = query.where(key, '==', valuesArray[0]);
+            }
+          } else {
+            query = query.where(key, '==', value);
           }
-          query = query.where(key, '==', finalValue);
         }
       });
 
       const snapshot = await query.get();
-      let results = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
-      // Auto-retry/Smart Resolution if no results
-      if (results.length === 0) {
-        console.log(`🔍 [getData] 0 results for ${normalizedCollection}, attempting resolution...`);
-
-        let retryNeeded = false;
-        let retryFilters = { ...filters };
-
-        // 1. Try Smart ID Resolution for indicator_id in evaluations_actual
-        if (normalizedCollection === 'evaluations_actual' && filters.indicator_id) {
-          try {
-            const inputId = filters.indicator_id;
-            // Case A: Input is Firestore Doc ID, database uses Legacy ID
-            const indDoc = await db.collection('indicators').doc(String(inputId)).get();
-            if (indDoc.exists && indDoc.data().id) {
-              console.log(`🧠 [SmartID] Resolved Firestore ID ${inputId} to Legacy ID ${indDoc.data().id}`);
-              retryFilters.indicator_id = String(indDoc.data().id);
-              retryNeeded = true;
-            } else {
-              // Case B: Input is Legacy ID, database uses Firestore Doc ID (Try to find Doc ID)
-              const indSnap = await db.collection('indicators').where('id', '==', isNaN(inputId) ? -1 : Number(inputId)).get();
-              if (!indSnap.empty) {
-                console.log(`🧠 [SmartID] Resolved Legacy ID ${inputId} to Firestore ID ${indSnap.docs[0].id}`);
-                retryFilters.indicator_id = indSnap.docs[0].id;
-                retryNeeded = true;
-              }
-            }
-          } catch (e) { console.warn('[SmartID] Resolution error:', e.message); }
-        }
-
-        // If resolution helped, try searching again with resolved IDs but ORIGINAL types for others
-        if (retryNeeded) {
-          console.log(`🔄 Retrying with Smart ID:`, retryFilters);
-          let retryQuery = db.collection(normalizedCollection);
-          Object.entries(retryFilters).forEach(([key, val]) => {
-            if (val !== undefined && val !== null && val !== '') {
-              // Preserve type for non-ID fields if they exist
-              retryQuery = retryQuery.where(key, '==', val);
-            }
-          });
-          const retrySnapshot = await retryQuery.get();
-          results = retrySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          if (results.length > 0) return results;
-        }
-
-        // 2. If still no results, try aggressive type-swapping for all ID fields
-        console.log(`🔄 Attempting type-swapping retry...`);
-        retryFilters = { ...filters };
-        let typeRetryNeeded = false;
-        Object.entries(filters).forEach(([key, value]) => {
-          if ((key === 'session_id' || key === 'indicator_id') && value !== undefined) {
-            // If currently string, try number; if number, try string
-            if (typeof value === 'string' && !isNaN(value) && value !== '') {
-              retryFilters[key] = Number(value);
-              typeRetryNeeded = true;
-            } else if (typeof value === 'number') {
-              retryFilters[key] = String(value);
-              typeRetryNeeded = true;
-            }
-          }
-        });
-
-        if (typeRetryNeeded) {
-          let typeQuery = db.collection(normalizedCollection);
-          Object.entries(retryFilters).forEach(([key, val]) => {
-            if (val !== undefined && val !== null && val !== '') {
-              typeQuery = typeQuery.where(key, '==', val);
-            }
-          });
-          const typeSnapshot = await typeQuery.get();
-          results = typeSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        }
-      }
-
-      return results;
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
       console.error(`Error fetching ${normalizedCollection}:`, error);
       return [];
@@ -504,13 +433,23 @@ app.get('/api/quality-components', async (req, res) => {
       return res.json(components);
     }
 
-    const { session_id, major_name } = req.query || {};
+    const { session_id, major_name, year } = req.query || {};
 
     // Use simple query without complex ordering to avoid index requirements
     let query = db.collection('quality_components');
 
     if (major_name) {
       query = query.where('major_name', '==', major_name);
+    }
+
+    // Add year filter
+    if (year) {
+      if (year === 'legacy') {
+        // Hard to filter for missing field without composite index, maybe skip or filter in memory?
+        // For now, assume legacy data has no year field.
+      } else {
+        query = query.where('year', '==', year);
+      }
     }
 
     // Remove ordering to avoid index requirement
@@ -540,13 +479,14 @@ app.get('/api/quality-components', async (req, res) => {
 
 app.post('/api/quality-components', async (req, res) => {
   try {
-    const { quality_name, component_id, session_id, major_name } = req.body;
+    const { quality_name, component_id, session_id, major_name, year } = req.body;
 
     const result = await addData('qualityComponents', {
       quality_name,
       component_id: parseInt(component_id),
       session_id,
-      major_name
+      major_name,
+      year: year || null
     });
 
     if (result.success) {
@@ -565,7 +505,77 @@ app.delete('/api/quality-components/:id', async (req, res) => {
     const { id } = req.params;
     if (!db) return res.json({ success: true }); // Mock success
 
-    await db.collection('quality_components').doc(id).delete();
+    // 1. Get the component data first to find its component_id
+    const docRef = db.collection('quality_components').doc(id);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return res.status(404).json({ error: 'ไม่พบองค์ประกอบคุณภาพ' });
+    }
+
+    const { component_id, major_name, year } = docSnap.data();
+
+    // 2. Delete associated indicators and ALL evaluation data
+    const batch = db.batch();
+
+    if (component_id || id) {
+      const indicatorsRef = db.collection('indicators');
+      const evalRef = db.collection('evaluations');
+      const evalActualRef = db.collection('evaluations_actual');
+      const commEvalRef = db.collection('committee_evaluations');
+
+      let indicatorsToDeleteDocs = [];
+
+      // Find indicators by logical component_id OR Firestore Doc ID
+      if (component_id) {
+        const q1 = await indicatorsRef.where('component_id', '==', component_id).where('major_name', '==', major_name).get();
+        q1.forEach(doc => indicatorsToDeleteDocs.push(doc));
+      }
+      if (id) {
+        const q2 = await indicatorsRef.where('component_id', '==', id).where('major_name', '==', major_name).get();
+        q2.forEach(doc => indicatorsToDeleteDocs.push(doc));
+      }
+
+      // De-duplicate indicator documents
+      const uniqueIndicatorDocs = [];
+      const seenPaths = new Set();
+      indicatorsToDeleteDocs.forEach(doc => {
+        if (!seenPaths.has(doc.ref.path)) {
+          seenPaths.add(doc.ref.path);
+          uniqueIndicatorDocs.push(doc);
+        }
+      });
+
+      let totalIndicatorDeletes = 0;
+      let totalEvalDeletes = 0;
+
+      for (const indDoc of uniqueIndicatorDocs) {
+        const indicatorId = indDoc.id;
+
+        // Delete the indicator itself
+        batch.delete(indDoc.ref);
+        totalIndicatorDeletes++;
+
+        // Delete related evaluations for this specific indicator
+        const e1 = await evalRef.where('indicator_id', '==', indicatorId).get();
+        e1.forEach(doc => { batch.delete(doc.ref); totalEvalDeletes++; });
+
+        const e2 = await evalActualRef.where('indicator_id', '==', indicatorId).get();
+        e2.forEach(doc => { batch.delete(doc.ref); totalEvalDeletes++; });
+
+        const e3 = await commEvalRef.where('indicator_id', '==', indicatorId).get();
+        e3.forEach(doc => { batch.delete(doc.ref); totalEvalDeletes++; });
+      }
+
+      // Finally delete the component itself
+      batch.delete(docRef);
+
+      await batch.commit();
+      console.log(`[CASCADE DELETE] Component ${id} removed. Indicators: ${totalIndicatorDeletes}, Evaluations: ${totalEvalDeletes}`);
+    } else {
+      await docRef.delete();
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting quality component:', error);
@@ -600,10 +610,11 @@ app.patch('/api/quality-components/:id', async (req, res) => {
 // ================= INDICATORS =================
 app.get('/api/indicators', async (req, res) => {
   try {
-    const { session_id, major_name, component_id } = req.query;
+    const { session_id, major_name, component_id, year } = req.query;
     const filters = {};
     if (component_id) filters.component_id = component_id;
     if (major_name) filters.major_name = major_name;
+    if (year) filters.year = year;
 
     const indicators = await getData('indicators', filters);
 
@@ -624,12 +635,15 @@ app.get('/api/indicators', async (req, res) => {
 app.get('/api/indicators-by-component/:componentId', async (req, res) => {
   try {
     const { componentId } = req.params;
-    const { session_id, major_name } = req.query;
+    const { session_id, major_name, year } = req.query;
 
-    const indicators = await getData('indicators', {
+    const filters = {
       component_id: componentId,
       major_name
-    });
+    };
+    if (year) filters.year = year;
+
+    const indicators = await getData('indicators', filters);
 
     // Sort indicators by sequence numerically
     indicators.sort((a, b) => {
@@ -647,7 +661,7 @@ app.get('/api/indicators-by-component/:componentId', async (req, res) => {
 
 app.post('/api/indicators', async (req, res) => {
   try {
-    const { component_id, sequence, indicator_type, criteria_type, indicator_name, data_source, session_id, major_name } = req.body;
+    const { component_id, sequence, indicator_type, criteria_type, indicator_name, data_source, session_id, major_name, year } = req.body;
 
     const result = await addData('indicators', {
       component_id: parseInt(component_id),
@@ -657,7 +671,8 @@ app.post('/api/indicators', async (req, res) => {
       indicator_name,
       data_source,
       session_id,
-      major_name
+      major_name,
+      year: year || null
     });
 
     if (result.success) {
@@ -681,6 +696,184 @@ app.delete('/api/indicators/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting indicator:', error);
     res.status(500).json({ error: 'ไม่สามารถลบตัวบ่งชี้ได้', details: error.message });
+  }
+});
+
+app.patch('/api/indicators/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
+
+    // Ensure component_id remains integer if present
+    if (updateData.component_id) {
+      updateData.component_id = parseInt(updateData.component_id);
+    }
+
+    if (!db) {
+      return res.json({ success: true });
+    }
+
+    await db.collection('indicators').doc(id).update(updateData);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating indicator:', error);
+    res.status(500).json({ error: 'ไม่สามารถแก้ไขตัวบ่งชี้ได้', details: error.message });
+  }
+});
+
+// ================= MASTER CRITERIA TEMPLATES =================
+
+// Master Quality Components
+app.get('/api/master-quality-components', async (req, res) => {
+  try {
+    if (!db) return res.json([]);
+    const snapshot = await db.collection('master_quality_components').orderBy('component_id').get();
+    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(items);
+  } catch (error) {
+    console.error('Error fetching master components:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลแม่แบบองค์ประกอบได้' });
+  }
+});
+
+app.post('/api/master-quality-components', async (req, res) => {
+  try {
+    const data = { ...req.body, created_at: admin.firestore.FieldValue.serverTimestamp() };
+    if (data.component_id) data.component_id = parseInt(data.component_id);
+
+    if (!db) return res.json({ id: Date.now(), ...data });
+    const docRef = await db.collection('master_quality_components').add(data);
+    res.json({ id: docRef.id, ...data });
+  } catch (error) {
+    console.error('Error creating master component:', error);
+    res.status(500).json({ error: 'ไม่สามารถสร้างแม่แบบองค์ประกอบได้' });
+  }
+});
+
+app.patch('/api/master-quality-components/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = { ...req.body };
+    if (data.component_id) data.component_id = parseInt(data.component_id);
+    delete data.id;
+
+    if (!db) return res.json({ success: true });
+    await db.collection('master_quality_components').doc(id).update(data);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating master component:', error);
+    res.status(500).json({ error: 'ไม่สามารถแก้ไขแม่แบบองค์ประกอบได้' });
+  }
+});
+
+app.delete('/api/master-quality-components/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!db) return res.json({ success: true });
+    await db.collection('master_quality_components').doc(id).delete();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting master component:', error);
+    res.status(500).json({ error: 'ไม่สามารถลบแม่แบบองค์ประกอบได้' });
+  }
+});
+
+// Master Indicators
+app.get('/api/master-indicators', async (req, res) => {
+  try {
+    if (!db) return res.json([]);
+    const snapshot = await db.collection('master_indicators').get();
+    const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+    // Sort by sequence numerically
+    items.sort((a, b) => {
+      const seqA = String(a.sequence || '');
+      const seqB = String(b.sequence || '');
+      return seqA.localeCompare(seqB, undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    res.json(items);
+  } catch (error) {
+    console.error('Error fetching master indicators:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลแม่แบบตัวบ่งชี้ได้' });
+  }
+});
+
+app.post('/api/master-indicators', async (req, res) => {
+  try {
+    const data = { ...req.body, created_at: admin.firestore.FieldValue.serverTimestamp() };
+    if (data.component_id) data.component_id = parseInt(data.component_id);
+
+    if (!db) return res.json({ id: Date.now(), ...data });
+    const docRef = await db.collection('master_indicators').add(data);
+    res.json({ id: docRef.id, ...data });
+  } catch (error) {
+    console.error('Error creating master indicator:', error);
+    res.status(500).json({ error: 'ไม่สามารถสร้างแม่แบบตัวบ่งชี้ได้' });
+  }
+});
+
+app.post('/api/master-indicators/bulk', async (req, res) => {
+  try {
+    const items = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: 'ข้อมูลต้องเป็นอาเรย์' });
+    }
+
+    const results = [];
+    if (!db) {
+      return res.json(items.map((item, index) => ({ id: Date.now() + index, ...item })));
+    }
+
+    const batch = db.batch();
+    const collection = db.collection('master_indicators');
+
+    for (const item of items) {
+      const docRef = collection.doc();
+      const data = {
+        ...item,
+        created_at: admin.firestore.FieldValue.serverTimestamp()
+      };
+      if (data.component_id) data.component_id = parseInt(data.component_id);
+      delete data.id; // Ensure no existing ID is saved
+
+      batch.set(docRef, data);
+      results.push({ id: docRef.id, ...data });
+    }
+
+    await batch.commit();
+    res.json(results);
+  } catch (error) {
+    console.error('Error creating bulk master indicators:', error);
+    res.status(500).json({ error: 'ไม่สามารถสร้างแม่แบบตัวบ่งชี้แบบกลุ่มได้' });
+  }
+});
+
+app.patch('/api/master-indicators/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = { ...req.body };
+    if (data.component_id) data.component_id = parseInt(data.component_id);
+    delete data.id;
+
+    if (!db) return res.json({ success: true });
+    await db.collection('master_indicators').doc(id).update(data);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating master indicator:', error);
+    res.status(500).json({ error: 'ไม่สามารถแก้ไขแม่แบบตัวบ่งชี้ได้' });
+  }
+});
+
+app.delete('/api/master-indicators/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!db) return res.json({ success: true });
+    await db.collection('master_indicators').doc(id).delete();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting master indicator:', error);
+    res.status(500).json({ error: 'ไม่สามารถลบแม่แบบตัวบ่งชี้ได้' });
   }
 });
 
@@ -718,18 +911,76 @@ app.get('/api/bulk/session-summary', async (req, res) => {
       });
     }
 
-    const { session_id, major_name } = req.query;
+    const { session_id, major_name, year } = req.query;
     if (!major_name) return res.status(400).json({ error: 'กรุณาระบุ major_name' });
 
-    console.log(`[BULK] Fetching session summary for major: ${major_name}, session: ${session_id}`);
+    console.log(`[BULK] Fetching session summary for major: ${major_name}, session: ${session_id}, year: ${year}`);
 
-    // Parallel fetch using Promise.all
+    // Determine target session IDs
+    let targetSessionIds = [];
+    if (session_id) {
+      targetSessionIds = [String(session_id)];
+    } else if (year) {
+      // Find sessions for this year
+      // Note: For legacy data (no round_year), we might need special handling if year='legacy'
+      // But for now, let's assume standard year filtering
+      let sessionQuery = db.collection('assessment_sessions').where('major_name', '==', major_name);
+
+      if (year === 'legacy') {
+        // Hard to query for missing field efficiently without index, 
+        // but assuming small dataset or we rely on client to know legacy session ID.
+        // Actually, usually users want "Current Year".
+        // Let's simplified: 
+        // If year is passed, we filter by round_year.
+        sessionQuery = sessionQuery.where('round_year', '==', year);
+      }
+
+      const sessionSnap = await sessionQuery.get();
+      targetSessionIds = sessionSnap.docs.map(doc => doc.id);
+    }
+
+    // Prepare queries
+    let compQuery = db.collection('quality_components').where('major_name', '==', major_name);
+    let indQuery = db.collection('indicators').where('major_name', '==', major_name);
+
+    // Broaden evaluation queries to use year if available
+    let evalQuery = db.collection('evaluations').where('major_name', '==', major_name);
+    let evalActualQuery = db.collection('evaluations_actual').where('major_name', '==', major_name);
+    let commQuery = db.collection('committee_evaluations').where('major_name', '==', major_name);
+
+    if (year) {
+      compQuery = compQuery.where('year', '==', year);
+      indQuery = indQuery.where('year', '==', year);
+
+      // If we have sessions, we can filter by session OR year. 
+      // But filtering by year is more direct and covers orphans.
+      // Refinement: Try to fetch by BOTH to catch records that might have missed the 'year' field
+      // during the brief interval between fixes but have a valid session_id.
+      evalQuery = evalQuery.where('year', '==', year);
+      evalActualQuery = evalActualQuery.where('year', '==', year);
+      commQuery = commQuery.where('year', '==', year);
+    } else if (targetSessionIds.length > 0) {
+      // Fallback to session_id for non-year queries
+      evalQuery = evalQuery.where('session_id', 'in', targetSessionIds);
+      evalActualQuery = evalActualQuery.where('session_id', 'in', targetSessionIds);
+      commQuery = commQuery.where('session_id', 'in', targetSessionIds);
+    } else if (session_id) {
+      evalQuery = evalQuery.where('session_id', '==', String(session_id));
+      evalActualQuery = evalActualQuery.where('session_id', '==', String(session_id));
+      commQuery = commQuery.where('session_id', '==', String(session_id));
+    } else {
+      // No criteria, return empty for evals
+      evalQuery = null;
+      evalActualQuery = null;
+      commQuery = null;
+    }
+
     const [compSnap, evalSnap, evalActualSnap, commSnap, indSnap] = await Promise.all([
-      db.collection('quality_components').where('major_name', '==', major_name).get(),
-      session_id ? db.collection('evaluations').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
-      session_id ? db.collection('evaluations_actual').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
-      session_id ? db.collection('committee_evaluations').where('major_name', '==', major_name).where('session_id', '==', String(session_id)).get() : Promise.resolve({ docs: [] }),
-      db.collection('indicators').where('major_name', '==', major_name).get()
+      compQuery.get(),
+      evalQuery ? evalQuery.get() : Promise.resolve({ docs: [] }),
+      evalActualQuery ? evalActualQuery.get() : Promise.resolve({ docs: [] }),
+      commQuery ? commQuery.get() : Promise.resolve({ docs: [] }),
+      indQuery.get()
     ]);
 
     const components = compSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -1002,6 +1253,156 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// ================= USER MANAGEMENT =================
+// Get all users
+app.get('/api/users', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const { role_id } = req.query;
+    let query = db.collection('users');
+
+    if (role_id) {
+      query = query.where('role_id', '==', parseInt(role_id));
+    }
+
+    const snapshot = await query.get();
+    const users = snapshot.docs.map(doc => {
+      const data = doc.data();
+      // Don't send passwords back
+      delete data.password;
+      return { id: doc.id, ...data };
+    });
+
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลผู้ใช้งานได้', details: error.message });
+  }
+});
+
+// Create new user
+app.post('/api/users', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const { email, password, role_id, first_name, last_name, faculty_id, major_id, major_name } = req.body;
+
+    // Basic validation
+    // Require first_name and last_name now, or at least one of them? The user requested separation.
+    // Let's require both or just names.
+    if (!email || !password || !role_id || !first_name || !last_name) {
+      return res.status(400).json({ success: false, message: 'ข้อมูลไม่ครบถ้วน (Email, Password, Role, ชื่อ, นามสกุล จำเป็น)' });
+    }
+
+    // Check if user already exists
+    const existingUser = await db.collection('users').where('email', '==', email).get();
+    if (!existingUser.empty) {
+      return res.status(400).json({ success: false, message: 'ผู้ใช้งานนี้มีอยู่ในระบบแล้ว' });
+    }
+
+    const full_name = `${first_name} ${last_name}`.trim();
+
+    const userData = {
+      email,
+      password, // In a real app, hash this!
+      role_id: parseInt(role_id),
+      first_name,
+      last_name,
+      full_name, // Keep for backward compatibility
+      faculty_id: faculty_id || null,
+      major_id: major_id || null,
+      major_name: major_name || null,
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    const docRef = await db.collection('users').add(userData);
+    res.json({ success: true, id: docRef.id, message: 'สร้างผู้ใช้งานสำเร็จ' });
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ success: false, message: 'สร้างผู้ใช้งานไม่สำเร็จ', details: error.message });
+  }
+});
+
+// Update user
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const { id } = req.params;
+    const { email, password, role_id, first_name, last_name, full_name, faculty_id, major_id, major_name } = req.body;
+
+    const updateData = {};
+    if (email) updateData.email = email;
+    if (password) updateData.password = password; // Only update if provided
+    if (role_id) updateData.role_id = parseInt(role_id);
+
+    // Handle names
+    if (first_name || last_name) {
+      if (first_name) updateData.first_name = first_name;
+      if (last_name) updateData.last_name = last_name;
+
+      // If we have both new values, construct full_name.
+      // If only one, we might need to fetch existing to reconstruct, OR just trust client sends both or client sends correct full_name?
+      // Safest: Client sends updated full_name OR we fetch.
+      // For simplicity: If client sends first/last, we update them. 
+      // We also allow client to send full_name directly if they want (legacy support), but if first/last are present, we prioritize/sync them.
+
+      // Let's assume frontend sends all modified fields. 
+      // If first_name is changed, we update it.
+      // We should really update full_name too.
+      // Let's reconstruct full_name from the updateData + existing data if potential overlap?
+      // Actually, for PUT, usually the client has the full object state.
+
+      // If full_name is NOT provided but first/last ARE, we can't easily reconstruction without reading first.
+      // Optimization: Just update what is sent. 
+      // BUT logic elsewhere might rely on full_name.
+      // So let's construct full_name from first/last if provided together.
+      if (first_name && last_name) {
+        updateData.full_name = `${first_name} ${last_name}`.trim();
+      } else if (full_name) {
+        updateData.full_name = full_name;
+      }
+    } else if (full_name) {
+      updateData.full_name = full_name;
+    }
+
+    if (faculty_id !== undefined) updateData.faculty_id = faculty_id;
+    if (major_id !== undefined) updateData.major_id = major_id;
+    if (major_name !== undefined) updateData.major_name = major_name;
+
+    updateData.updated_at = admin.firestore.FieldValue.serverTimestamp();
+
+    await db.collection('users').doc(id).update(updateData);
+    res.json({ success: true, message: 'อัปเดตข้อมูลสำเร็จ' });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ success: false, message: 'อัปเดตข้อมูลไม่สำเร็จ', details: error.message });
+  }
+});
+
+// Delete user
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    if (!db) {
+      return res.status(500).json({ error: 'Firebase not initialized' });
+    }
+
+    const { id } = req.params;
+    await db.collection('users').doc(id).delete();
+    res.json({ success: true, message: 'ลบผู้ใช้งานสำเร็จ' });
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ success: false, message: 'ลบผู้ใช้งานไม่สำเร็จ', details: error.message });
+  }
+});
+
 // ================= INDICATORS =================
 app.get('/api/indicators/:id', async (req, res) => {
   try {
@@ -1080,40 +1481,22 @@ app.get('/api/indicators-by-component/:componentId', async (req, res) => {
       return res.status(500).json({ error: 'Firebase not initialized' });
     }
 
-    const { componentId } = req.params;
-    const { session_id, major_name } = req.query || {};
+    const possibleIds = new Set();
+    possibleIds.add(String(componentId));
+    if (!isNaN(componentId)) possibleIds.add(Number(componentId));
 
-    console.log(`🔍 Looking for indicators with component_id: ${componentId} (type: ${typeof componentId})`);
+    const idArray = Array.from(possibleIds);
+    let query = db.collection('indicators').where('component_id', 'in', idArray);
 
-    // Try both string and number versions of component_id
-    const queries = [
-      db.collection('indicators').where('component_id', '==', componentId),
-      db.collection('indicators').where('component_id', '==', parseInt(componentId)),
-      db.collection('indicators').where('component_id', '==', componentId.toString())
-    ];
-
-    let allIndicators = [];
-
-    for (const query of queries) {
-      try {
-        let currentQuery = query;
-
-        if (major_name) {
-          currentQuery = currentQuery.where('major_name', '==', major_name);
-        }
-
-        const snapshot = await currentQuery.get();
-        snapshot.forEach(doc => {
-          const data = { id: doc.id, ...doc.data() };
-          // Avoid duplicates
-          if (!allIndicators.find(ind => ind.id === data.id)) {
-            allIndicators.push(data);
-          }
-        });
-      } catch (queryError) {
-        console.log(`Query failed: ${queryError.message}`);
-      }
+    if (major_name) {
+      query = query.where('major_name', '==', major_name);
     }
+    if (year) {
+      query = query.where('year', '==', year);
+    }
+
+    const snapshot = await query.get();
+    const allIndicators = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
     // Sort in memory by sequence
     allIndicators.sort((a, b) => {
@@ -1195,6 +1578,7 @@ app.post('/api/bulk/indicators', async (req, res) => {
       const docRef = db.collection('indicators').doc();
       const docData = {
         ...item,
+        component_id: item.component_id ? Number(item.component_id) : item.component_id,
         created_at: timestamp
       };
       batch.set(docRef, docData);
@@ -1222,6 +1606,24 @@ app.post('/api/assessment-sessions', async (req, res) => {
       return res.status(400).json({ error: 'level_id จำเป็น' });
     }
 
+    // Fetch active round
+    let roundData = {};
+    try {
+      const roundSnap = await db.collection('rounds').where('is_active', '==', true).limit(1).get();
+      if (!roundSnap.empty) {
+        const r = roundSnap.docs[0].data();
+        roundData = {
+          round_id: roundSnap.docs[0].id,
+          round_year: r.year,
+          round_name: r.name
+        };
+      } else {
+        console.log('⚠️ No active round found when creating session.');
+      }
+    } catch (e) {
+      console.warn('Failed to fetch active round for session:', e);
+    }
+
     const sessionData = {
       level_id,
       faculty_id: faculty_id || null,
@@ -1229,6 +1631,7 @@ app.post('/api/assessment-sessions', async (req, res) => {
       major_id: major_id || null,
       major_name: major_name || null,
       evaluator_id: evaluator_id || null,
+      ...roundData,
       created_at: admin.firestore.FieldValue.serverTimestamp()
     };
 
@@ -1328,6 +1731,7 @@ app.get('/api/evaluations', async (req, res) => {
     if (session_id) filters.session_id = session_id;
     if (major_name) filters.major_name = major_name;
     if (evaluator_id) filters.evaluator_id = parseInt(evaluator_id);
+    if (year) filters.year = year; // Allow filtering by year
 
     const evaluations = await getData('evaluations', filters);
     res.json(evaluations);
@@ -1339,11 +1743,12 @@ app.get('/api/evaluations', async (req, res) => {
 
 app.get('/api/evaluations/history', async (req, res) => {
   try {
-    const { session_id, major_name } = req.query;
+    const { session_id, major_name, year } = req.query;
 
     const filters = {};
     if (session_id) filters.session_id = session_id;
     if (major_name) filters.major_name = major_name;
+    if (year) filters.year = year; // Allow filtering by year
 
     const evaluations = await getData('evaluations', filters);
     res.json(evaluations);
@@ -1356,7 +1761,7 @@ app.get('/api/evaluations/history', async (req, res) => {
 // ================= EVALUATIONS ACTUAL =================
 app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (req, res) => {
   try {
-    const { session_id, indicator_id, operation_result, operation_score, reference_score, goal_achievement, evidence_number, evidence_name, evidence_url, comment, major_name, status, keep_existing } = req.body;
+    const { session_id, indicator_id, operation_result, operation_score, reference_score, goal_achievement, evidence_number, evidence_name, evidence_url, comment, major_name, status, keep_existing, year } = req.body;
 
     let evidenceFiles = [];
     let evidenceMeta = {};
@@ -1405,6 +1810,7 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
       evidence_meta_json: JSON.stringify(evidenceMeta),
       comment,
       major_name,
+      year: year || null,
       status: status || 'submitted'
     };
 
@@ -1427,13 +1833,45 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
 
 app.get('/api/evaluations-actual/history', async (req, res) => {
   try {
-    const { session_id, major_name } = req.query;
+    const { session_id, major_name, year } = req.query;
 
-    const filters = {};
-    if (session_id) filters.session_id = session_id;
-    if (major_name) filters.major_name = major_name;
+    let targetSessionIds = [];
+    if (session_id) {
+      targetSessionIds = [String(session_id)];
+    } else if (year) {
+      let sessionQuery = db.collection('assessment_sessions').where('major_name', '==', major_name);
+      if (year === 'legacy') {
+        sessionQuery = sessionQuery.where('round_year', '==', year); // Or logic for missing?
+      } else {
+        sessionQuery = sessionQuery.where('round_year', '==', year);
+      }
+      const sessionSnap = await sessionQuery.get();
+      targetSessionIds = sessionSnap.docs.map(doc => doc.id);
+    } else {
+      // No session or year, maybe fetch all for major? Or just default empty?
+      // Existing logic seemed to allow filtering by just major_name across all time?
+      // Let's keep it safe: if major_name provided, maybe fetch all?
+      // But original code: if (session_id) filters.session_id = session_id; if (major_name) filters.major_name = major_name;
+      // So original allowed fetching by major_name (all history).
+      // If year is NOT provided, we fall back to original logic (fetch all for major).
+    }
 
-    const evaluations = await getData('evaluationsActual', filters);
+    let query = db.collection('evaluations_actual');
+    if (major_name) query = query.where('major_name', '==', major_name);
+
+    // If we have specific session targets from year filter
+    if (year && targetSessionIds.length > 0) {
+      query = query.where('session_id', 'in', targetSessionIds);
+    } else if (year && targetSessionIds.length === 0) {
+      return res.json([]); // Year provided but no sessions found
+    }
+    // If explicit session_id filter (overrides year usually, or matches targetSessionIds)
+    else if (session_id) {
+      query = query.where('session_id', '==', session_id);
+    }
+
+    const snapshot = await query.get();
+    const evaluations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(evaluations);
   } catch (error) {
     console.error('Error fetching actual evaluation history:', error);
@@ -1444,7 +1882,7 @@ app.get('/api/evaluations-actual/history', async (req, res) => {
 // ================= COMMITTEE EVALUATIONS =================
 app.post('/api/committee-evaluations', async (req, res) => {
   try {
-    const { session_id, major_name, indicator_id, committee_score, strengths, improvements } = req.body;
+    const { session_id, major_name, indicator_id, committee_score, strengths, improvements, year } = req.body;
 
     const evaluationData = {
       session_id,
@@ -1452,7 +1890,8 @@ app.post('/api/committee-evaluations', async (req, res) => {
       indicator_id,
       committee_score: committee_score ? parseFloat(committee_score) : null,
       strengths,
-      improvements
+      improvements,
+      year: year || null
     };
 
     const result = await addData('committeeEvaluations', evaluationData);
@@ -1550,6 +1989,126 @@ app.get('/api/view/:filename', async (req, res) => {
   }
 });
 
+// ================= DATABASE ADMINISTRATION =================
+app.get('/api/admin/db-stats', async (req, res) => {
+  try {
+    if (!db) {
+      // Mock stats for development
+      return res.json({
+        quality_components: 1,
+        indicators: 1,
+        evaluations: 0,
+        evaluations_actual: 0,
+        committee_evaluations: 0,
+        assessment_sessions: 2,
+        users: mockData.users?.length || 10,
+        rounds: 1,
+        programs: mockData.programs?.length || 2
+      });
+    }
+
+    const collections = [
+      'quality_components', 'indicators', 'evaluations',
+      'evaluations_actual', 'committee_evaluations',
+      'assessment_sessions', 'users', 'rounds', 'programs'
+    ];
+
+    const stats = {};
+    const promises = collections.map(async (col) => {
+      const snap = await db.collection(col).count().get();
+      stats[col] = snap.data().count;
+    });
+
+    await Promise.all(promises);
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching db-stats:', error);
+    res.status(500).json({ error: 'ไม่สามารถดึงข้อมูลสถิติฐานข้อมูลได้', details: error.message });
+  }
+});
+
+app.post('/api/admin/clear-collection', async (req, res) => {
+  try {
+    const { collection } = req.body;
+    const allowedCollections = [
+      'quality_components', 'indicators', 'evaluations',
+      'evaluations_actual', 'committee_evaluations',
+      'assessment_sessions'
+    ];
+
+    if (!allowedCollections.includes(collection)) {
+      return res.status(400).json({ error: 'ไม่อนุญาตให้ลบข้อมูลในคอลเลกชันนี้ หรือคอลเลกชันนี้มีความสำคัญสูง' });
+    }
+
+    if (!db) {
+      console.log(`[ADMIN] Mock clear collection: ${collection}`);
+      return res.json({ success: true, message: `(Mock) ล้างข้อมูลใน ${collection} เรียบร้อยแล้ว` });
+    }
+
+    // Delete in batches of 500
+    const collectionRef = db.collection(collection);
+    const snapshot = await collectionRef.get();
+
+    if (snapshot.empty) {
+      return res.json({ success: true, message: `คอลเลกชัน ${collection} ไม่มีข้อมูลให้ลบ` });
+    }
+
+    const chunks = [];
+    const docs = snapshot.docs;
+    for (let i = 0; i < docs.length; i += 500) {
+      chunks.push(docs.slice(i, i + 500));
+    }
+
+    for (const chunk of chunks) {
+      const batch = db.batch();
+      chunk.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    console.log(`[ADMIN] Cleared ${snapshot.size} documents from ${collection}`);
+    res.json({ success: true, message: `ล้างข้อมูลใน ${collection} จำนวน ${snapshot.size} รายการ เรียบร้อยแล้ว` });
+  } catch (error) {
+    console.error(`Error clearing collection ${req.body.collection}:`, error);
+    res.status(500).json({ error: 'ไม่สามารถล้างข้อมูลได้', details: error.message });
+  }
+});
+
+app.post('/api/admin/reset-assessment-data', async (req, res) => {
+  try {
+    const collectionsToClear = [
+      'quality_components', 'indicators', 'evaluations',
+      'evaluations_actual', 'committee_evaluations',
+      'assessment_sessions'
+    ];
+
+    if (!db) {
+      console.log('[ADMIN] Mock reset assessment data');
+      return res.json({ success: true, message: '(Mock) รีเซ็ตข้อมูลการประเมินทั้งหมดเรียบร้อยแล้ว' });
+    }
+
+    let totalDeleted = 0;
+    for (const collection of collectionsToClear) {
+      const snapshot = await db.collection(collection).get();
+      if (!snapshot.empty) {
+        const docs = snapshot.docs;
+        for (let i = 0; i < docs.length; i += 500) {
+          const batch = db.batch();
+          const chunk = docs.slice(i, i + 500);
+          chunk.forEach(doc => batch.delete(doc.ref));
+          await batch.commit();
+        }
+        totalDeleted += snapshot.size;
+      }
+    }
+
+    console.log(`[ADMIN] Reset assessment data: Deleted ${totalDeleted} documents across ${collectionsToClear.length} collections`);
+    res.json({ success: true, message: 'รีเซ็ตข้อมูลการประเมินทั้งหมด (Wipe Assessment Data) เรียบร้อยแล้ว' });
+  } catch (error) {
+    console.error('Error resetting assessment data:', error);
+    res.status(500).json({ error: 'ไม่สามารถรีเซ็ตข้อมูลได้', details: error.message });
+  }
+});
+
 // ================= START SERVER =================
 const PORT = process.env.PORT || 3002;
 if (require.main === module) {
@@ -1560,3 +2119,107 @@ if (require.main === module) {
 }
 
 module.exports = app;
+// ================= ROUNS (ACADEMIC YEARS) =================
+app.get('/api/rounds', async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: 'Firebase not initialized' });
+
+    const snapshot = await db.collection('rounds').orderBy('year', 'desc').get();
+    const rounds = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json(rounds);
+  } catch (error) {
+    console.error('Error fetching rounds:', error);
+    res.status(500).json({ error: 'ดึงข้อมูลรอบประเมินไม่สำเร็จ' });
+  }
+});
+
+app.post('/api/rounds', async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: 'Firebase not initialized' });
+
+    const { year, name, is_active, start_date, end_date } = req.body;
+
+    // Basic validation
+    if (!year || !name) {
+      return res.status(400).json({ error: 'ข้อมูลไม่ครบถ้วน (Year, Name จำเป็น)' });
+    }
+
+    // If setting to active, we might want to deactivate others? 
+    // For now, let's allow multiple or just handle it simple.
+    // Usually only one active round.
+    if (is_active) {
+      // Deactivate others?
+      const activeSnaps = await db.collection('rounds').where('is_active', '==', true).get();
+      const batch = db.batch();
+      activeSnaps.docs.forEach(doc => {
+        batch.update(doc.ref, { is_active: false });
+      });
+      await batch.commit();
+    }
+
+    const newRound = {
+      year,
+      name,
+      is_active: !!is_active,
+      start_date: start_date || null,
+      end_date: end_date || null,
+      created_at: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    const docRef = await db.collection('rounds').add(newRound);
+    res.json({ success: true, id: docRef.id, message: 'สร้างรอบประเมินสำเร็จ' });
+  } catch (error) {
+    console.error('Error creating round:', error);
+    res.status(500).json({ error: 'สร้างรอบประเมินไม่สำเร็จ' });
+  }
+});
+
+app.put('/api/rounds/:id', async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: 'Firebase not initialized' });
+
+    const { id } = req.params;
+    const updateData = {};
+    const { year, name, is_active, start_date, end_date } = req.body;
+
+    if (year) updateData.year = year;
+    if (name) updateData.name = name;
+    if (start_date !== undefined) updateData.start_date = start_date;
+    if (end_date !== undefined) updateData.end_date = end_date;
+    if (is_active !== undefined) {
+      updateData.is_active = is_active;
+
+      // If activating this one, deactivate others
+      if (is_active) {
+        const activeSnaps = await db.collection('rounds').where('is_active', '==', true).get();
+        const batch = db.batch();
+        activeSnaps.docs.forEach(doc => {
+          if (doc.id !== id) {
+            batch.update(doc.ref, { is_active: false });
+          }
+        });
+        await batch.commit();
+      }
+    }
+
+    updateData.updated_at = admin.firestore.FieldValue.serverTimestamp();
+
+    await db.collection('rounds').doc(id).update(updateData);
+    res.json({ success: true, message: 'อัปเดตรอบประเมินสำเร็จ' });
+  } catch (error) {
+    console.error('Error updating round:', error);
+    res.status(500).json({ error: 'อัปเดตรอบประเมินไม่สำเร็จ' });
+  }
+});
+
+app.delete('/api/rounds/:id', async (req, res) => {
+  try {
+    if (!db) return res.status(500).json({ error: 'Firebase not initialized' });
+    const { id } = req.params;
+    await db.collection('rounds').doc(id).delete();
+    res.json({ success: true, message: 'ลบรอบประเมินสำเร็จ' });
+  } catch (error) {
+    console.error('Error deleting round:', error);
+    res.status(500).json({ error: 'ลบรอบประเมินไม่สำเร็จ' });
+  }
+});

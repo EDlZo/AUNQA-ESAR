@@ -6,8 +6,11 @@ import { BASE_URL } from '../config/api.js';
 
 export default function SummaryPage({ currentUser }) {
   const [selectedProgram, setSelectedProgram] = useState(null);
+  const [rounds, setRounds] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
   const [rows, setRows] = useState([]); // evaluations_actual
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // General loading
+  const [loadingRounds, setLoadingRounds] = useState(true);
   const [indicatorMap, setIndicatorMap] = useState({}); // id -> detail
   const [components, setComponents] = useState([]);
   const [componentIndicatorsCount, setComponentIndicatorsCount] = useState({}); // componentId -> count
@@ -17,10 +20,30 @@ export default function SummaryPage({ currentUser }) {
   const [detailEvaluation, setDetailEvaluation] = useState(null);
   const [criteriaMap, setCriteriaMap] = useState({}); // indicator_id -> { target_value, score }
   const [committeeMap, setCommitteeMap] = useState({}); // indicator_id -> { committee_score, strengths, improvements }
+  const [allIndicatorsMap, setAllIndicatorsMap] = useState({}); // componentId -> indicators[]
 
   useEffect(() => {
-    // สำหรับหน้าสรุปผลการดำเนินการ ให้เริ่มต้นใหม่เสมอ
-    // ล้างข้อมูลเก่าและไม่โหลดจาก localStorage
+    // 1. Fetch Rounds
+    const fetchRounds = async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/api/rounds`);
+        if (res.ok) {
+          const data = await res.json();
+          setRounds(data);
+          const active = data.find(r => r.is_active);
+          // Default to active year if available, otherwise first
+          if (active) setSelectedYear(active.year);
+          else if (data.length > 0) setSelectedYear(data[0].year);
+        }
+      } catch (err) {
+        console.error('Error fetching rounds:', err);
+      } finally {
+        setLoadingRounds(false);
+      }
+    };
+    fetchRounds();
+
+    // 2. Reset other states
     setSelectedProgram(null);
     setViewComponent(null);
     setViewIndicators([]);
@@ -31,31 +54,22 @@ export default function SummaryPage({ currentUser }) {
       const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
       if (!major) return;
 
-      let sessionId = localStorage.getItem('assessment_session_id');
+      if (!loadingRounds && !selectedYear) return;
 
-      // If session ID is missing, try to recover the latest one for this major from backend
-      if (!sessionId) {
-        console.log(`🔍 Attempting to recover latest session for summary: ${major}`);
-        try {
-          const recoveryRes = await fetch(`${BASE_URL}/api/assessment-sessions/latest?major_name=${encodeURIComponent(major)}`);
-          if (recoveryRes.ok) {
-            const recoveryData = await recoveryRes.json();
-            if (recoveryData.session_id) {
-              sessionId = recoveryData.session_id;
-              console.log(`✅ Recovered session for summary: ${sessionId}`);
-              localStorage.setItem('assessment_session_id', sessionId);
-            }
-          }
-        } catch (recoveryError) {
-          console.warn('Session recovery failed in summary:', recoveryError);
-        }
-      }
-
-      if (!sessionId) return;
+      // Note: We now prioritized YEAR selection. 
+      // So we don't necessarily need session_id if endpoints support year.
+      // But for compatibility, let's try to resolve session if we can, or rely on bulk endpoint's year support.
 
       setLoading(true);
       try {
-        const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
+        // Use year if available to fetch data directly
+        const qsObj = { major_name: major };
+        if (selectedYear) qsObj.year = selectedYear;
+        // If we had a session_id logic before, we can keep it as fallback or override? 
+        // Actually, user wants "Year" view. So session_id from localStorage might be stale/wrong year.
+        // We should IGNORE localStorage session_id here and trust Year + Major.
+
+        const qs = new URLSearchParams(qsObj).toString();
         const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
 
         if (res.ok) {
@@ -94,13 +108,33 @@ export default function SummaryPage({ currentUser }) {
           });
           setCommitteeMap(commMap);
 
-          // Count main indicators per component
+          // Group indicators by component_id (Agnostic mapping)
+          const allIndsMap = {};
+          indicators.forEach(ind => {
+            const cid = String(ind.component_id);
+            if (!allIndsMap[cid]) allIndsMap[cid] = [];
+            if (!allIndsMap[cid].some(existing => existing.id === ind.id)) {
+              allIndsMap[cid].push(ind);
+            }
+          });
+
+          // Mix mapping so either Firestore ID or Logical ID works
+          components.forEach(comp => {
+            const fireId = String(comp.id);
+            const logId = String(comp.component_id);
+            if (!allIndsMap[fireId] && allIndsMap[logId]) allIndsMap[fireId] = allIndsMap[logId];
+            else if (!allIndsMap[logId] && allIndsMap[fireId]) allIndsMap[logId] = allIndsMap[fireId];
+          });
+          setAllIndicatorsMap(allIndsMap);
+
+          // Count main indicators per component (ID-agnostic)
           const countMap = {};
           components.forEach(comp => {
-            const mainCount = indicators.filter(ind =>
-              String(ind?.component_id) === String(comp.id) &&
-              !String(ind?.sequence ?? '').includes('.')
-            ).length;
+            const mainCount = indicators.filter(ind => {
+              const indCid = String(ind?.component_id);
+              const matches = (indCid === String(comp.id) || indCid === String(comp.component_id));
+              return matches && !String(ind?.sequence ?? '').includes('.');
+            }).length;
             countMap[comp.id] = mainCount;
           });
           setComponentIndicatorsCount(countMap);
@@ -129,10 +163,30 @@ export default function SummaryPage({ currentUser }) {
     };
 
     fetchAllSummaryData();
-  }, [selectedProgram]);
+  }, [selectedProgram, selectedYear, loadingRounds]);
+
+  // Helper for ID-agnostic lookup
+  const getIndicatorData = (indicator, dataMap) => {
+    if (!indicator) return {};
+    return (
+      dataMap[String(indicator.id)] ||
+      dataMap[String(indicator.indicator_id)] ||
+      dataMap[String(indicator.sequence)] ||
+      {}
+    );
+  };
 
   const handleViewIndicators = async (component) => {
     setViewComponent(component);
+    const compId = String(component.id);
+    const logicalId = String(component.component_id);
+
+    // Use pre-fetched indicators if available
+    if (allIndicatorsMap[compId] || allIndicatorsMap[logicalId]) {
+      setViewIndicators(allIndicatorsMap[compId] || allIndicatorsMap[logicalId]);
+      return;
+    }
+
     setViewIndicators([]);
     const sessionId = localStorage.getItem('assessment_session_id') || '';
     const major = selectedProgram?.majorName || selectedProgram?.major_name || '';
@@ -146,7 +200,11 @@ export default function SummaryPage({ currentUser }) {
   const openIndicatorDetail = (indicator) => {
     setDetailIndicator(indicator);
     // หา evaluation ล่าสุดของตัวบ่งชี้นี้จาก rows
-    const list = rows.filter(r => String(r.indicator_id) === String(indicator.id))
+    const list = rows.filter(r =>
+      String(r.indicator_id) === String(indicator.id) ||
+      String(r.indicator_id) === String(indicator.indicator_id) ||
+      String(r.indicator_id) === String(indicator.sequence)
+    )
       .sort((a, b) => {
         const getTime = (val) => {
           if (!val) return 0;
@@ -165,8 +223,8 @@ export default function SummaryPage({ currentUser }) {
 
   // หน้ารายละเอียด (แบบหน้าใหม่ ไม่ใช้ป๊อปอัป)
   if (detailIndicator) {
-    const crit = criteriaMap[String(detailIndicator.id)] || {};
-    const committee = committeeMap[String(detailIndicator.id)] || {};
+    const crit = getIndicatorData(detailIndicator, criteriaMap);
+    const committee = getIndicatorData(detailIndicator, committeeMap);
 
     return (
       <div className="container mx-auto px-4">
@@ -482,25 +540,51 @@ export default function SummaryPage({ currentUser }) {
     );
   }
 
-  // หากยังไม่ได้เลือกสาขา ให้แสดงหน้าเลือกสาขา
+  // หากยังไม่ได้เลือกสาขา ให้แสดงหน้าเลือกสาขา (และปี)
   if (!selectedProgram) {
     return (
       <div className="max-w-4xl mx-auto py-12">
         <div className="text-center mb-8">
           <BarChart3 className="w-16 h-16 text-blue-600 mx-auto mb-4" />
           <h1 className="text-3xl font-bold text-gray-900">สรุปผลการดำเนินการคุณภาพการศึกษา</h1>
-          <p className="text-gray-600 mt-2">กรุณาเลือกสาขาที่ต้องการดูสรุปผล</p>
+          <p className="text-gray-600 mt-2">กรุณาเลือกปีการศึกษาและสาขาที่ต้องการดูสรุปผล</p>
         </div>
+
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
-          <ProgramSelection
-            mode="assess"
-            storageKey="summaryProgramSelection"
-            buttonText="เลือกสาขา"
-            onComplete={(s) => {
-              setSelectedProgram(s);
-              try { localStorage.setItem('selectedProgramContext', JSON.stringify(s)); } catch { }
-            }}
-          />
+          {/* Year Selection Section */}
+          <div className="mb-8 p-6 bg-blue-50/50 rounded-xl border border-blue-100">
+            <label className="block text-sm font-semibold text-gray-700 mb-3">
+              เลือกปีการศึกษา
+            </label>
+            {loadingRounds ? (
+              <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+            ) : (
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="block w-full px-4 py-3 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-white text-gray-900 text-base"
+              >
+                {rounds.map(r => (
+                  <option key={r.id} value={r.year}>
+                    ปีการศึกษา {r.year} {r.is_active ? '(รอบปัจจุบัน)' : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="border-t border-gray-100 pt-8">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">เลือกสาขา</h2>
+            <ProgramSelection
+              mode="assess"
+              storageKey="summaryProgramSelection"
+              buttonText="ดูสรุปผล"
+              onComplete={(s) => {
+                setSelectedProgram(s);
+                try { localStorage.setItem('selectedProgramContext', JSON.stringify(s)); } catch { }
+              }}
+            />
+          </div>
         </div>
       </div>
     );
@@ -510,7 +594,12 @@ export default function SummaryPage({ currentUser }) {
     <div className="max-w-6xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold">สรุปผลการดำเนินการคุณภาพการศึกษา</h1>
+        <div className="flex items-center gap-3">
+          <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+            ปี {selectedYear}
+          </span>
+          <h1 className="text-3xl font-bold">สรุปผลการดำเนินการ</h1>
+        </div>
         <p className="text-gray-600 mt-1">ดูสรุปผลการดำเนินงานและการประเมินสำหรับแต่ละตัวบ่งชี้</p>
       </div>
 
@@ -522,14 +611,6 @@ export default function SummaryPage({ currentUser }) {
           {selectedProgram?.facultyName ? <span className="ml-1 text-gray-500">({selectedProgram.facultyName})</span> : null}
         </div>
         <div className="flex gap-2">
-          {viewComponent && (
-            <button
-              onClick={() => { setViewComponent(null); setViewIndicators([]); setDetailIndicator(null); setDetailEvaluation(null); }}
-              className="px-4 py-2 text-sm font-medium bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors border border-gray-200"
-            >
-              กลับหน้าหลัก
-            </button>
-          )}
           <button
             onClick={() => setSelectedProgram(null)}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
@@ -689,9 +770,13 @@ export default function SummaryPage({ currentUser }) {
                   </tr>
                 ) : (
                   viewIndicators.map((ind) => {
-                    const latest = rows.find(r => String(r.indicator_id) === String(ind.id));
-                    const crit = criteriaMap[String(ind.id)] || {};
-                    const committee = committeeMap[String(ind.id)] || {};
+                    const latest = rows.find(r =>
+                      String(r.indicator_id) === String(ind.id) ||
+                      String(r.indicator_id) === String(ind.indicator_id) ||
+                      String(r.indicator_id) === String(ind.sequence)
+                    );
+                    const crit = getIndicatorData(ind, criteriaMap);
+                    const committee = getIndicatorData(ind, committeeMap);
 
                     return (
                       <tr key={ind.id} className="hover:bg-gray-50">

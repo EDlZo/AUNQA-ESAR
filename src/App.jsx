@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Award, BookOpen, Users, Globe, CheckCircle, Star,
   ChevronRight, Menu, X, GraduationCap, Building,
-  FileText, Lock, User, Eye, EyeOff, Shield, UserCheck, Settings, LogOut, LayoutDashboard, Target, Layers
+  FileText, Lock, User, Eye, EyeOff, Shield, UserCheck, Settings, LogOut, LayoutDashboard, Target, Layers, CalendarX
 } from 'lucide-react';
 
 // Import Components ที่จะสร้างขึ้นมาใหม่
@@ -23,6 +23,10 @@ import DefineComponentSection from './components/Quality/DefineComponentSection'
 import ProgramSelection from './components/ProgramSelection';
 import AssessmentTablePage from './pages/AssessmentTablePage';
 import ConnectionStatus from './components/ConnectionStatus';
+import UserManagementPage from './pages/UserManagementPage';
+import SystemManagementPage from './pages/SystemManagementPage';
+import RoundManagementPage from './pages/RoundManagementPage';
+import DatabaseManagementPage from './pages/DatabaseManagementPage';
 
 
 export default function App() {
@@ -31,6 +35,8 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedProgram, setSelectedProgram] = useState(null);
+  const [activeRound, setActiveRound] = useState(null);
+  const [loadingRound, setLoadingRound] = useState(true);
 
   // Restore session from localStorage
   useEffect(() => {
@@ -47,6 +53,32 @@ export default function App() {
       }
     } catch { }
   }, []);
+
+  // Fetch Active Round
+  useEffect(() => {
+    const checkActiveRound = async () => {
+      try {
+        const res = await fetch('/api/rounds');
+        if (res.ok) {
+          const rounds = await res.json();
+          const active = rounds.find(r => r.is_active);
+          setActiveRound(active || null);
+        }
+      } catch (error) {
+        console.error('Error fetching rounds:', error);
+      } finally {
+        setLoadingRound(false);
+      }
+    };
+    checkActiveRound();
+
+    // Set up an interval or similar if we want real-time, but for now just fetch on mount
+    // Or maybe refresh when activeTab changes to ensure we catch updates?
+    // Let's rely on mount + maybe manual refresh if needed.
+    // Actually, adding activeTab as dep might be too aggressive if they switch tabs often, 
+    // but it ensures they don't get stuck in a state if someone else opens a round.
+    // Let's add it to run occasionally or just on mount for now.
+  }, [activeTab]); // Refresh round status when tab changes to ensure up-to-date access
 
   // ไม่ใช้ mock users แล้ว ใช้ API จริง
 
@@ -121,6 +153,55 @@ export default function App() {
     switch (activeTab) {
       case 'about':
         return <AboutContent currentUser={currentUser} rolePermissions={rolePermissions} standards={standards} />;
+
+      // Check for Restricted Tabs (Require Active Round)
+      case 'programs':
+      case 'manage':
+      case 'committee':
+      case 'assessment_criteria':
+      case 'assessment_evaluation':
+      case 'assessment_table':
+      case 'database_management':
+      case 'dashboard': // User requested dashboard to be restricted too
+        // Special case: System Admin or QA Admin might still want to see things?
+        // Usually Admins create rounds, so if they haven't created one, they probably know why.
+        // But let's stick to the rule: No Active Round = Block these pages.
+        // Unless we want to allow Admins to "Preview"? 
+        // For now, block everyone to enforce "Not Assessment Period".
+        // UPDATE: User requested System Admin to always see these pages.
+
+        if (!loadingRound && !activeRound && currentUser?.role !== 'system_admin') {
+          return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+              <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+                <CalendarX className="w-12 h-12 text-gray-400" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">ยังไม่อยู่ในช่วงเวลาการประเมิน</h2>
+              <p className="text-gray-500 max-w-md mb-8">
+                ระบบยังไม่เปิดรับการประเมินในขณะนี้ กรุณาตรวจสอบกำหนดการหรือติดต่อผู้ดูแลระบบ
+              </p>
+              {['system_admin', 'qa_admin'].includes(role) && (
+                <button
+                  onClick={() => setActiveTab('round_management')}
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-lg"
+                >
+                  <Settings className="w-5 h-5" />
+                  จัดการรอบประเมิน (สำหรับผู้ดูแล)
+                </button>
+              )}
+            </div>
+          );
+        }
+        // Fallthrough to normal rendering for these cases (using a second switch or if/else blocks inside)
+        // Since we can't fallthrough effectively in React return, we handle specific cases below.
+        break;
+
+      default:
+        break;
+    }
+
+    // Secondary Switch for content handling after restriction check
+    switch (activeTab) {
       case 'programs':
         // Only Admin or QA Admin can access programs setup
         if (role !== 'system_admin' && role !== 'qa_admin') {
@@ -321,6 +402,26 @@ export default function App() {
         );
       case 'dashboard':
         return <DashboardContent user={currentUser} />;
+      case 'system_management':
+        if (role !== 'system_admin') {
+          return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+        }
+        return <SystemManagementPage setActiveTab={setActiveTab} />;
+      case 'round_management':
+        if (role !== 'system_admin') {
+          return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+        }
+        return <RoundManagementPage setActiveTab={setActiveTab} />;
+      case 'user_management':
+        if (role !== 'system_admin') {
+          return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+        }
+        return <UserManagementPage setActiveTab={setActiveTab} />;
+      case 'database_management':
+        if (role !== 'system_admin') {
+          return <div className="p-8 text-center text-red-600">คุณไม่มีสิทธิ์เข้าถึงหน้านี้</div>;
+        }
+        return <DatabaseManagementPage setActiveTab={setActiveTab} />;
       default:
         return null;
     }

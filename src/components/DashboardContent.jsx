@@ -41,6 +41,9 @@ export default function DashboardContent({ user }) {
     recentEvaluations: []
   });
 
+  const [rounds, setRounds] = useState([]);
+  const [selectedYear, setSelectedYear] = useState('');
+
   // Load selected program from localStorage on mount
   useEffect(() => {
     try {
@@ -51,13 +54,25 @@ export default function DashboardContent({ user }) {
     } catch (e) {
       console.error('Failed to load program context', e);
     }
+
+    // Fetch rounds
+    fetch('/api/rounds')
+      .then(res => res.json())
+      .then(data => {
+        setRounds(data);
+        const active = data.find(r => r.is_active);
+        if (active) setSelectedYear(active.year);
+        else if (data.length > 0) setSelectedYear(data[0].year);
+        else setSelectedYear(''); // No legacy fallback
+      })
+      .catch(err => console.error('Failed to load rounds', err));
   }, []);
 
   useEffect(() => {
     if (selectedProgram) {
       fetchDashboardData();
     }
-  }, [selectedProgram]);
+  }, [selectedProgram, selectedYear]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -66,7 +81,8 @@ export default function DashboardContent({ user }) {
       const sessionId = localStorage.getItem('assessment_session_id');
       const qs = new URLSearchParams({
         major_name: majorName,
-        session_id: sessionId || ''
+        session_id: sessionId || '',
+        year: selectedYear
       }).toString();
 
       // Use the new bulk session summary endpoint
@@ -82,21 +98,39 @@ export default function DashboardContent({ user }) {
       } = await res.json();
 
       // Calculate stats based on real indicators and evaluations
-      const totalIndicatorsCount = indicators.length;
-      const completedAssessmentsCount = evaluations_actual.length;
+      const componentIds = new Set(components.map(c => String(c.component_id)));
+      const componentDocIds = new Set(components.map(c => String(c.id)));
+
+      const filteredIndicators = indicators.filter(ind =>
+        componentIds.has(String(ind.component_id)) || componentDocIds.has(String(ind.component_id))
+      );
+
+      const totalIndicatorsCount = filteredIndicators.length;
+      const activeIndicatorIds = new Set(filteredIndicators.map(ind => String(ind.id)));
+      const activeIndicatorSequences = new Set(filteredIndicators.map(ind => String(ind.sequence)));
+      const activeIndicatorLogicalIds = new Set(filteredIndicators.map(ind => String(ind.indicator_id || "")));
+
+      const filteredEvaluationsActual = evaluations_actual.filter(ev =>
+        activeIndicatorIds.has(String(ev.indicator_id)) ||
+        activeIndicatorSequences.has(String(ev.indicator_id)) ||
+        activeIndicatorLogicalIds.has(String(ev.indicator_id))
+      );
+      const completedAssessmentsCount = filteredEvaluationsActual.length;
 
       // Calculate progress and score per component
       const componentStats = components.map(c => {
-        const componentIndicators = indicators.filter(ind => String(ind.component_id) === String(c.id));
+        const componentIndicators = indicators.filter(ind =>
+          String(ind.component_id) === String(c.id) || String(ind.component_id) === String(c.component_id)
+        );
         const componentIndicatorIds = new Set(componentIndicators.map(ind => String(ind.id)));
 
-        const completedInComponent = evaluations_actual.filter(ev => componentIndicatorIds.has(String(ev.indicator_id))).length;
+        const completedInComponent = filteredEvaluationsActual.filter(ev => componentIndicatorIds.has(String(ev.indicator_id))).length;
         const totalInComponent = componentIndicators.length;
 
         const progress = totalInComponent > 0 ? Math.round((completedInComponent / totalInComponent) * 100) : 0;
 
-        // Average score for this component (from evaluations_actual if available)
-        const componentScores = evaluations_actual
+        // Average score for this component
+        const componentScores = filteredEvaluationsActual
           .filter(ev => componentIndicatorIds.has(String(ev.indicator_id)))
           .map(ev => parseFloat(ev.operation_score) || 0)
           .filter(s => s > 0);
@@ -113,7 +147,7 @@ export default function DashboardContent({ user }) {
       });
 
       // Overall average score
-      const allScores = evaluations_actual
+      const allScores = filteredEvaluationsActual
         .map(ev => parseFloat(ev.operation_score) || 0)
         .filter(s => s > 0);
 
@@ -195,12 +229,23 @@ export default function DashboardContent({ user }) {
             <span className="flex items-center gap-1"><Clock size={14} /> ข้อมูล ณ วันที่ {new Date().toLocaleDateString('th-TH')}</span>
           </div>
         </div>
-        <button
-          onClick={() => setSelectedProgram(null)}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
-        >
-          <RefreshCcw size={16} /> เปลี่ยนสาขา
-        </button>
+        <div className="flex gap-2">
+          <select
+            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm outline-none focus:ring-2 focus:ring-blue-500"
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+          >
+            {rounds.map(r => (
+              <option key={r.id} value={r.year}>{r.name} {r.is_active ? '(Active)' : ''}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setSelectedProgram(null)}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
+          >
+            <RefreshCcw size={16} /> เปลี่ยนสาขา
+          </button>
+        </div>
       </div>
 
       {/* Quick Stats */}

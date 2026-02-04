@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { BASE_URL } from '../config/api.js';
 
 
-export default function AssessmentFormModal({ indicator, selectedProgram, onComplete, onCancel }) {
+export default function AssessmentFormModal({ indicator, selectedProgram, onComplete, onCancel, activeYear }) {
   const [targetValue, setTargetValue] = useState('');
   const [score, setScore] = useState('');
   const [comment, setComment] = useState('');
@@ -116,6 +116,7 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
       formData.append('comment', comment);
       formData.append('status', 'submitted');
       formData.append('major_name', major);
+      if (activeYear) formData.append('year', activeYear);
 
       if (evidenceFile) {
         formData.append('evidence_file', evidenceFile);

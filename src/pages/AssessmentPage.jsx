@@ -11,6 +11,19 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
   const [selectedComponent, setSelectedComponent] = useState(null);
   const [indicators, setIndicators] = useState({});
   const [loading, setLoading] = useState(false);
+  const [activeYear, setActiveYear] = useState(null);
+
+  // Fetch active round on mount
+  useEffect(() => {
+    fetch(`${BASE_URL}/api/rounds`)
+      .then(res => res.json())
+      .then(data => {
+        const active = data.find(r => r.is_active);
+        if (active) setActiveYear(active.year);
+        else if (data.length > 0) setActiveYear(data[0].year);
+      })
+      .catch(err => console.error('Failed to load rounds', err));
+  }, []);
 
   const [sessionData, setSessionData] = useState({
     evaluations: [],
@@ -51,7 +64,10 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
           console.log(`🆕 Created new session: ${sessionId}`);
         }
 
-        const qs = new URLSearchParams({ session_id: sessionId, major_name: majorName }).toString();
+        const qsObj = { session_id: sessionId, major_name: majorName };
+        if (activeYear) qsObj.year = activeYear;
+
+        const qs = new URLSearchParams(qsObj).toString();
 
         // ใช้ Bulk endpoint ดึงข้อมูลทั้งหมดในครั้งเดียว
         const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
@@ -63,14 +79,30 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
             evaluationsActual: data.evaluations_actual || []
           });
 
-          // จัดกลุ่ม indicators ตาม component_id ล่วงหน้า
+          // จัดกลุ่ม indicators ตาม component_id ล่วงหน้า (ID-agnostic mapping)
           const indicatorsMap = {};
           if (Array.isArray(data.indicators)) {
             data.indicators.forEach(ind => {
               const cid = String(ind.component_id);
               if (!indicatorsMap[cid]) indicatorsMap[cid] = [];
-              indicatorsMap[cid].push(ind);
+              if (!indicatorsMap[cid].some(existing => existing.id === ind.id)) {
+                indicatorsMap[cid].push(ind);
+              }
             });
+
+            // ตรวจสอบความถูกต้อง: ตรวจสอบให้แน่ใจว่าแต่ละ component มีตัวบ่งชี้ของตัวเองโดยดูจากทั้ง ID และ logical ID
+            if (Array.isArray(data.components)) {
+              data.components.forEach(comp => {
+                const firestoreId = String(comp.id);
+                const logicalId = String(comp.component_id);
+
+                if (!indicatorsMap[firestoreId] && indicatorsMap[logicalId]) {
+                  indicatorsMap[firestoreId] = indicatorsMap[logicalId];
+                } else if (!indicatorsMap[logicalId] && indicatorsMap[firestoreId]) {
+                  indicatorsMap[logicalId] = indicatorsMap[firestoreId];
+                }
+              });
+            }
           }
           setIndicators(indicatorsMap);
           setShowComponents(true);
@@ -93,7 +125,7 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
       setLoading(false);
     };
     fetchFullSessionData();
-  }, [selectedProgram]);
+  }, [selectedProgram, activeYear]);
 
   const handleProgramSelect = (program) => {
     setSelectedProgram(program);
@@ -284,8 +316,16 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
             </div>
           )}
 
+          {components.length === 0 && !loading && (
+            <div className="bg-white p-12 rounded-lg border-2 border-dashed border-gray-200 text-center">
+              <ClipboardList className="mx-auto h-12 w-12 text-gray-300 mb-4" />
+              <h3 className="text-lg font-medium text-gray-900">ยังไม่มีข้อมูลองค์ประกอบคุณภาพ</h3>
+              <p className="text-gray-500 mt-2">กรุณาเพิ่มองค์ประกอบในหน้า "จัดการองค์ประกอบ" ก่อนทำรายการ</p>
+            </div>
+          )}
+
           {/* แสดงตารางตัวบ่งชี้สำหรับบันทึกผลการดำเนินการ */}
-          {selectedComponent && indicators[selectedComponent.id] && (
+          {selectedComponent && indicators[selectedComponent.component_id] && (
             <AssessmentTable
               selectedComponent={selectedComponent}
               indicators={indicators}
@@ -293,7 +333,21 @@ export default function AssessmentPage({ assessmentMode = 'evaluation' }) {
               mode={assessmentMode}
               onBack={() => setSelectedComponent(null)}
               sessionData={sessionData}
+              activeYear={activeYear}
             />
+          )}
+
+          {/* Fallback if indicators not found for component */}
+          {selectedComponent && !indicators[selectedComponent.component_id] && (
+            <div className="bg-white p-8 rounded-lg border border-gray-200 text-center">
+              <p className="text-gray-500 mb-4">ไม่พบข้อมูลตัวบ่งชี้สำหรับองค์ประกอบนี้</p>
+              <button
+                onClick={() => setSelectedComponent(null)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200"
+              >
+                ย้อนกลับ
+              </button>
+            </div>
           )}
         </>
       )}

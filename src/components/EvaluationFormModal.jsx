@@ -18,7 +18,7 @@ import {
   Clock
 } from 'lucide-react';
 
-export default function EvaluationFormModal({ indicator, selectedProgram, onComplete, onCancel, allEvaluations, allEvaluationsActual }) {
+export default function EvaluationFormModal({ indicator, selectedProgram, onComplete, onCancel, allEvaluations, allEvaluationsActual, activeYear }) {
   // ข้อมูลจากการประเมินเกณฑ์ก่อนหน้า (target_value, score)
   const [criteriaData, setCriteriaData] = useState({ target_value: '', score: '' });
 
@@ -305,6 +305,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
       formData.append('comment', comment);
       formData.append('major_name', major);
       formData.append('status', 'submitted');
+      if (activeYear) formData.append('year', activeYear);
       // Keep previous files when submitting a new record (merge server-side)
       formData.append('keep_existing', 'true');
 
@@ -623,7 +624,7 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
               <button
                 type="button"
                 onClick={() => setShowEvidenceModal(true)}
-                className="px-3 py-1 bg-indigo-600 text-white text-xs font-bold rounded hover:bg-indigo-700 transition-colors flex items-center gap-1"
+                className="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
               >
                 <Plus className="w-3 h-3" /> เพิ่มหลักฐาน
               </button>

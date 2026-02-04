@@ -5,13 +5,13 @@ import EvaluationFormModal from './EvaluationFormModal';
 import { BASE_URL } from '../config/api.js';
 
 
-export default function AssessmentTable({ selectedComponent, indicators, selectedProgram, mode = 'criteria', onBack, sessionData }) {
+export default function AssessmentTable({ selectedComponent, indicators, selectedProgram, mode = 'criteria', onBack, sessionData, activeYear }) {
   const [evaluatedIndicators, setEvaluatedIndicators] = useState(new Set());
   const [assessingIndicator, setAssessingIndicator] = useState(null);
   const [flash, setFlash] = useState({ message: '', type: 'success' });
   const [criteriaCompletedIds, setCriteriaCompletedIds] = useState(new Set());
 
-  const indicatorList = indicators[selectedComponent.id] || [];
+  const indicatorList = (indicators && selectedComponent) ? (indicators[selectedComponent.component_id] || indicators[selectedComponent.id] || []) : [];
 
   // Derived state from sessionData prop
   useEffect(() => {
@@ -112,6 +112,7 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
         onCancel={handleAssessmentCancel}
         allEvaluations={sessionData?.evaluations || []}
         allEvaluationsActual={sessionData?.evaluationsActual || []}
+        activeYear={activeYear}
       />
     );
   }

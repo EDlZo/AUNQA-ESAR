@@ -11,7 +11,8 @@ export default function IndicatorTable({
   indicators,
   onEditClick,
   onDeleteClick,
-  onAddIndicator, // เพิ่ม prop สำหรับ handle การเพิ่มตัวบ่งชี้ (optional)
+  onAddIndicator,
+  onUpdateIndicator,
   onAfterBulkAdded,
   onAssessingChange,
   evaluatedMap = {},
@@ -22,8 +23,8 @@ export default function IndicatorTable({
   const formatSequence = (seq) => {
     if (!seq) return '';
     try {
-      return String(seq)
-        .split('.')
+      // Split by dot and remove leading zeros from each part
+      return String(seq).split('.')
         .map(part => String(parseInt(part, 10)))
         .join('.');
     } catch {
@@ -35,50 +36,7 @@ export default function IndicatorTable({
     try { return String(parseInt(String(n), 10)).padStart(2, '0'); } catch { return '00'; }
   };
 
-  const seedIndicatorsForMainCode = async (mainCode) => {
-    const mainNumMatch = String(mainCode).match(/AUN\.(\d+)/i);
-    const mainNum = mainNumMatch ? mainNumMatch[1] : '0';
-    const mainPart = pad2(mainNum);
-    const sessionId = localStorage.getItem('assessment_session_id') || '';
-    const sel = localStorage.getItem('selectedProgramContext');
-    const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
 
-    // 1) เพิ่มหัวข้อหลัก (บรรทัดหัว) ก่อน
-    await fetch(`${BASE_URL}/api/indicators`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        component_id: selectedComponent.id,
-        sequence: mainPart,
-        indicator_type: 'ผลลัพธ์',
-        criteria_type: 'เชิงคุณภาพ',
-        indicator_name: indicatorName,
-        data_source: '',
-        session_id: sessionId,
-        major_name: major
-      })
-    }).catch(() => { });
-
-    // 2) เพิ่มหัวข้อย่อยตามเทมเพลต
-    const list = AUNQA_SUBITEMS[mainCode] || [];
-    for (let i = 0; i < list.length; i++) {
-      const it = list[i];
-      await fetch(`${BASE_URL}/api/indicators`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          component_id: selectedComponent.id,
-          sequence: `${mainPart}.${it.seq}`,
-          indicator_type: 'ผลลัพธ์',
-          criteria_type: 'เชิงคุณภาพ',
-          indicator_name: it.text,
-          data_source: '',
-          session_id: sessionId,
-          major_name: major
-        })
-      }).catch(() => { });
-    }
-  };
 
   // State สำหรับฟอร์ม
   const [indicatorSequence, setIndicatorSequence] = useState('');
@@ -86,6 +44,7 @@ export default function IndicatorTable({
   const [criteriaType, setCriteriaType] = useState('');
   const [indicatorName, setIndicatorName] = useState('');
   const [dataSource, setDataSource] = useState('');
+  const [parentId, setParentId] = useState(''); // Parent for the new indicator
   const [error, setError] = useState('');
   const [flash, setFlash] = useState({ message: '', type: 'success' });
   const [assessIndicator, setAssessIndicator] = useState(null);
@@ -94,6 +53,70 @@ export default function IndicatorTable({
   const [assessComment, setAssessComment] = useState('');
   const [evaluatedIndicators, setEvaluatedIndicators] = useState(new Set()); // เก็บ ID ของตัวบ่งชี้ที่ประเมินแล้ว
   const [evaluationHistory, setEvaluationHistory] = useState([]); // เก็บประวัติการประเมินสำหรับตัวบ่งชี้ปัจจุบัน
+  const [editingIndicator, setEditingIndicator] = useState(null); // ตัวบ่งชี้ที่กำลังแก้ไข
+  const [masterIndicators, setMasterIndicators] = useState([]); // แม่แบบตัวบ่งชี้จากระบบ
+  const [rounds, setRounds] = useState([]);
+  const [programs, setPrograms] = useState([]);
+  const [allMasterComponents, setAllMasterComponents] = useState([]);
+  const [selectedMasterId, setSelectedMasterId] = useState(''); // เก็บ ID ของแม่แบบที่เลือก
+
+  useEffect(() => {
+    fetchMasterIndicators();
+  }, [selectedComponent, allMasterComponents]);
+
+  const fetchMasterIndicators = async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/api/master-indicators`);
+      if (res.ok) {
+        const data = await res.json();
+        let compId = selectedComponent?.component_id || selectedComponent?.componentId;
+
+        console.log(`🔍 Checking indicators for component: "${selectedComponent?.quality_name}" (ID in DB: ${compId})`);
+
+        // Fallback: ถ้าไม่มี component_id ให้ลองหาจากชื่อใน allMasterComponents
+        if (!compId && selectedComponent?.quality_name) {
+          console.log(`⚠️ Missing component_id. Searching in ${allMasterComponents.length} master templates...`);
+          const matchedMaster = allMasterComponents.find(c =>
+            String(c.quality_name || '').trim().toLowerCase() === String(selectedComponent.quality_name || '').trim().toLowerCase()
+          );
+          if (matchedMaster) {
+            compId = matchedMaster.component_id;
+            console.log(`✅ Healed missing component_id for "${selectedComponent.quality_name}" -> ${compId}`);
+          } else {
+            console.log(`❌ Could not find master template with name: "${selectedComponent.quality_name}"`);
+            console.log('Available master components:', allMasterComponents.map(c => c.quality_name));
+          }
+        }
+
+        // กรองเฉพาะตัวบ่งชี้ขององค์ประกอบนี้ 
+        const filtered = data.filter(ind => {
+          const indCompId = String(ind.component_id);
+          const targetCompId = String(compId);
+          return indCompId === targetCompId;
+        });
+
+        console.log(`📊 Found ${filtered.length} master indicators for ID ${compId}`);
+        setMasterIndicators(filtered);
+      }
+    } catch (err) { console.error('Error fetching master indicators:', err); }
+  };
+
+  const fetchMeta = async () => {
+    try {
+      const [rRes, pRes, cRes] = await Promise.all([
+        fetch(`${BASE_URL}/api/rounds`),
+        fetch(`${BASE_URL}/api/programs`),
+        fetch(`${BASE_URL}/api/master-quality-components`)
+      ]);
+      if (rRes.ok) setRounds(await rRes.json());
+      if (pRes.ok) setPrograms(await pRes.json());
+      if (cRes.ok) setAllMasterComponents(await cRes.json());
+    } catch (err) { console.error('Error fetching meta:', err); }
+  };
+
+  useEffect(() => {
+    fetchMeta();
+  }, []);
 
   useEffect(() => {
     if (!flash.message) return;
@@ -247,10 +270,10 @@ export default function IndicatorTable({
     }
   }, [assessIndicator]);
 
-  if (!selectedComponent || !indicators[selectedComponent.id]) {
+  if (!selectedComponent) {
     return null;
   }
-  const indicatorList = indicators[selectedComponent.id] || [];
+  const indicatorList = indicators?.[selectedComponent.id] || [];
 
   const handleOpenForm = () => {
     setShowForm(true);
@@ -263,14 +286,29 @@ export default function IndicatorTable({
   };
 
   const handleCancel = () => {
-    // คงฟอร์มไว้ เคลียร์ค่าเฉยๆ
     setIndicatorSequence('');
     setIndicatorType('');
     setCriteriaType('');
     setIndicatorName('');
     setDataSource('');
+    setParentId('');
+    setSelectedMasterId('');
+    setEditingIndicator(null);
     setError('');
     setShowForm(true);
+  };
+
+  const handleEdit = (indicator) => {
+    setEditingIndicator(indicator);
+    setIndicatorSequence(indicator.sequence || '');
+    setIndicatorType(indicator.indicator_type || '');
+    setCriteriaType(indicator.criteria_type || '');
+    setIndicatorName(indicator.indicator_name || '');
+    setDataSource(indicator.data_source || '');
+    setParentId(indicator.parent_id || '');
+    setShowForm(true);
+    // Scroll to form or show user we are editing
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = async (e) => {
@@ -293,22 +331,52 @@ export default function IndicatorTable({
         return;
       }
     }
+    // 1. หารหัสองค์ประกอบที่ถูกต้อง (Heal ID if missing)
+    let healedCompId = selectedComponent?.component_id || selectedComponent?.componentId;
+    if (!healedCompId && selectedComponent?.quality_name) {
+      const matchedMaster = allMasterComponents.find(c =>
+        String(c.quality_name || '').trim().toLowerCase() === String(selectedComponent.quality_name || '').trim().toLowerCase()
+      );
+      if (matchedMaster) {
+        healedCompId = matchedMaster.component_id;
+        console.log(`✅ Healed ID for Submit: ${healedCompId}`);
+      }
+    }
+
     // สร้าง object ตัวบ่งชี้ใหม่
     const newIndicator = {
-      component_id: selectedComponent.id,
+      component_id: healedCompId,
       sequence: indicatorSequence,
       indicator_type: indicatorType,
       criteria_type: criteriaType,
       indicator_name: indicatorName,
-      data_source: dataSource
+      data_source: dataSource,
+      parent_id: parentId
     };
     try {
+      if (editingIndicator) {
+        // Mode: Update
+        if (typeof onUpdateIndicator === 'function') {
+          await onUpdateIndicator(editingIndicator.id, {
+            sequence: indicatorSequence,
+            indicator_type: indicatorType,
+            criteria_type: criteriaType,
+            indicator_name: indicatorName,
+            data_source: dataSource,
+            parent_id: parentId
+          });
+          setFlash({ message: 'แก้ไขตัวบ่งชี้สำร็จ', type: 'success' });
+          handleCancel(); // Clear form and exit edit mode
+        }
+        return;
+      }
+
       if (mainMatch) {
         // การทำงานเดิม (ยกเลิกการเพิ่มหัวข้อย่อยอัตโนมัติ 8 ข้อตามคำขอผู้ใช้)
         // เราจะเพิ่มเฉพาะหัวข้อหลักที่ผู้ใช้เลือกเท่านั้น
 
         const mainCode = `AUN.${mainMatch[1]}`;
-        const mainPart = pad2(mainMatch[1]);
+        const mainPart = String(parseInt(mainMatch[1], 10));
 
         // ตรวจซ้ำหัวข้อหลัก
         const existsMain = indicatorList.some(ind => {
@@ -324,6 +392,7 @@ export default function IndicatorTable({
 
         // ส่งให้ component แม่จัดการเพิ่มเฉพาะหัวข้อหลัก
         if (typeof onAddIndicator === 'function') {
+          // 1. Add Main Indicator
           await onAddIndicator({
             indicator_name: indicatorName,
             sequence: mainPart,
@@ -332,24 +401,75 @@ export default function IndicatorTable({
             data_source: dataSource || ''
           });
 
+          // 2. Add Sub-indicators (RESTORED)
+          const list = AUNQA_SUBITEMS[mainCode] || [];
+          for (const item of list) {
+            await onAddIndicator({
+              indicator_name: item.text,
+              sequence: `${mainPart}.${item.seq}`,
+              indicator_type: 'ผลลัพธ์',
+              criteria_type: 'เชิงคุณภาพ',
+              data_source: ''
+            });
+          }
+
           setIndicatorSequence('');
           setIndicatorName('');
-          setFlash({ message: 'เพิ่มตัวบ่งชี้เรียบร้อย', type: 'success' });
+          setFlash({ message: `เพิ่มตัวบ่งชี้ ${mainCode} และข้อย่อยเรียบร้อย`, type: 'success' });
+
+          if (typeof onAfterBulkAdded === 'function') {
+            await onAfterBulkAdded();
+          }
         }
         return;
       }
       // เรียก API เพิ่มตัวบ่งชี้ ผ่าน prop onAddIndicator ของ component แม่ (DefineComponentSection)
       if (typeof onAddIndicator === 'function') {
         try {
+          // 1. เพิ่มตัวบ่งชี้หลัก (ที่เลือกจาก dropdown หรือกรอกเอง)
           await onAddIndicator(newIndicator);
+
+          // 2. ถ้าเลือกจากแม่แบบ ให้ดึงข้อย่อยมาเพิ่มด้วย
+          let addedCount = 1;
+          if (selectedMasterId) {
+            const children = masterIndicators.filter(m => m.parent_id === selectedMasterId);
+            if (children.length > 0) {
+              // เรียงลำดับข้อย่อยตามลำดับ (sequence)
+              children.sort((a, b) => String(a.sequence).localeCompare(String(b.sequence), undefined, { numeric: true }));
+
+              for (const child of children) {
+                await onAddIndicator({
+                  component_id: healedCompId,
+                  indicator_name: child.indicator_name,
+                  sequence: child.sequence,
+                  indicator_type: child.indicator_type,
+                  criteria_type: child.criteria_type,
+                  data_source: child.data_source || ''
+                });
+                addedCount++;
+              }
+            }
+          }
+
           // รีเซ็ตฟอร์มหลังจากสำเร็จ (Parent component จะจัดการ Refresh ข้อมูลเอง)
           setIndicatorSequence('');
           setIndicatorType('');
           setCriteriaType('');
           setIndicatorName('');
           setDataSource('');
+          setSelectedMasterId('');
           setError('');
-          setFlash({ message: 'เพิ่มตัวบ่งชี้เรียบร้อย', type: 'success' });
+
+          setFlash({
+            message: selectedMasterId && addedCount > 1
+              ? `เพิ่มตัวบ่งชี้และข้อย่อยทั้งหมด ${addedCount} รายการเรียบร้อย`
+              : 'เพิ่มตัวบ่งชี้เรียบร้อย',
+            type: 'success'
+          });
+
+          if (typeof onAfterBulkAdded === 'function') {
+            await onAfterBulkAdded(healedCompId);
+          }
         } catch (err) {
           setError('เกิดข้อผิดพลาดในการบันทึกตัวบ่งชี้');
         }
@@ -604,11 +724,21 @@ export default function IndicatorTable({
             setIndicatorName={setIndicatorName}
             dataSource={dataSource}
             setDataSource={setDataSource}
+            parentId={parentId}
+            setParentId={setParentId}
+            indicatorList={indicatorList}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
             error={error}
             flash={flash}
             onDismissFlash={() => setFlash({ message: '', type: 'success' })}
+            masterIndicators={masterIndicators}
+            selectedMasterId={selectedMasterId}
+            setSelectedMasterId={setSelectedMasterId}
+            programs={programs}
+            rounds={rounds}
+            allMasterComponents={allMasterComponents}
+            onRefreshMaster={fetchMasterIndicators}
           />
         </div>
       )}
@@ -641,43 +771,58 @@ export default function IndicatorTable({
                   <td colSpan={5} className="text-center py-6 text-gray-500">ไม่มีข้อมูลตัวบ่งชี้</td>
                 </tr>
               ) : (
-                indicatorList.map((indicator) => (
-                  <tr key={indicator.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-4 text-center text-sm font-semibold text-gray-900 border-r border-gray-200">
-                      {String(indicator.sequence).includes('.') ? (
-                        <span>{formatSequence(indicator.sequence)}</span>
-                      ) : (
-                        <span className="inline-flex items-center justify-center w-8 h-8 bg-red-500 text-white rounded-full text-sm font-bold">
-                          {formatSequence(indicator.sequence)}
+                indicatorList.map((indicator) => {
+                  const sequenceLabel = String(indicator.sequence);
+                  const isSub = sequenceLabel.includes('.');
+                  const level = isSub ? sequenceLabel.split('.').length - 1 : 0;
+
+                  return (
+                    <tr key={indicator.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-4 text-center text-sm font-semibold text-gray-900 border-r border-gray-200">
+                        {!isSub ? (
+                          <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-600 text-white rounded-full text-sm font-bold shadow-sm">
+                            {formatSequence(indicator.sequence)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500 font-medium">
+                            {formatSequence(indicator.sequence, true)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-900 border-r border-gray-200">
+                        <div
+                          className={`${!isSub ? 'font-bold text-gray-900' : 'font-medium text-gray-700'} transition-all`}
+                          style={{ paddingLeft: `${level * 1.5}rem` }}
+                        >
+                          {isSub && <span className="text-gray-400 mr-2"></span>}
+                          {indicator.indicator_name}
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-center text-sm text-gray-900 border-r border-gray-200">
+                        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${indicator.indicator_type === 'Quantitative' ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800'}`}>
+                          {indicator.indicator_type}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-sm text-gray-900 border-r border-gray-200">
-                      <div className={(String(indicator.sequence).includes('.') ? 'font-medium' : 'font-bold') + ' text-gray-900'}>
-                        {indicator.indicator_name}
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-center text-sm text-gray-900 border-r border-gray-200">
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                        {indicator.indicator_type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-center text-sm text-gray-900 border-r border-gray-200">
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                        {indicator.criteria_type}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      <button
-                        onClick={() => onDeleteClick(indicator.id, selectedComponent.id)}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-all duration-200 group"
-                        title="ลบตัวบ่งชี้"
-                      >
-                        <Trash2 className="w-5 h-5 group-hover:scale-110" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-4 py-4 text-center text-sm text-gray-900 border-r border-gray-200">
+                        <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${indicator.criteria_type === 'AUN-QA' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {indicator.criteria_type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
+
+                          <button
+                            onClick={() => onDeleteClick(indicator.id, selectedComponent.id)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-all duration-200 group"
+                            title="ลบตัวบ่งชี้"
+                          >
+                            <Trash2 className="w-5 h-5 group-hover:scale-110" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

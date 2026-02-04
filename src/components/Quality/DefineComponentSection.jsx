@@ -25,46 +25,28 @@ const normalizeSequence = (seq) => {
     .join('.');
 };
 
-async function seedIndicatorsForMainCode(mainCode, componentDbId, ctx) {
-  const subitems = AUNQA_SUBITEMS[mainCode] || [];
-  if (subitems.length === 0) return;
-  const mainNumMatch = mainCode.match(/AUN\.(\d+)/i);
-  const mainPart = pad2(mainNumMatch ? mainNumMatch[1] : '0');
-
-  // เตรียมข้อมูลเป็น Array เพื่อส่งแบบ Bulk
-  const indicatorsToSeed = subitems.map(it => ({
-    component_id: componentDbId,
-    sequence: `${mainPart}.${it.seq}`,
-    indicator_type: 'ผลลัพธ์',
-    criteria_type: 'เชิงคุณภาพ',
-    indicator_name: it.text,
-    data_source: '',
-    session_id: ctx.session_id || '',
-    major_name: ctx.major_name || ''
-  }));
-
-  try {
-    const res = await fetch(`${BASE_URL}/api/bulk/indicators`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ indicators: indicatorsToSeed })
-    });
-    if (!res.ok) {
-      console.error('Failed to seed indicators in bulk');
-    }
-  } catch (err) {
-    console.error('Error seeding indicators:', err);
-  }
-}
+// seedIndicatorsForMainCode removed as it is unused and logic is handled elsewhere
 
 
-export default function DefineComponentSection() {
+export default function DefineComponentSection({ forcedMajor, forcedYear }) {
   const [qualityName, setQualityName] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [componentId, setComponentId] = useState('1');
+  const [activeRound, setActiveRound] = useState(null);
+
+  // Fetch active round
+  useEffect(() => {
+    fetch(`${BASE_URL}/api/rounds`)
+      .then(res => res.json())
+      .then(data => {
+        const active = data.find(r => r.is_active);
+        if (active) setActiveRound(active);
+      })
+      .catch(err => console.error('Failed to load rounds', err));
+  }, []);
 
   const [showIndicatorForm, setShowIndicatorForm] = useState(false);
   const [selectedComponent, setSelectedComponent] = useState(null);
@@ -91,32 +73,40 @@ export default function DefineComponentSection() {
           localStorage.setItem('assessment_session_id', sessionId);
         }
 
-        const sel = localStorage.getItem('selectedProgramContext');
-        let major = '';
-        if (sel) {
-          try {
-            const parsed = JSON.parse(sel);
-            major = parsed?.majorName || parsed?.major_name || '';
-            setCurrentContext({
-              facultyName: parsed?.facultyName || parsed?.faculty_name || '',
-              majorName: major
-            });
-          } catch { }
+        let major = forcedMajor !== undefined ? forcedMajor : '';
+        if (forcedMajor === undefined) {
+          const sel = localStorage.getItem('selectedProgramContext');
+          if (sel) {
+            try {
+              const parsed = JSON.parse(sel);
+              major = parsed?.majorName || parsed?.major_name || '';
+            } catch { }
+          }
         }
-        const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-        const res = await fetch(`${BASE_URL}/api/quality-components?${qs}`);
 
+        const year = forcedYear || activeRound?.year || '';
+
+        setCurrentContext({
+          facultyName: '',
+          majorName: major
+        });
+
+        const qs = new URLSearchParams({
+          session_id: sessionId,
+          major_name: major,
+          year: year
+        }).toString();
+
+        const res = await fetch(`${BASE_URL}/api/quality-components?${qs}`);
         if (res.ok) {
           const data = await res.json();
           setItems(Array.isArray(data) ? data : []);
         } else {
           console.warn('API response not OK:', res.status, res.statusText);
-          // ใช้ข้อมูลเริ่มต้นเมื่อ API ไม่พร้อมใช้งาน
           setItems([]);
         }
       } catch (error) {
         console.error('Error fetching quality components:', error);
-        // ใช้ข้อมูลเริ่มต้นเมื่อเกิดข้อผิดพลาด
         setItems([]);
         setError('ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง');
       } finally {
@@ -124,13 +114,19 @@ export default function DefineComponentSection() {
       }
     };
     fetchQualityComponents();
-  }, []);
+  }, [activeRound, forcedMajor, forcedYear]);
 
   // ฟังก์ชันเพิ่มองค์ประกอบ
   const handleAdd = async (e) => {
     e.preventDefault();
-    setError('');
     if (!componentId || !qualityName) return;
+
+    // Check for existing component_id for this year/major
+    const exists = items.some(item => parseInt(item.component_id) === parseInt(componentId));
+    if (exists) {
+      setError(`มีองค์ประกอบที่ ${componentId} อยู่ในระบบแล้ว`);
+      return;
+    }
 
     const ctx = (() => {
       try {
@@ -141,12 +137,12 @@ export default function DefineComponentSection() {
         }
         const sel = localStorage.getItem('selectedProgramContext');
         const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
-        return { session_id: sessionId, major_name: major };
-      } catch { return { session_id: '', major_name: '' }; }
+        return { session_id: sessionId, major_name: major, year: activeRound?.year };
+      } catch { return { session_id: '', major_name: '', year: activeRound?.year }; }
     })();
 
     const newItem = {
-      component_id: parseInt(componentId),
+      component_id: !isNaN(componentId) && !isNaN(parseInt(componentId)) ? parseInt(componentId) : componentId,
       quality_name: qualityName,
       ...ctx
     };
@@ -241,13 +237,18 @@ export default function DefineComponentSection() {
 
   // ดึง indicators จาก backend ทุกครั้งที่เลือก component หรือเปิดฟอร์มตัวบ่งชี้
   useEffect(() => {
-    if (!selectedComponent) return;
+    if (!selectedComponent || !activeRound) return; // Wait for activeRound
+
     try {
       const sessionId = localStorage.getItem('assessment_session_id') || '';
       const sel = localStorage.getItem('selectedProgramContext');
       const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
-      const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      fetch(`${BASE_URL}/api/indicators-by-component/${selectedComponent.id}?${qs}`)
+      const qsObj = { session_id: sessionId, major_name: major };
+      if (activeRound && activeRound.year) {
+        qsObj.year = activeRound.year;
+      }
+      const qs = new URLSearchParams(qsObj).toString();
+      fetch(`${BASE_URL}/api/indicators-by-component/${selectedComponent.component_id}?${qs}`)
         .then(res => res.json())
         .then(async (data) => {
           setIndicators(prev => ({ ...prev, [selectedComponent.id]: data }));
@@ -271,59 +272,53 @@ export default function DefineComponentSection() {
     } catch {
       setIndicators(prev => ({ ...prev, [selectedComponent.id]: [] }));
     }
-  }, [selectedComponent, showIndicatorForm]);
+  }, [selectedComponent, showIndicatorForm, activeRound]); // Add activeRound dependency
 
-  // ฟังก์ชันเพิ่มตัวบ่งชี้
-  const handleAddIndicator = async (e) => {
-    e.preventDefault();
-    if (!selectedComponent || !indicatorName) return;
+  // ฟังก์ชันเพิ่มตัวบ่งชี้ (Refactored to accept payload from IndicatorTable)
+  const handleAddIndicator = async (indicatorData) => {
+    // If called via event (legacy), we shouldn't really support it here anymore, 
+    // but let's handle the payload structure.
+    if (!selectedComponent) return;
 
-    const normSeq = normalizeSequence(indicatorSequence);
     const ctx = (() => {
       try {
         const sessionId = localStorage.getItem('assessment_session_id') || '';
         const sel = localStorage.getItem('selectedProgramContext');
         const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
-        return { session_id: sessionId, major_name: major };
-      } catch { return { session_id: '', major_name: '' }; }
+        // Use activeRound.year if available, otherwise fallback to null (which backend might handle or error)
+        return { session_id: sessionId, major_name: major, year: activeRound?.year };
+      } catch { return { session_id: '', major_name: '', year: activeRound?.year }; }
     })();
 
+    if (!ctx.year) {
+      alert('กรุณารอข้อมูลปีการศึกษาโหลดสักครู่ หรือตรวจสอบการตั้งค่ารอบการประเมิน');
+      return;
+    }
+
     const newIndicator = {
-      component_id: selectedComponent.id,
-      sequence: normSeq,
-      indicator_type: indicatorType,
-      criteria_type: criteriaType,
-      indicator_name: indicatorName,
-      data_source: dataSource
+      component_id: indicatorData.component_id || selectedComponent.component_id,
+      sequence: indicatorData.sequence || indicatorSequence, // Fallback if needed
+      indicator_type: indicatorData.indicator_type || indicatorType,
+      criteria_type: indicatorData.criteria_type || criteriaType,
+      indicator_name: indicatorData.indicator_name || indicatorName,
+      data_source: indicatorData.data_source || dataSource,
+      ...ctx
     };
 
     try {
-      // --- แก้ไข: เพิ่มการตรวจสอบตัวบ่งชี้ซ้ำในฝั่ง client ก่อนส่งไป server ---
-      const currentIndicators = indicators[selectedComponent.id] || [];
-      const dupBySeq = currentIndicators.some(ind => normalizeSequence(ind.sequence) === normSeq);
-      const dupByName = currentIndicators.some(ind => {
-        const nameA = String(ind.indicator_name || ind.indicatorName || '').trim().toLowerCase();
-        const nameB = String(newIndicator.indicator_name).trim().toLowerCase();
-        return nameA === nameB;
-      });
+      // NOTE: Clientside duplicate check is now handled in IndicatorTable/Form. 
+      // We just perform the save here.
 
-      if (dupBySeq || dupByName) {
-        setError('ตัวบ่งชี้นี้มีอยู่แล้ว (ลำดับหรือชื่อซ้ำ)');
-        return;
-      }
-
-      // บันทึกเฉพาะหัวข้อเดียวตามที่ผู้ใช้ต้องการ (ยกเลิกการเพิ่มหัวข้อย่อยอัตโนมัติ)
       const res = await fetch(`${BASE_URL}/api/indicators`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newIndicator, ...ctx })
+        body: JSON.stringify(newIndicator)
       });
 
       if (res.ok) {
         const result = await res.json();
         const addedItem = {
           ...newIndicator,
-          ...ctx,
           id: result.id
         };
 
@@ -334,26 +329,42 @@ export default function DefineComponentSection() {
           return { ...prev, [selectedComponent.id]: newList };
         });
 
-        // รีเซ็ตฟอร์ม
-        setShowIndicatorForm(false);
-        setIndicatorName('');
-        setIndicatorType('');
-        setCriteriaType('');
-        setDataSource('');
-        setIndicatorSequence('');
+        // Reset form states in parent if any (mostly handled in child now)
         setError('');
       } else {
         setError('บันทึกตัวบ่งชี้ไม่สำเร็จ');
+        throw new Error('Save failed'); // Construct error to let child know
       }
     } catch (err) {
       setError('เกิดข้อผิดพลาดในการบันทึกตัวบ่งชี้');
+      throw err;
     }
   };
 
 
   // ฟังก์ชันลบตัวบ่งชี้
   const handleDeleteIndicator = async (indicatorId, componentId) => {
-    if (!window.confirm('ยืนยันการลบตัวบ่งชี้นี้?')) return;
+    // หาตัวบ่งชี้ที่จะลบเพื่อเช็คว่าเป็นหัวข้อหลักหรือไม่
+    const list = indicators[componentId] || [];
+    const target = list.find(i => i.id === indicatorId);
+    if (!target) return;
+
+    // เช็คว่ามีลูกหรือไม่
+    const isMain = !String(target.sequence).includes('.');
+    const idsToDelete = [indicatorId];
+
+    if (isMain) {
+      const prefix = String(target.sequence) + '.';
+      const subs = list.filter(i => String(i.sequence).startsWith(prefix));
+      if (subs.length > 0) {
+        if (!window.confirm(`ยืนยันการลบตัวบ่งชี้ ${target.sequence} และข้อย่อยทั้งหมดจำนวน ${subs.length} รายการ?`)) return;
+        subs.forEach(s => idsToDelete.push(s.id));
+      } else {
+        if (!window.confirm('ยืนยันการลบตัวบ่งชี้นี้?')) return;
+      }
+    } else {
+      if (!window.confirm('ยืนยันการลบตัวบ่งชี้นี้?')) return;
+    }
 
     try {
       const ctxParams = (() => {
@@ -364,29 +375,52 @@ export default function DefineComponentSection() {
           return new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
         } catch { return ''; }
       })();
-      const res = await fetch(`${BASE_URL}/api/indicators/${indicatorId}?${ctxParams}`, { method: 'DELETE' });
-      if (res.ok) {
-        setIndicators(prev => ({
-          ...prev,
-          [componentId]: prev[componentId].filter(ind => ind.id !== indicatorId)
-        }));
-      } else {
-        setError('ลบตัวบ่งชี้ไม่สำเร็จ');
-      }
+
+      // ลบทั้งหมดแบบ Parallel
+      await Promise.all(idsToDelete.map(id =>
+        fetch(`${BASE_URL}/api/indicators/${id}?${ctxParams}`, { method: 'DELETE' })
+      ));
+
+      setIndicators(prev => ({
+        ...prev,
+        [componentId]: prev[componentId].filter(ind => !idsToDelete.includes(ind.id))
+      }));
     } catch (err) {
+      console.error('Delete error', err);
       setError('เกิดข้อผิดพลาดในการลบตัวบ่งชี้');
     }
   };
 
-  // ฟังก์ชันแก้ไขตัวบ่งชี้ (เปิดฟอร์มแก้ไข)
+  const handleUpdateIndicator = async (indicatorId, updatedData) => {
+    if (!selectedComponent) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/indicators/${indicatorId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedData)
+      });
+
+      if (res.ok) {
+        setIndicators(prev => {
+          const list = prev[selectedComponent.id] || [];
+          const newList = list.map(ind => ind.id === indicatorId ? { ...ind, ...updatedData } : ind);
+          // Sort after update as sequence might change
+          newList.sort((a, b) => normalizeSequence(a.sequence).localeCompare(normalizeSequence(b.sequence), undefined, { numeric: true }));
+          return { ...prev, [selectedComponent.id]: newList };
+        });
+      } else {
+        throw new Error('บันทึกการแก้ไขไม่สำเร็จ');
+      }
+    } catch (err) {
+      console.error('Update indicator error:', err);
+      throw err;
+    }
+  };
+
+  // ฟังก์ชันแก้ไขตัวบ่งชี้ (ส่งต่อไปยัง IndicatorTable)
   const handleEditIndicator = (indicator) => {
+    // This state is actually owned by IndicatorTable now
     setSelectedIndicator(indicator);
-    setIndicatorSequence(indicator.sequence);
-    setIndicatorType(indicator.indicator_type);
-    setCriteriaType(indicator.criteria_type);
-    setIndicatorName(indicator.indicator_name);
-    setDataSource(indicator.data_source);
-    setShowIndicatorForm(true);
   };
 
   // ฟังก์ชันเปิด/ปิดฟอร์ม
@@ -442,14 +476,23 @@ export default function DefineComponentSection() {
           indicators={indicators}
           onEditClick={handleEditIndicator}
           onDeleteClick={handleDeleteIndicator}
-          onAfterBulkAdded={async () => {
+          onAddIndicator={handleAddIndicator}
+          onUpdateIndicator={handleUpdateIndicator}
+          onAfterBulkAdded={async (healedId) => {
             try {
               const sessionId = localStorage.getItem('assessment_session_id') || '';
               const sel = localStorage.getItem('selectedProgramContext');
               const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
-              const qs = new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-              const refreshed = await fetch(`${BASE_URL}/api/indicators-by-component/${selectedComponent.id}?${qs}`).then(r => r.json()).catch(() => []);
+              const qsObj = { session_id: sessionId, major_name: major };
+              if (activeRound && activeRound.year) {
+                qsObj.year = activeRound.year; // Ensure refresh uses year
+              }
+              const qs = new URLSearchParams(qsObj).toString();
+
+              const targetId = healedId || selectedComponent.component_id;
+              const refreshed = await fetch(`${BASE_URL}/api/indicators-by-component/${targetId}?${qs}`).then(r => r.json()).catch(() => []);
               setIndicators(prev => ({ ...prev, [selectedComponent.id]: Array.isArray(refreshed) ? refreshed : [] }));
+
               // refresh evaluated map as well
               const history = await fetch(`${BASE_URL}/api/evaluations/history?${qs}`).then(r => r.json()).catch(() => []);
               const map = {};
@@ -472,6 +515,14 @@ export default function DefineComponentSection() {
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
       <div className="text-center mb-8">
 
+      </div>
+
+      <div className="text-center mb-8">
+        {activeRound && (
+          <div className="px-4 py-3 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold mb-4 border border-blue-200 inline-flex items-center">
+            <span className="mr-2">📅</span> กำลังแก้ไขเกณฑ์สำหรับ: {activeRound.name} (ปี {activeRound.year})
+          </div>
+        )}
       </div>
 
       <InstructionsSection />

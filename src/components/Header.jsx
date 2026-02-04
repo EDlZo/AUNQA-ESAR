@@ -1,6 +1,6 @@
 // src/components/Header.jsx
 import React, { useState } from 'react';
-import { GraduationCap, Menu, X, LogOut, ChevronDown } from 'lucide-react';
+import { GraduationCap, Menu, X, LogOut, ChevronDown, Shield } from 'lucide-react';
 
 export default function Header({
   isMenuOpen, setIsMenuOpen, activeTab, setActiveTab,
@@ -27,6 +27,8 @@ export default function Header({
     if (['system_admin', 'qa_admin'].includes(role)) {
       navigation.push({ name: 'จัดการองค์ประกอบ', tab: 'programs', active: isManageFlowActive });
     }
+
+
 
     // กำหนดค่าเป้าหมาย (Admin, SAR Manager)
     if (['system_admin', 'sar_manager'].includes(role)) {
@@ -118,6 +120,22 @@ export default function Header({
                         <p className="text-sm font-medium text-gray-900 truncate">{currentUser.name}</p>
                         <p className="text-xs text-gray-500">{rolePermissions[currentUser.role_id]?.name || 'User'}</p>
                       </div>
+
+                      {currentUser.role === 'system_admin' && (
+                        <button
+                          onClick={() => {
+                            setActiveTab('system_management');
+                            setIsProfileOpen(false);
+                          }}
+                          className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left font-medium border-b border-gray-50"
+                        >
+                          <div className="p-1.5 bg-indigo-50 rounded-lg">
+                            <Shield className="w-4 h-4 text-indigo-600" />
+                          </div>
+                          <span>จัดการระบบ</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => {
                           handleLogout();
