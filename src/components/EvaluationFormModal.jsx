@@ -18,8 +18,10 @@ import {
   Clock,
   ArrowLeft
 } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
-export default function EvaluationFormModal({ indicator, selectedProgram, onComplete, onCancel, allEvaluations, allEvaluationsActual, activeYear, readOnly }) {
+export default function EvaluationFormModal({ indicator, selectedProgram, onComplete, onCancel, allEvaluations, allEvaluationsActual, activeYear, readOnly, currentUser, onApprove, onReject }) {
+  const { showAlert, showConfirm, showPrompt } = useModal();
   // ข้อมูลจากการประเมินเกณฑ์ก่อนหน้า (target_value, score)
   const [criteriaData, setCriteriaData] = useState({ target_value: '', score: '' });
 
@@ -293,6 +295,20 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
       console.log('Major:', major);
       console.log('pendingEvidenceFiles:', pendingEvidenceFiles);
 
+      const maxAllowed = criteriaData.score ? parseFloat(criteriaData.score) : 5.0;
+      const opScoreNum = parseFloat(operationScore) || 0;
+      const refScoreNum = parseFloat(referenceScore) || 0;
+
+      if (opScoreNum > maxAllowed || refScoreNum > maxAllowed) {
+        showAlert({
+          title: 'คะแนนเกินเป้าหมาย',
+          message: `คะแนนต้องไม่เกินคะแนนเป้าหมายที่กำหนดไว้ (${maxAllowed})`,
+          type: 'warning'
+        });
+        setLoading(false);
+        return;
+      }
+
       const formData = new FormData();
       formData.append('session_id', sessionId);
       formData.append('indicator_id', indicator.id);
@@ -368,20 +384,29 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
         console.log('Response data:', data);
         try { localStorage.setItem('last_summary_major', selectedProgram?.majorName || ''); } catch { }
         if (fileInputRef.current) { try { fileInputRef.current.value = ''; } catch { } }
-        // ล้างข้อมูลไฟล์หลักฐานที่ยังไม่ได้บันทึก
         setPendingEvidenceFiles([]);
         onComplete();
       } else {
-        const errorText = await res.text();
-        console.error('Server error:', res.status, errorText);
-        alert('บันทึกผลการดำเนินการไม่สำเร็จ: ' + res.status);
+        const errorData = await res.json().catch(() => ({}));
+        console.error('Server error:', res.status, errorData);
+
+        if (res.status === 403 && errorData.error === 'cannot_edit_approved') {
+          showAlert({
+            title: 'ไม่สามารถบันทึกได้',
+            message: 'รายการนี้ได้รับการอนุมัติเรียบร้อยแล้ว ไม่สามารถแก้ไขได้อีกต่อไป',
+            type: 'warning'
+          });
+        } else {
+          showAlert({
+            title: 'ข้อผิดพลาด',
+            message: 'บันทึกไม่สำเร็จ: ' + (errorData.message || res.status),
+            type: 'error'
+          });
+        }
       }
     } catch (error) {
       console.error('========== SUBMISSION ERROR ==========');
-      console.error('Error type:', error.name);
-      console.error('Error message:', error.message);
-      console.error('Full error:', error);
-      alert('เกิดข้อผิดพลาด: ' + error.message);
+      showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + error.message, type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -404,13 +429,13 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
         body: fd
       });
       if (!res.ok) {
-        alert('เพิ่มไฟล์ไม่สำเร็จ');
+        showAlert({ title: 'ข้อผิดพลาด', message: 'เพิ่มไฟล์ไม่สำเร็จ', type: 'error' });
       }
       // refresh history to reflect new files
       await fetchEvaluationHistory();
     } catch (err) {
       console.error('Error appending files:', err);
-      alert('เกิดข้อผิดพลาดในการเพิ่มไฟล์');
+      showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการเพิ่มไฟล์', type: 'error' });
     }
   };
 
@@ -433,14 +458,15 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: sessionId, indicator_id: indicator.id, major_name: major, filename })
       });
-      if (!res.ok) {
-        alert('ลบไฟล์ไม่สำเร็จ');
-        return;
+      if (res.ok) {
+        showAlert({ title: 'สำเร็จ', message: 'ลบไฟล์เรียบร้อยแล้ว', type: 'success' });
+        fetchExistingData();
+      } else {
+        const err = await res.json();
+        showAlert({ title: 'ข้อผิดพลาด', message: err.error, type: 'error' });
       }
-      await fetchEvaluationHistory();
     } catch (err) {
-      console.error('Error removing file:', err);
-      alert('เกิดข้อผิดพลาดในการลบไฟล์');
+      showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'error' });
     }
   };
 
@@ -572,12 +598,12 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
               <input
                 type="number"
                 min="0"
-                max="5"
+                max={criteriaData.score || "5"}
                 step="0.1"
                 value={operationScore}
                 onChange={(e) => setOperationScore(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0.0 - 5.0"
+                placeholder={`0.0 - ${criteriaData.score || "5.0"}`}
                 required
               />
             </div>
@@ -589,12 +615,12 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
               <input
                 type="number"
                 min="0"
-                max="5"
+                max={criteriaData.score || "5"}
                 step="0.1"
                 value={referenceScore}
                 onChange={(e) => setReferenceScore(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0.0 - 5.0"
+                placeholder={`0.0 - ${criteriaData.score || "5.0"}`}
                 required
               />
             </div>
@@ -720,6 +746,26 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
             >
               {readOnly ? 'ปิด' : 'ยกเลิก'}
             </button>
+
+            {readOnly && onApprove && onReject && evaluationHistory.length > 0 && evaluationHistory[0].status === 'pending_review' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onReject(evaluationHistory[0].id || evaluationHistory[0]._id)}
+                  className="px-6 py-2 bg-rose-600 text-white font-bold rounded hover:bg-rose-700 transition-colors flex-1"
+                >
+                  ส่งกลับแก้ไข
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onApprove(evaluationHistory[0].id || evaluationHistory[0]._id)}
+                  className="px-6 py-2 bg-emerald-600 text-white font-bold rounded hover:bg-emerald-700 transition-colors flex-1"
+                >
+                  อนุมัติ
+                </button>
+              </>
+            )}
+
             {!readOnly && (
               <button
                 type="submit"
@@ -897,15 +943,15 @@ export default function EvaluationFormModal({ indicator, selectedProgram, onComp
                 type="button"
                 onClick={() => {
                   if (!evidenceNumber || !evidenceName) {
-                    alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+                    showAlert({ title: 'ข้อมูลไม่ครบ', message: 'กรุณากรอกข้อมูลให้ครบถ้วน', type: 'warning' });
                     return;
                   }
                   if (evidenceType === 'file' && evidenceFiles.length === 0) {
-                    alert('กรุณาเลือกไฟล์');
+                    showAlert({ title: 'ไม่ได้เลือกไฟล์', message: 'กรุณาเลือกไฟล์', type: 'warning' });
                     return;
                   }
                   if (evidenceType === 'url' && !evidenceUrl) {
-                    alert('กรุณากรอก URL');
+                    showAlert({ title: 'ไม่ได้กรอก URL', message: 'กรุณากรอก URL', type: 'warning' });
                     return;
                   }
 

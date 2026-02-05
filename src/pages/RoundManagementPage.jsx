@@ -2,8 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Clock, Plus, Check, X, AlertCircle, Trash2, Edit2 } from 'lucide-react';
 import { BASE_URL } from '../config/api';
+import { useModal } from '../context/ModalContext';
 
 export default function RoundManagementPage({ setActiveTab }) {
+    const { showAlert, showConfirm } = useModal();
     const [rounds, setRounds] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -83,47 +85,61 @@ export default function RoundManagementPage({ setActiveTab }) {
             if (res.ok) {
                 setShowModal(false);
                 fetchRounds();
-                alert(formData.id ? 'แก้ไขรอบประเมินสำเร็จ' : 'สร้างรอบประเมินสำเร็จ');
+                showAlert({ title: 'สำเร็จ', message: formData.id ? 'แก้ไขรอบประเมินสำเร็จ' : 'สร้างรอบประเมินสำเร็จ', type: 'success' });
             } else {
                 const data = await res.json();
-                alert(data.error || 'เกิดข้อผิดพลาด');
+                showAlert({ title: 'ข้อผิดพลาด', message: data.error || 'เกิดข้อผิดพลาด', type: 'error' });
             }
         } catch (error) {
             console.error('Error saving round:', error);
-            alert('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+            showAlert({ title: 'ข้อผิดพลาด', message: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', type: 'error' });
         }
     };
 
-    const handleDelete = async (round) => {
-        if (!window.confirm(`คุณต้องการลบรอบ "${round.name}" ใช่หรือไม่? พึงระวังข้อมูลที่เกี่ยวข้องอาจได้รับผลกระทบ`)) return;
-
-        try {
-            const res = await fetch(`${BASE_URL}/api/rounds/${round.id}`, {
-                method: 'DELETE'
-            });
-
-            if (res.ok) {
-                fetchRounds();
-            } else {
-                alert('ลบรอบประเมินไม่สำเร็จ');
+    const handleDelete = (round) => {
+        showConfirm({
+            title: 'ยืนยันการลบ',
+            message: `คุณต้องการลบรอบ "${round.name}" ใช่หรือไม่? ข้อมูลประเมินและไฟล์ทั้งหมดในปีนี้จะถูกลบถาวร ไม่สามารถกู้คืนได้`,
+            type: 'error',
+            confirmText: 'ลบข้อมูลทั้งหมด',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`${BASE_URL}/api/rounds/${round.id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        fetchRounds();
+                        showAlert({ title: 'สำเร็จ', message: 'ลบรอบประเมินเรียบร้อยแล้ว', type: 'success' });
+                    } else {
+                        showAlert({ title: 'ข้อผิดพลาด', message: 'ลบรอบประเมินไม่สำเร็จ', type: 'error' });
+                    }
+                } catch (error) {
+                    console.error('Error deleting round:', error);
+                    showAlert({ title: 'ข้อผิดพลาด', message: 'ลบรอบประเมินไม่สำเร็จ', type: 'error' });
+                }
             }
-        } catch (error) {
-            console.error('Error deleting round:', error);
-            alert('ลบรอบประเมินไม่สำเร็จ');
-        }
+        });
     };
     const handleStatusChange = async (round, newStatus) => {
         const isActive = newStatus === 'active';
-        // If already in that status, do nothing (though select won't trigger usually)
         if (round.is_active === isActive) return;
 
-        if (isActive && !window.confirm(`คุณต้องการเปลี่ยนสถานะรอบ "${round.name}" เป็น "เปิดใช้งาน" ใช่หรือไม่? รอบอื่นๆ จะถูกปิดใช้งานอัตโนมัติ`)) {
-            // Reset select if needed, but since we rely on state updates, just return
-            return;
+        if (isActive) {
+            showConfirm({
+                title: 'เปลี่ยนรอบการประเมิน',
+                message: `คุณต้องการเปลี่ยนสถานะรอบ "${round.name}" เป็น "เปิดใช้งาน" ใช่หรือไม่? รอบการประเมินอื่นๆ จะถูกปิดใช้งานโดยอัตโนมัติ`,
+                type: 'warning',
+                confirmText: 'เปิดใช้งานรอบนี้',
+                onConfirm: async () => {
+                    await updateRoundStatus(round.id, true);
+                }
+            });
+        } else {
+            await updateRoundStatus(round.id, false);
         }
+    };
 
+    const updateRoundStatus = async (id, isActive) => {
         try {
-            const res = await fetch(`${BASE_URL}/api/rounds/${round.id}`, {
+            const res = await fetch(`${BASE_URL}/api/rounds/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_active: isActive })
@@ -131,12 +147,13 @@ export default function RoundManagementPage({ setActiveTab }) {
 
             if (res.ok) {
                 fetchRounds();
+                if (isActive) showAlert({ title: 'สำเร็จ', message: 'เปลี่ยนรอบการประเมินปัจจุบันเรียบร้อยแล้ว', type: 'success' });
             } else {
-                alert('อัปเดตสถานะไม่สำเร็จ');
+                showAlert({ title: 'ข้อผิดพลาด', message: 'อัปเดตสถานะไม่สำเร็จ', type: 'error' });
             }
         } catch (error) {
             console.error('Error updating status:', error);
-            alert('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+            showAlert({ title: 'ข้อผิดพลาด', message: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', type: 'error' });
         }
     };
 

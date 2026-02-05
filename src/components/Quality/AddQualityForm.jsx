@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BASE_URL } from '../../config/api.js';
 import { Plus, Edit2, Trash2, Settings } from 'lucide-react';
+import { useModal } from '../../context/ModalContext';
 import MasterComponentForm from '../Admin/MasterComponentForm';
 
 
@@ -13,6 +14,7 @@ export default function AddQualityForm({
   onCancel,
   error
 }) {
+  const { showConfirm } = useModal();
   const [components, setComponents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedComponent, setSelectedComponent] = useState(null);
@@ -82,15 +84,21 @@ export default function AddQualityForm({
 
   const handleDeleteMaster = async () => {
     if (!selectedComponent) return;
-    if (!window.confirm('ยืนยันการลบแม่แบบองค์ประกอบนี้?')) return;
-    try {
-      const res = await fetch(`${BASE_URL}/api/master-quality-components/${selectedComponent.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setComponentId('');
-        setSelectedComponent(null);
-        fetchComponents();
+    showConfirm({
+      title: 'ยืนยันการลบ',
+      message: 'ยืนยันการลบแม่แบบองค์ประกอบนี้? การดำเนินการนี้ไม่สามารถย้อนกลับได้',
+      type: 'error',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${BASE_URL}/api/master-quality-components/${selectedComponent.id}`, { method: 'DELETE' });
+          if (res.ok) {
+            setComponentId('');
+            setSelectedComponent(null);
+            fetchComponents();
+          }
+        } catch (err) { console.error('Error deleting master:', err); }
       }
-    } catch (err) { console.error('Error deleting master:', err); }
+    });
   };
 
   // ฟังก์ชันสำหรับรีเฟรชข้อมูล

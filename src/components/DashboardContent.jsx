@@ -12,7 +12,7 @@ import {
   Title as ChartTitle,
 } from 'chart.js';
 import { Doughnut, Bar, Line } from 'react-chartjs-2';
-import { LayoutDashboard, FileText, CheckCircle, GraduationCap, Clock, RefreshCcw, ChevronRight, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, FileText, CheckCircle, GraduationCap, Clock, RefreshCcw, ChevronRight, BarChart3, Activity } from 'lucide-react';
 import ProgramSelection from './ProgramSelection';
 import { BASE_URL } from '../config/api.js';
 
@@ -40,6 +40,7 @@ export default function DashboardContent({ user }) {
     componentProgress: [],
     recentEvaluations: []
   });
+  const [historicalStats, setHistoricalStats] = useState([]); // Array of { year, avgScore }
 
   const [rounds, setRounds] = useState([]);
   const [selectedYear, setSelectedYear] = useState('');
@@ -71,8 +72,55 @@ export default function DashboardContent({ user }) {
   useEffect(() => {
     if (selectedProgram) {
       fetchDashboardData();
+      fetchHistoricalTrends();
     }
-  }, [selectedProgram, selectedYear]);
+  }, [selectedProgram, selectedYear, rounds]);
+
+  const fetchHistoricalTrends = async () => {
+    if (!selectedProgram || rounds.length === 0) return;
+
+    try {
+      const { majorName } = selectedProgram;
+
+      const yearlyData = await Promise.all(rounds.map(async (round) => {
+        const qs = new URLSearchParams({
+          major_name: majorName,
+          year: round.year
+        }).toString();
+
+        const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
+        if (!res.ok) return { year: round.year, avgScore: 0 };
+
+        const data = await res.json();
+        const evalsActual = data.evaluations_actual || [];
+
+        // Logic: Take only the latest score per indicator to avoid duplicate sessions inflation
+        const latestMap = new Map();
+        evalsActual.forEach(ev => {
+          const key = String(ev.indicator_id);
+          const score = parseFloat(ev.operation_score) || 0;
+          if (score <= 0) return;
+
+          const existing = latestMap.get(key);
+          const currentTimestamp = ev.created_at?.seconds || ev.created_at?._seconds || new Date(ev.created_at).getTime() / 1000 || 0;
+          const existingTimestamp = existing ? (existing.created_at?.seconds || existing.created_at?._seconds || new Date(existing.created_at).getTime() / 1000 || 0) : 0;
+
+          if (!existing || currentTimestamp > existingTimestamp) {
+            latestMap.set(key, ev);
+          }
+        });
+
+        const activeScores = Array.from(latestMap.values()).map(ev => parseFloat(ev.operation_score));
+        const avg = activeScores.length > 0 ? (activeScores.reduce((a, b) => a + b, 0) / activeScores.length) : 0;
+
+        return { year: round.year, avgScore: parseFloat(avg.toFixed(3)) };
+      }));
+
+      setHistoricalStats(yearlyData.sort((a, b) => a.year.localeCompare(b.year)));
+    } catch (err) {
+      console.error('Failed to fetch historical trends', err);
+    }
+  };
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -89,15 +137,14 @@ export default function DashboardContent({ user }) {
       const res = await fetch(`${BASE_URL}/api/bulk/session-summary?${qs}`);
       if (!res.ok) throw new Error('Failed to fetch dashboard data');
 
+      const fullData = await res.json();
       const {
         components = [],
-        evaluations = [],
         evaluations_actual = [],
-        committee_evaluations = [],
         indicators = []
-      } = await res.json();
+      } = fullData;
 
-      // Calculate stats based on real indicators and evaluations
+      // Filter and deduplicate indicators to only those relevant to current year components
       const componentIds = new Set(components.map(c => String(c.component_id)));
       const componentDocIds = new Set(components.map(c => String(c.id)));
 
@@ -106,39 +153,46 @@ export default function DashboardContent({ user }) {
       );
 
       const totalIndicatorsCount = filteredIndicators.length;
-      const mainIndicatorsCount = filteredIndicators.filter(ind => !String(ind.sequence || "").includes('.')).length;
       const activeIndicatorIds = new Set(filteredIndicators.map(ind => String(ind.id)));
       const activeIndicatorSequences = new Set(filteredIndicators.map(ind => String(ind.sequence)));
       const activeIndicatorLogicalIds = new Set(filteredIndicators.map(ind => String(ind.indicator_id || "")));
 
-      const filteredEvaluationsActual = evaluations_actual.filter(ev =>
-        activeIndicatorIds.has(String(ev.indicator_id)) ||
-        activeIndicatorSequences.has(String(ev.indicator_id)) ||
-        activeIndicatorLogicalIds.has(String(ev.indicator_id))
-      );
+      // Deduplicate evaluations: take only the latest for each indicator if multiple exist
+      const latestMap = new Map();
+      evaluations_actual.forEach(ev => {
+        // Must belong to our relevant indicators
+        if (!activeIndicatorIds.has(String(ev.indicator_id)) &&
+          !activeIndicatorSequences.has(String(ev.indicator_id)) &&
+          !activeIndicatorLogicalIds.has(String(ev.indicator_id))) return;
 
-      // Count unique indicators evaluated (to avoid duplicates or parent/child confusion)
-      const evaluatedIndicatorIds = new Set(filteredEvaluationsActual.map(ev => String(ev.indicator_id)));
+        const key = String(ev.indicator_id);
+        const existing = latestMap.get(key);
 
-      // Match back to the indicators list to see how many unique indicators from the list are covered
-      const completedIndicatorsCount = filteredIndicators.filter(ind =>
-        evaluatedIndicatorIds.has(String(ind.id)) ||
-        evaluatedIndicatorIds.has(String(ind.indicator_id)) ||
-        evaluatedIndicatorIds.has(String(ind.sequence))
-      ).length;
+        const currentTimestamp = ev.created_at?.seconds || ev.created_at?._seconds || new Date(ev.created_at).getTime() / 1000 || 0;
+        const existingTimestamp = existing ? (existing.created_at?.seconds || existing.created_at?._seconds || new Date(existing.created_at).getTime() / 1000 || 0) : 0;
 
-      // For a "Clean" high-level view, we might only want to show progress of main indicators
-      const completedMainIndicatorsCount = filteredIndicators.filter(ind =>
-        !String(ind.sequence || "").includes('.') &&
-        (evaluatedIndicatorIds.has(String(ind.id)) || evaluatedIndicatorIds.has(String(ind.indicator_id)) || evaluatedIndicatorIds.has(String(ind.sequence)))
-      ).length;
+        if (!existing || currentTimestamp > existingTimestamp) {
+          latestMap.set(key, ev);
+        }
+      });
+
+      const uniqueEvaluatedActual = Array.from(latestMap.values());
+      const evaluatedIndicatorIds = new Set(uniqueEvaluatedActual.map(ev => String(ev.indicator_id)));
+
+      // Average score based on unique/latest evaluations
+      const allScores = uniqueEvaluatedActual
+        .map(ev => parseFloat(ev.operation_score) || 0)
+        .filter(s => s > 0);
+
+      const averageScore = allScores.length > 0
+        ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(2)
+        : "0.00";
 
       // Calculate progress and score per component
       const componentStats = components.map(c => {
-        const componentIndicators = indicators.filter(ind =>
+        const componentIndicators = filteredIndicators.filter(ind =>
           String(ind.component_id) === String(c.id) || String(ind.component_id) === String(c.component_id)
         );
-        const componentIndicatorIds = new Set(componentIndicators.map(ind => String(ind.id)));
 
         const completedInComponent = componentIndicators.filter(ind =>
           evaluatedIndicatorIds.has(String(ind.id)) ||
@@ -147,11 +201,9 @@ export default function DashboardContent({ user }) {
         ).length;
 
         const totalInComponent = componentIndicators.length;
-
         const progress = totalInComponent > 0 ? Math.round((completedInComponent / totalInComponent) * 100) : 0;
 
-        // Average score for this component
-        const componentScores = filteredEvaluationsActual
+        const componentScores = uniqueEvaluatedActual
           .filter(ev => {
             return componentIndicators.some(ind =>
               String(ind.id) === String(ev.indicator_id) ||
@@ -166,29 +218,58 @@ export default function DashboardContent({ user }) {
           ? (componentScores.reduce((a, b) => a + b, 0) / componentScores.length).toFixed(2)
           : "0.00";
 
-        return {
-          name: c.quality_name,
-          progress,
-          score
-        };
+        return { name: c.quality_name, progress, score };
       });
-
-      // Overall average score
-      const allScores = filteredEvaluationsActual
-        .map(ev => parseFloat(ev.operation_score) || 0)
-        .filter(s => s > 0);
-
-      const averageScore = allScores.length > 0
-        ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(2)
-        : "0.00";
 
       setStats({
         totalComponents: components.length,
         totalIndicators: totalIndicatorsCount,
-        completedAssessments: completedIndicatorsCount, // Use unique count instead of record length
+        completedAssessments: evaluatedIndicatorIds.size,
         averageScore,
         componentProgress: componentStats,
-        recentEvaluations: evaluations_actual.slice(0, 5)
+        recentEvaluations: (() => {
+          return uniqueEvaluatedActual
+            .sort((a, b) => {
+              const dateA = a.created_at?.seconds || a.created_at?._seconds || new Date(a.created_at).getTime() / 1000 || 0;
+              const dateB = b.created_at?.seconds || b.created_at?._seconds || new Date(b.created_at).getTime() / 1000 || 0;
+              return dateB - dateA;
+            })
+            .filter(ev => {
+              const ind = filteredIndicators.find(i =>
+                String(i.id) === String(ev.indicator_id) ||
+                String(i.indicator_id) === String(ev.indicator_id) ||
+                String(i.sequence) === String(ev.indicator_id)
+              );
+              // Only show sub-indicators in recent activity for better detail
+              return ind && String(ind.sequence || "").includes('.');
+            })
+            .slice(0, 5)
+            .map(ev => {
+              const ind = filteredIndicators.find(i =>
+                String(i.id) === String(ev.indicator_id) ||
+                String(i.indicator_id) === String(ev.indicator_id) ||
+                String(i.sequence) === String(ev.indicator_id)
+              );
+
+              let dateStr = 'ไม่ระบุวันที่';
+              if (ev.created_at) {
+                const seconds = ev.created_at.seconds || ev.created_at._seconds;
+                if (seconds) dateStr = new Date(seconds * 1000).toLocaleDateString('th-TH');
+                else {
+                  const d = new Date(ev.created_at);
+                  if (!isNaN(d.getTime())) dateStr = d.toLocaleDateString('th-TH');
+                }
+              }
+
+              return {
+                ...ev,
+                display_id: ind ? ind.sequence : 'ไม่พบข้อมูล',
+                display_name: ind ? ind.indicator_name : 'ไม่พบชื่อตัวบ่งชี้',
+                display_date: dateStr,
+                display_score: ev.operation_score || ev.score || '-'
+              };
+            })
+        })()
       });
 
     } catch (error) {
@@ -295,6 +376,74 @@ export default function DashboardContent({ user }) {
         ))}
       </div>
 
+      {/* Yearly Trend Chart */}
+      <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm mb-8">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">แนวโน้มคะแนนประเมินรายปี</h3>
+            <p className="text-sm text-gray-500 mt-1">เปรียบเทียบคะแนนเฉลี่ยจากคณะกรรมการในแต่ละปีการศึกษา</p>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full">
+            <Activity className="w-3.5 h-3.5" />
+            AUN-QA TREND
+          </div>
+        </div>
+        <div className="h-[300px]">
+          {historicalStats.length > 0 ? (
+            <Line
+              data={{
+                labels: historicalStats.map(d => `ปี ${d.year}`),
+                datasets: [
+                  {
+                    label: 'คะแนนเฉลี่ยรวม',
+                    data: historicalStats.map(d => d.avgScore),
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: 'rgba(59, 130, 246, 1)',
+                    pointBorderWidth: 2,
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                    tension: 0.4,
+                    fill: true,
+                  }
+                ]
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  tooltip: {
+                    backgroundColor: '#1e293b',
+                    padding: 12,
+                    titleFont: { size: 14, weight: 'bold' },
+                    bodyFont: { size: 13 },
+                    cornerRadius: 8,
+                  }
+                },
+                scales: {
+                  y: {
+                    min: 0,
+                    max: 5,
+                    ticks: { stepSize: 1 },
+                    grid: { color: '#f1f5f9' }
+                  },
+                  x: {
+                    grid: { display: false }
+                  }
+                }
+              }}
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center text-gray-400 italic">
+              กำลังโหลดข้อมูลแนวโน้ม...
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column - Main Charts */}
         <div className="lg:col-span-2 space-y-8">
@@ -339,12 +488,13 @@ export default function DashboardContent({ user }) {
                       <FileText size={18} />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-gray-900">ตัวบ่งชี้ที่ {ev.indicator_id}</p>
-                      <p className="text-xs text-gray-500">บันทึกคะแนน: {ev.score}</p>
+                      <p className="text-sm font-bold text-gray-900">ตัวบ่งชี้ที่ {ev.display_id}</p>
+                      <p className="text-[10px] text-gray-400 truncate max-w-[200px]">{ev.display_name}</p>
+                      <p className="text-xs text-blue-600 font-bold mt-1">คะแนน: {ev.display_score}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-400">{new Date(ev.created_at).toLocaleDateString('th-TH')}</p>
+                    <p className="text-xs text-gray-400">{ev.display_date}</p>
                     <span className="inline-block px-2 py-1 bg-green-100 text-green-700 text-[10px] uppercase font-bold rounded-full mt-1">สมบูรณ์</span>
                   </div>
                 </div>

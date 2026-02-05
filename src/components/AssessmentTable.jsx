@@ -4,9 +4,11 @@ import AssessmentFormModal from './AssessmentFormModal';
 import EvaluationFormModal from './EvaluationFormModal';
 import { BASE_URL } from '../config/api.js';
 import { ArrowLeft } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 
 export default function AssessmentTable({ selectedComponent, indicators, selectedProgram, currentUser, mode = 'criteria', onBack, sessionData, activeYear }) {
+  const { showAlert, showConfirm, showPrompt } = useModal();
   const [evaluatedIndicators, setEvaluatedIndicators] = useState(new Set());
   const [assessingIndicator, setAssessingIndicator] = useState(null);
   const [flash, setFlash] = useState({ message: '', type: 'success' });
@@ -126,14 +128,18 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
         })
       });
       if (res.ok) {
-        setFlash({ message: action === 'approve' ? 'อนุมัติการประเมินเรียบร้อย' : (action === 'submit' ? 'ส่งตรวจประเมินเรียบร้อย' : 'ส่งกลับแก้ไขเรียบร้อย'), type: 'success' });
+        showAlert({
+          title: 'สำเร็จ',
+          message: action === 'approve' ? 'อนุมัติการประเมินเรียบร้อย' : (action === 'submit' ? 'ส่งตรวจประเมินเรียบร้อย' : 'ส่งกลับแก้ไขเรียบร้อย'),
+          type: 'success'
+        });
         fetchEvaluationStatus();
       } else {
         const err = await res.json();
-        setFlash({ message: `เกิดข้อผิดพลาด: ${err.error}`, type: 'error' });
+        showAlert({ title: 'ข้อผิดพลาด', message: err.error, type: 'error' });
       }
     } catch (err) {
-      setFlash({ message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'error' });
+      showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'error' });
     }
   };
 
@@ -180,6 +186,20 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
         allEvaluationsActual={localSessionData?.evaluationsActual || []}
         activeYear={activeYear}
         readOnly={readOnly}
+        currentUser={currentUser}
+        onApprove={(id) => {
+          updateStatus(id, 'approve').then(() => handleAssessmentComplete());
+        }}
+        onReject={(id) => {
+          showPrompt({
+            title: 'ระบุสิ่งที่ควรปรับปรุง',
+            message: 'ระบุสิ่งที่ควรปรับปรุงเพื่อแจ้งผู้รับผิดชอบ:',
+            placeholder: 'ระบุรายละเอียด...',
+            onConfirm: (fb) => {
+              if (fb) updateStatus(id, 'reject', { feedback: fb }).then(() => handleAssessmentComplete());
+            }
+          });
+        }}
       />
     );
   }
@@ -350,7 +370,7 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
                                     onClick={() => {
                                       const evalId = evalData.id || evalData._id;
                                       if (evalId) updateStatus(evalId, 'submit');
-                                      else alert('ไม่พบรหัสการประเมิน กรุณารีเฟรชหน้าเว็บ');
+                                      else showAlert({ title: 'ข้อผิดพลาด', message: 'ไม่พบรหัสการประเมิน กรุณารีเฟรชหน้าเว็บ', type: 'error' });
                                     }}
                                     className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 shadow-sm"
                                   >
@@ -374,8 +394,14 @@ export default function AssessmentTable({ selectedComponent, indicators, selecte
                                       onClick={() => {
                                         const evalId = evalData.id || evalData._id;
                                         if (evalId) {
-                                          const fb = prompt('ระบุสิ่งที่ควรปรับปรุง:');
-                                          if (fb !== null) updateStatus(evalId, 'reject', { feedback: fb });
+                                          showPrompt({
+                                            title: 'ส่งกลับแก้ไข',
+                                            message: 'ระบุสิ่งที่ควรปรับปรุงเพื่อแจ้งผู้รับผิดชอบ:',
+                                            placeholder: 'ระบุรายละเอียด...',
+                                            onConfirm: (fb) => {
+                                              if (fb) updateStatus(evalId, 'reject', { feedback: fb });
+                                            }
+                                          });
                                         }
                                       }}
                                       className="px-3 py-1.5 bg-rose-600 text-white text-xs font-medium rounded-md hover:bg-rose-700 shadow-sm"

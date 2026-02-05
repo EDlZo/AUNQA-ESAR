@@ -26,65 +26,186 @@ export class PDFGenerator {
     // this.doc.setFont('Sarabun');
   }
 
-  // เพิ่มหัวเรื่อง
-  addHeader(title, subtitle = '') {
-    // Logo และชื่อมหาวิทยาลัย
-    this.doc.setFontSize(16);
-    this.doc.setFont('helvetica', 'bold');
-    this.doc.text('มหาวิทยาลัยเทคโนโลยีราชมงคลศรีวิชัย', this.pageWidth / 2, 30, { align: 'center' });
-
-    this.doc.setFontSize(12);
-    this.doc.setFont('helvetica', 'normal');
-    this.doc.text('Rajamangala University of Technology Srivijaya', this.pageWidth / 2, 38, { align: 'center' });
-
-    // เส้นคั่น
-    this.doc.setDrawColor(59, 130, 246);
-    this.doc.setLineWidth(0.5);
-    this.doc.line(this.margin, 45, this.pageWidth - this.margin, 45);
-
-    // หัวเรื่องรายงาน
-    this.doc.setFontSize(18);
-    this.doc.setFont('helvetica', 'bold');
-    this.doc.text(title, this.pageWidth / 2, 60, { align: 'center' });
-
-    if (subtitle) {
-      this.doc.setFontSize(14);
-      this.doc.setFont('helvetica', 'normal');
-      this.doc.text(subtitle, this.pageWidth / 2, 68, { align: 'center' });
-    }
-
-    this.currentY = 80;
+  decodeHtmlEntities(text) {
+    if (!text) return "";
+    return text
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&rsquo;/g, "'")
+      .replace(/&lsquo;/g, "'")
+      .replace(/&rdquo;/g, '"')
+      .replace(/&ldquo;/g, '"')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<p[^>]*>/gi, '\n')
+      .replace(/<\/p>/gi, '')
+      .replace(/<li[^>]*>/gi, '\n• ')
+      .replace(/<\/li>/gi, '');
   }
 
-  // เพิ่มข้อมูลทั่วไป
-  addInfoSection(data) {
-    const infoData = [
-      ['ผู้จัดทำ:', String(data.author || '-')],
-      ['หน่วยงาน:', String(data.department || '-')],
-      ['วันที่จัดทำ:', data.date ? new Date(data.date).toLocaleDateString('th-TH') : '-'],
-      ['สถานะ:', this.getStatusText(String(data.status || 'unknown'))],
-      ['จำนวนตัวบ่งชี้:', String(data.indicators || '0')],
-      ['จำนวนการประเมิน:', String(data.evaluations || '0')]
-    ];
+  // Recursive block parser for tables/nested content
+  parseHtmlToBlocks(html) {
+    if (!html || typeof window === 'undefined') return [{ type: 'text', content: this.stripHtml(html) }];
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html || '', 'text/html');
+    const blocks = [];
 
-    if (data.score > 0) {
-      infoData.push(['คะแนนเฉลี่ย:', `${data.score}/5.0`]);
-    }
+    const walk = (node) => {
+      if (node.nodeType === 3) {
+        const text = node.textContent;
+        if (text && text.trim()) {
+          blocks.push({ type: 'text', content: this.decodeHtmlEntities(text) });
+        }
+      } else if (node.nodeName.toUpperCase() === 'IMG') {
+        const src = node.getAttribute('src');
+        if (src) blocks.push({ type: 'image', content: src });
+      } else if (node.nodeName.toUpperCase() === 'TABLE') {
+        const rows = [];
+        Array.from(node.rows).forEach(tr => {
+          const cols = [];
+          Array.from(tr.cells).forEach(cell => {
+            const cellBlocks = this.parseHtmlToBlocks(cell.innerHTML);
+            cols.push({ content: '', blocks: cellBlocks });
+          });
+          if (cols.length > 0) rows.push(cols);
+        });
+        if (rows.length > 0) blocks.push({ type: 'table', content: rows });
+      } else if (node.nodeName.toUpperCase() === 'BR') {
+        blocks.push({ type: 'text', content: '\n' });
+      } else {
+        node.childNodes.forEach(walk);
+        if (['P', 'DIV', 'H1', 'H2', 'H3', 'LI'].includes(node.nodeName.toUpperCase())) {
+          blocks.push({ type: 'text', content: '\n' });
+        }
+      }
+    };
+    doc.body.childNodes.forEach(walk);
 
-    this.doc.setFontSize(12);
-    let y = this.currentY;
-    infoData.forEach(([label, value]) => {
-      this.doc.setFont('helvetica', 'bold');
-      this.doc.text(String(label), this.margin, y);
-      this.doc.setFont('helvetica', 'normal');
-      this.doc.text(String(value), this.margin + 40, y);
-      y += 8;
+    const merged = [];
+    blocks.forEach(b => {
+      if (b.type === 'text') {
+        if (merged.length > 0 && merged[merged.length - 1].type === 'text') {
+          merged[merged.length - 1].content += b.content;
+        } else {
+          merged.push({ ...b });
+        }
+      } else {
+        merged.push(b);
+      }
     });
 
-    this.currentY = y + 10;
+    merged.forEach(b => {
+      if (b.type === 'text') b.content = b.content.replace(/^\s+|\s+$/g, (m) => m.includes('\n') ? '\n' : '');
+    });
+
+    const finalBlocks = merged.filter(b => b.type !== 'text' || b.content.trim() || b.content === '\n');
+    return finalBlocks.length > 0 ? finalBlocks : [{ type: 'text', content: '-' }];
   }
 
-  // เพิ่มตารางข้อมูล
+  estimateBlocksHeight(blocks, colWidth) {
+    let h = 2; // Start padding
+    const padding = 6;
+    const width = Math.max(10, colWidth - padding);
+
+    blocks.forEach(block => {
+      if (block.type === 'text') {
+        const lines = this.doc.splitTextToSize(block.content, width);
+        h += (lines.length * 5);
+      } else if (block.type === 'table') {
+        let tableH = 2;
+        block.content.forEach(row => {
+          let maxRowH = 0;
+          const approxColWidth = width / (row.length || 1);
+          row.forEach(cell => {
+            const cellH = this.estimateBlocksHeight(cell.blocks || [], approxColWidth);
+            if (cellH > maxRowH) maxRowH = cellH;
+          });
+          tableH += Math.max(7, maxRowH);
+        });
+        h += tableH + 4;
+      } else if (block.type === 'image') {
+        h += Math.min(60, width * 0.6) + 6;
+      }
+    });
+    return h + 2;
+  }
+
+  drawBlocks(blocks, cellX, cellY, cellWidth) {
+    let currentY = cellY + 2;
+    const padding = 6;
+    const drawWidth = Math.max(10, cellWidth - padding);
+
+    blocks.forEach(block => {
+      if (block.type === 'text') {
+        this.doc.setFontSize(10);
+        const split = this.doc.splitTextToSize(block.content, drawWidth);
+        this.doc.text(split, cellX + 2, currentY + 3);
+        currentY += (split.length * 5);
+      } else if (block.type === 'table') {
+        this.doc.autoTable({
+          body: block.content,
+          startY: currentY + 1,
+          margin: { left: cellX + 2.5 },
+          tableWidth: drawWidth - 1,
+          theme: 'grid',
+          styles: {
+            font: 'helvetica',
+            fontSize: 8,
+            cellPadding: 1,
+            minCellHeight: 7,
+            lineWidth: 0.1, // Thinner lines for nested tables
+            overflow: 'linebreak'
+          },
+          didParseCell: (hookData) => this.tableComplexCellHook(hookData, drawWidth),
+          didDrawCell: (hookData) => this.tableComplexDrawHook(hookData, drawWidth)
+        });
+        currentY = this.doc.lastAutoTable.finalY + 2;
+      } else if (block.type === 'image') {
+        try {
+          if (block.content && block.content.length > 0) {
+            let format = 'PNG';
+            if (block.content.startsWith('data:image')) {
+              const typeMatch = block.content.match(/data:image\/([a-zA-Z]+);base64/);
+              format = typeMatch ? typeMatch[1].toUpperCase() : 'PNG';
+            }
+            const imgHeight = Math.min(60, drawWidth * 0.6);
+            this.doc.addImage(block.content, format, cellX + 2, currentY + 1, drawWidth, imgHeight);
+            currentY += imgHeight + 3;
+          }
+        } catch (e) { console.error('Image Error:', e); }
+      }
+    });
+  }
+
+  tableComplexCellHook(data, availableWidth) {
+    if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.blocks) {
+      const numCols = data.row.cells.length || 1;
+      const currentWidth = data.cell.width || (availableWidth / numCols);
+      const h = this.estimateBlocksHeight(data.cell.raw.blocks, currentWidth);
+      if (data.cell.styles.minCellHeight < h) data.cell.styles.minCellHeight = h;
+    }
+  }
+
+  tableComplexDrawHook(data, availableWidth) {
+    if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.blocks) {
+      this.drawBlocks(data.cell.raw.blocks, data.cell.x, data.cell.y, data.cell.width || availableWidth);
+    }
+  }
+
+  // --- UI Elements ---
+
+  addTitle(text, size = 16, style = 'bold') {
+    const cleanText = this.stripHtml(text);
+    this.doc.setFontSize(size);
+    this.doc.setFont('helvetica', style === 'normal' ? 'normal' : 'bold');
+    const splitText = this.doc.splitTextToSize(cleanText, this.contentWidth);
+    this.doc.text(splitText, this.pageWidth / 2, this.currentY, { align: 'center' });
+    this.currentY += (splitText.length * (size * 0.4)) + 5;
+  }
+
   addTable(headers, data, title = '') {
     if (title) {
       this.doc.setFontSize(14);
@@ -98,136 +219,97 @@ export class PDFGenerator {
       body: data,
       startY: this.currentY,
       margin: { left: this.margin, right: this.margin },
-      styles: {
-        font: 'helvetica',
-        fontSize: 10,
-        cellPadding: 3
+      styles: { font: 'helvetica', fontSize: 10, cellPadding: 3, overflow: 'linebreak' },
+      headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 247, 250] },
+      didParseCell: (data) => {
+        if (data.section === 'body' && data.cell.raw && data.cell.raw.blocks) {
+          // Identify the column width dynamically
+          const colWidth = data.column.width || (this.contentWidth / headers.length);
+          this.tableComplexCellHook(data, colWidth);
+        }
       },
-      headStyles: {
-        fillColor: [59, 130, 246],
-        textColor: 255,
-        fontStyle: 'bold'
-      },
-      alternateRowStyles: {
-        fillColor: [245, 247, 250]
+      didDrawCell: (data) => {
+        if (data.section === 'body' && data.cell.raw && data.cell.raw.blocks) {
+          this.tableComplexDrawHook(data, data.cell.width);
+        }
       }
     });
 
     this.currentY = this.doc.lastAutoTable.finalY + 10;
   }
 
-  // เพิ่มกราฟ
-  addChart(title, data, type = 'bar') {
-    this.doc.setFontSize(14);
-    this.doc.setFont('helvetica', 'bold');
-    this.doc.text(title, this.margin, this.currentY);
-    this.currentY += 10;
-
-    // สร้างกราฟง่ายๆ ด้วย rectangle
-    const chartWidth = this.contentWidth;
-    const chartHeight = 60;
-    const maxValue = Math.max(...data.map(d => d.value));
-    const barWidth = chartWidth / data.length * 0.7;
-    const spacing = chartWidth / data.length * 0.3;
-
-    data.forEach((item, index) => {
-      const barHeight = (item.value / maxValue) * chartHeight;
-      const x = this.margin + (index * (barWidth + spacing));
-      const y = this.currentY + chartHeight - barHeight;
-
-      // วาดแท่ง
-      this.doc.setFillColor(59, 130, 246);
-      this.doc.rect(x, y, barWidth, barHeight, 'F');
-
-      // เพิ่ม label
-      this.doc.setFontSize(8);
-      this.doc.setFont('helvetica', 'normal');
-      this.doc.text(item.label, x + barWidth / 2, this.currentY + chartHeight + 5, { align: 'center' });
-      this.doc.text(item.value.toString(), x + barWidth / 2, y - 2, { align: 'center' });
-    });
-
-    this.currentY += chartHeight + 20;
-  }
-
-  // เพิ่มสรุปผลการประเมิน
   addSummarySection(indicators) {
     this.doc.setFontSize(14);
     this.doc.setFont('helvetica', 'bold');
     this.doc.text('สรุปผลการประเมิน', this.margin, this.currentY);
     this.currentY += 10;
 
-    const tableData = indicators.map((indicator, index) => [
-      index + 1,
-      String(indicator.name || '-'),
-      String(indicator.type || '-'),
-      String(indicator.score || '-'),
-      String(indicator.status || '-'),
-      String(indicator.comment || '-')
-    ]);
+    const tableData = indicators.map((indicator, index) => {
+      const result = indicator.result || indicator.operation_result || '';
+      return [
+        index + 1,
+        String(indicator.name || indicator.indicator_name || '-'),
+        String(indicator.type || '-'),
+        String(indicator.score || indicator.operation_score || '-'),
+        String(indicator.status || '-'),
+        { content: '', blocks: this.parseHtmlToBlocks(result || indicator.comment || '-') }
+      ];
+    });
 
     this.addTable(
-      ['ลำดับ', 'ตัวบ่งชี้', 'ประเภท', 'คะแนน', 'สถานะ', 'หมายเหตุ'],
+      ['ลำดับ', 'ตัวบ่งชี้', 'ประเภท', 'คะแนน', 'สถานะ', 'หมายเหตุ/ผลดำเนินงาน'],
       tableData
     );
   }
 
-  // เพิ่มท้ายกระดาษ
-  addFooter() {
-    const footerY = this.pageHeight - 30;
-
-    // เส้นคั่น
-    this.doc.setDrawColor(200, 200, 200);
-    this.doc.setLineWidth(0.3);
-    this.doc.line(this.margin, footerY, this.pageWidth - this.margin, footerY);
-
-    // ข้อความท้ายกระดาษ
-    this.doc.setFontSize(10);
-    this.doc.setFont('helvetica', 'normal');
-    this.doc.text(
-      `พิมพ์เมื่อ ${new Date().toLocaleString('th-TH')}`,
-      this.margin,
-      footerY + 10
-    );
-    this.doc.text(
-      'ระบบประกันคุณภาพ AUN-QA - มหาวิทยาลัยเทคโนโลยีราชมงคลศรีวิชัย',
-      this.pageWidth / 2,
-      footerY + 10,
-      { align: 'center' }
-    );
-    this.doc.text(
-      `หน้า ${this.doc.internal.getNumberOfPages()}`,
-      this.pageWidth - this.margin,
-      footerY + 10,
-      { align: 'right' }
-    );
-  }
-
-  // แปลงสถานะเป็นข้อความ
-  getStatusText(status) {
-    const statusMap = {
-      completed: 'สมบูรณ์',
-      in_progress: 'ดำเนินการ',
-      draft: 'ฉบับร่าง'
-    };
-    return statusMap[status] || status;
-  }
-
-  // เพิ่มหน้าใหม่
-  addNewPage() {
-    this.doc.addPage();
-    this.currentY = this.margin;
-  }
-
-  // บันทึกไฟล์ PDF
+  // บันทึกไฟล์ PDF และเพิ่มท้ายกระดาษทุกหน้า
   save(filename) {
-    this.addFooter();
+    this.addFootersToAllPages();
     this.doc.save(filename);
   }
 
-  // สร้าง Blob สำหรับดาวน์โหลด
+  // สร้าง Blob และเพิ่มท้ายกระดาษทุกหน้า
   getBlob() {
-    this.addFooter();
+    this.addFootersToAllPages();
     return this.doc.output('blob');
+  }
+
+  addFootersToAllPages() {
+    const totalPages = this.doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      this.doc.setPage(i);
+      this.drawSingleFooter(i, totalPages);
+    }
+  }
+
+  drawSingleFooter(pageNumber, totalPages) {
+    const footerY = this.pageHeight - 15;
+    this.doc.setDrawColor(200, 200, 200);
+    this.doc.setLineWidth(0.3);
+    this.doc.line(this.margin, footerY - 5, this.pageWidth - this.margin, footerY - 5);
+
+    this.doc.setFontSize(9);
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setTextColor(100, 100, 100);
+
+    this.doc.text(
+      `พิมพ์เมื่อ ${new Date().toLocaleString('th-TH')}`,
+      this.margin,
+      footerY
+    );
+    this.doc.text(
+      'ระบบประกันคุณภาพ AUN-QA',
+      this.pageWidth / 2,
+      footerY,
+      { align: 'center' }
+    );
+    this.doc.text(
+      `หน้า ${pageNumber} / ${totalPages}`,
+      this.pageWidth - this.margin,
+      footerY,
+      { align: 'right' }
+    );
   }
 
   // สร้างรายงานการประเมินแบบสมบูรณ์

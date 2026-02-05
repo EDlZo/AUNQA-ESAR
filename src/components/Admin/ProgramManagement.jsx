@@ -4,9 +4,11 @@ import {
     Layers, School, BookOpen, Plus, Edit, Trash2,
     Search, X, ArrowLeft, ChevronRight, Save, AlertCircle
 } from 'lucide-react';
+import { useModal } from '../../context/ModalContext';
 import { BASE_URL } from '../../config/api.js';
 
 export default function ProgramManagement({ setActiveTab }) {
+    const { showAlert, showConfirm } = useModal();
     const [activeSubTab, setActiveSubTab] = useState('levels'); // levels | faculties | programs
     const [loading, setLoading] = useState(false);
 
@@ -99,31 +101,39 @@ export default function ProgramManagement({ setActiveTab }) {
                 setShowModal(false);
                 fetchAllData();
             } else {
-                alert('บันทึกไม่สำเร็จ');
+                showAlert({ title: 'ข้อผิดพลาด', message: 'บันทึกไม่สำเร็จ', type: 'error' });
             }
         } catch (error) {
             console.error('Save error:', error);
-            alert('เกิดข้อผิดพลาดในการบันทึก');
+            showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการบันทึก', type: 'error' });
         } finally {
             setLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('คุณต้องการลบรายการนี้ใช่หรือไม่? การลบอาจส่งผลกระทบต่อข้อมูลที่เกี่ยวข้อง')) return;
-        setLoading(true);
-        try {
-            const res = await fetch(`${BASE_URL}/api/${activeSubTab}/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                fetchAllData();
-            } else {
-                alert('ลบไม่สำเร็จ');
+        showConfirm({
+            title: 'ยืนยันการลบ',
+            message: 'คุณต้องการลบรายการนี้ใช่หรือไม่? การลบอาจส่งผลกระทบต่อข้อมูลที่เกี่ยวข้อง',
+            type: 'error',
+            onConfirm: async () => {
+                setLoading(true);
+                try {
+                    const res = await fetch(`${BASE_URL}/api/${activeSubTab}/${id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        fetchAllData();
+                        showAlert({ title: 'สำเร็จ', message: 'ลบข้อมูลเรียบร้อยแล้ว', type: 'success' });
+                    } else {
+                        showAlert({ title: 'ข้อผิดพลาด', message: 'ลบไม่สำเร็จ', type: 'error' });
+                    }
+                } catch (error) {
+                    console.error('Delete error:', error);
+                    showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการลบ', type: 'error' });
+                } finally {
+                    setLoading(false);
+                }
             }
-        } catch (error) {
-            console.error('Delete error:', error);
-        } finally {
-            setLoading(false);
-        }
+        });
     };
 
     return (

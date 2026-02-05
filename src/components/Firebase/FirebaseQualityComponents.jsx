@@ -1,15 +1,16 @@
-// Firebase-based Quality Components Management
 import React, { useState } from 'react';
 import { useQualityComponents } from '../../hooks/useFirebase.js';
+import { useModal } from '../../context/ModalContext.js';
 
 const FirebaseQualityComponents = ({ majorName, sessionId }) => {
-  const { 
-    components, 
-    loading, 
-    error, 
-    addComponent, 
-    updateComponent, 
-    deleteComponent 
+  const { showAlert, showConfirm } = useModal();
+  const {
+    components,
+    loading,
+    error,
+    addComponent,
+    updateComponent,
+    deleteComponent
   } = useQualityComponents(majorName);
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -21,7 +22,7 @@ const FirebaseQualityComponents = ({ majorName, sessionId }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     try {
       let result;
       if (editingComponent) {
@@ -37,11 +38,12 @@ const FirebaseQualityComponents = ({ majorName, sessionId }) => {
         setFormData({ component_id: '', quality_name: '' });
         setShowAddForm(false);
         setEditingComponent(null);
+        showAlert({ title: 'สำเร็จ', message: editingComponent ? 'อัปเดตข้อมูลสำเร็จ' : 'เพิ่มข้อมูลสำเร็จ', type: 'success' });
       } else {
-        alert('เกิดข้อผิดพลาด: ' + result.error);
+        showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาด: ' + result.error, type: 'error' });
       }
     } catch (err) {
-      alert('เกิดข้อผิดพลาด: ' + err.message);
+      showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาด: ' + err.message, type: 'error' });
     }
   };
 
@@ -55,12 +57,19 @@ const FirebaseQualityComponents = ({ majorName, sessionId }) => {
   };
 
   const handleDelete = async (id) => {
-    if (confirm('คุณต้องการลบองค์ประกอบนี้หรือไม่?')) {
-      const result = await deleteComponent(id);
-      if (!result.success) {
-        alert('เกิดข้อผิดพลาดในการลบ: ' + result.error);
+    showConfirm({
+      title: 'ยืนยันการลบ',
+      message: 'คุณต้องการลบองค์ประกอบนี้หรือไม่?',
+      type: 'error',
+      onConfirm: async () => {
+        const result = await deleteComponent(id);
+        if (result.success) {
+          showAlert({ title: 'สำเร็จ', message: 'ลบข้อมูลสำเร็จ', type: 'success' });
+        } else {
+          showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการลบ: ' + result.error, type: 'error' });
+        }
       }
-    }
+    });
   };
 
   const resetForm = () => {
@@ -112,7 +121,7 @@ const FirebaseQualityComponents = ({ majorName, sessionId }) => {
           <h3 className="text-lg font-semibold mb-4">
             {editingComponent ? 'แก้ไของค์ประกอบ' : 'เพิ่มองค์ประกอบใหม่'}
           </h3>
-          
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -121,7 +130,7 @@ const FirebaseQualityComponents = ({ majorName, sessionId }) => {
               <input
                 type="text"
                 value={formData.component_id}
-                onChange={(e) => setFormData({...formData, component_id: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, component_id: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="เช่น 1.1, 2.1"
               />
@@ -134,7 +143,7 @@ const FirebaseQualityComponents = ({ majorName, sessionId }) => {
               <input
                 type="text"
                 value={formData.quality_name}
-                onChange={(e) => setFormData({...formData, quality_name: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, quality_name: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="ระบุชื่อองค์ประกอบคุณภาพ"
                 required
@@ -196,8 +205,8 @@ const FirebaseQualityComponents = ({ majorName, sessionId }) => {
                       {component.quality_name}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">
-                      {component.created_at ? 
-                        new Date(component.created_at.seconds * 1000).toLocaleDateString('th-TH') : 
+                      {component.created_at ?
+                        new Date(component.created_at.seconds * 1000).toLocaleDateString('th-TH') :
                         '-'
                       }
                     </td>

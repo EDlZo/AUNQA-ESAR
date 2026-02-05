@@ -29,6 +29,7 @@ import RoundManagementPage from './pages/RoundManagementPage';
 import DatabaseManagementPage from './pages/DatabaseManagementPage';
 import ProgramManagement from './components/Admin/ProgramManagement';
 import { BASE_URL } from './config/api';
+import { ModalProvider } from './context/ModalContext';
 
 
 export default function App() {
@@ -435,43 +436,45 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
-      <ConnectionStatus />
-      <Header
-        isMenuOpen={isMenuOpen}
-        setIsMenuOpen={setIsMenuOpen}
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        currentUser={currentUser}
-        handleLogout={handleLogout}
-        setShowLogin={setShowLogin}
-        rolePermissions={rolePermissions}
-      />
-
-      {activeTab === 'about' && (
-        <HeroSection
-          onGoResults={() => setActiveTab('results')}
-          onGoProcess={() => setActiveTab('process')}
+    <ModalProvider>
+      <div className="min-h-screen bg-slate-50 font-['Sarabun']">
+        <ConnectionStatus />
+        <Header
+          isMenuOpen={isMenuOpen}
+          setIsMenuOpen={setIsMenuOpen}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          currentUser={currentUser}
+          handleLogout={handleLogout}
+          setShowLogin={setShowLogin}
+          rolePermissions={rolePermissions}
         />
-      )}
 
-      <main className="flex-grow container mx-auto px-4 py-8">
-        <TabContent />
-      </main>
+        {activeTab === 'about' && (
+          <HeroSection
+            onGoResults={() => setActiveTab('results')}
+            onGoProcess={() => setActiveTab('process')}
+          />
+        )}
 
-      {showLogin && (
-        <LoginModal
-          onLogin={(user) => {
-            setCurrentUser(user);
-            try { localStorage.setItem('currentUser', JSON.stringify(user)); } catch { }
-            setShowLogin(false);
-            setActiveTab('dashboard'); // เปลี่ยนไปหน้า dashboard หลังจากเข้าสู่ระบบ
-          }}
-          onClose={() => setShowLogin(false)}
-        />
-      )}
+        <main className="flex-grow container mx-auto px-4 py-8">
+          <TabContent />
+        </main>
 
-      <Footer />
-    </div>
+        {showLogin && (
+          <LoginModal
+            onLogin={(user) => {
+              setCurrentUser(user);
+              try { localStorage.setItem('currentUser', JSON.stringify(user)); } catch { }
+              setShowLogin(false);
+              setActiveTab('dashboard'); // เปลี่ยนไปหน้า dashboard หลังจากเข้าสู่ระบบ
+            }}
+            onClose={() => setShowLogin(false)}
+          />
+        )}
+
+        <Footer />
+      </div>
+    </ModalProvider>
   );
 }

@@ -1,8 +1,9 @@
-// src/components/CommitteeEvaluationModal.jsx
 import React, { useState, useEffect } from 'react';
 import RichTextEditor from './RichTextEditor.jsx';
+import { useModal } from '../context/ModalContext';
 
 export default function CommitteeEvaluationModal({ indicator, selectedProgram, onComplete, onCancel }) {
+  const { showAlert } = useModal();
   const [committeeScore, setCommitteeScore] = useState('');
   const [strengths, setStrengths] = useState('');
   const [improvements, setImprovements] = useState('');
@@ -35,7 +36,11 @@ export default function CommitteeEvaluationModal({ indicator, selectedProgram, o
 
   const handleSubmit = async () => {
     if (!committeeScore) {
-      alert('กรุณากรอกคะแนนประเมิน');
+      showAlert({
+        title: 'ข้อมูลไม่ครบถ้วน',
+        message: 'กรุณากรอกคะแนนประเมิน',
+        type: 'warning'
+      });
       return;
     }
 
@@ -62,11 +67,19 @@ export default function CommitteeEvaluationModal({ indicator, selectedProgram, o
         onComplete();
       } else {
         const errorData = await response.json();
-        alert(`เกิดข้อผิดพลาด: ${errorData.error || 'ไม่สามารถบันทึกข้อมูลได้'}`);
+        showAlert({
+          title: 'ข้อผิดพลาด',
+          message: `เกิดข้อผิดพลาด: ${errorData.error || 'ไม่สามารถบันทึกข้อมูลได้'}`,
+          type: 'error'
+        });
       }
     } catch (error) {
       console.error('Error submitting evaluation:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      showAlert({
+        title: 'ข้อผิดพลาด',
+        message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
+        type: 'error'
+      });
     } finally {
       setLoading(false);
     }

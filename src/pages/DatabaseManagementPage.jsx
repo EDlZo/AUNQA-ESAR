@@ -10,8 +10,10 @@ import MasterIndicatorsTable from '../components/Admin/MasterIndicatorsTable';
 import MasterComponentForm from '../components/Admin/MasterComponentForm';
 import MasterIndicatorForm from '../components/Admin/MasterIndicatorForm';
 import { BASE_URL } from '../config/api.js';
+import { useModal } from '../context/ModalContext';
 
 export default function DatabaseManagementPage({ setActiveTab }) {
+    const { showAlert, showConfirm } = useModal();
     const [stats, setStats] = useState({});
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(null);
@@ -117,21 +119,32 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                 setEditingItem(null);
                 fetchMasterData();
                 fetchStats();
+                showAlert({ title: 'สำเร็จ', message: 'บันทึกข้อมูลเรียบร้อยแล้ว', type: 'success' });
             } else {
-                alert('ไม่สามารถบันทึกข้อมูลได้');
+                showAlert({ title: 'ข้อผิดพลาด', message: 'ไม่สามารถบันทึกข้อมูลได้', type: 'error' });
             }
-        } catch (err) { console.error('Save component error:', err); }
+        } catch (err) {
+            console.error('Save component error:', err);
+            showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'error' });
+        }
     };
 
-    const handleDeleteComponent = async (id) => {
-        if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบแม่แบบองค์ประกอบนี้?')) return;
-        try {
-            const res = await fetch(`${BASE_URL}/api/master-quality-components/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                fetchMasterData();
-                fetchStats();
+    const handleDeleteComponent = (id) => {
+        showConfirm({
+            title: 'ยืนยันการลบ',
+            message: 'คุณแน่ใจหรือไม่ที่จะลบแม่แบบองค์ประกอบนี้? ข้อมูลตัวบ่งชี้ที่เกี่ยวข้องอาจสูญหาย',
+            type: 'warning',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`${BASE_URL}/api/master-quality-components/${id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        fetchMasterData();
+                        fetchStats();
+                        showAlert({ title: 'สำเร็จ', message: 'ลบข้อมูลสำเร็จ', type: 'success' });
+                    }
+                } catch (err) { console.error('Delete component error:', err); }
             }
-        } catch (err) { console.error('Delete component error:', err); }
+        });
     };
 
     const handleSaveIndicator = async (formData) => {
@@ -175,7 +188,7 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                         if (!bulkRes.ok) {
                             const errData = await bulkRes.json().catch(() => ({}));
                             console.error('Bulk save failed:', bulkRes.status, errData);
-                            alert(`บันทึกหัวข้อย่อยบางส่วนไม่สำเร็จ (${bulkRes.status})`);
+                            showAlert({ title: 'คำเตือน', message: `บันทึกหัวข้อย่อยบางส่วนไม่สำเร็จ (${bulkRes.status})`, type: 'warning' });
                         }
                     }
 
@@ -186,7 +199,7 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                 } else {
                     const errData = await mainRes.json().catch(() => ({}));
                     console.error('Main save failed:', mainRes.status, errData);
-                    alert(`ไม่สามารถบันทึกข้อมูลหลักได้ (${mainRes.status})`);
+                    showAlert({ title: 'ข้อผิดพลาด', message: `ไม่สามารถบันทึกข้อมูลหลักได้ (${mainRes.status})`, type: 'error' });
                 }
                 return;
             }
@@ -206,85 +219,105 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                 setEditingItem(null);
                 fetchMasterData();
                 fetchStats();
+                showAlert({ title: 'สำเร็จ', message: 'บันทึกข้อมูลตัวบ่งชี้เรียบร้อยแล้ว', type: 'success' });
             } else {
-                alert('ไม่สามารถบันทึกข้อมูลได้');
+                showAlert({ title: 'ข้อผิดพลาด', message: 'ไม่สามารถบันทึกข้อมูลได้', type: 'error' });
             }
         } catch (err) {
             console.error('Save indicator error:', err);
-            alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+            showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', type: 'error' });
         }
     };
 
-    const handleDeleteIndicator = async (id) => {
-        if (!window.confirm('คุณแน่ใจหรือไม่ที่จะลบแม่แบบตัวบ่งชี้นี้?')) return;
-        try {
-            const res = await fetch(`${BASE_URL}/api/master-indicators/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                fetchMasterData();
-                fetchStats();
+    const handleDeleteIndicator = (id) => {
+        showConfirm({
+            title: 'ยืนยันการลบ',
+            message: 'คุณแน่ใจหรือไม่ที่จะลบแม่แบบตัวบ่งชี้นี้?',
+            type: 'warning',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`${BASE_URL}/api/master-indicators/${id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        fetchMasterData();
+                        fetchStats();
+                        showAlert({ title: 'สำเร็จ', message: 'ลบข้อมูลสำเร็จ', type: 'success' });
+                    }
+                } catch (err) { console.error('Delete indicator error:', err); }
             }
-        } catch (err) { console.error('Delete indicator error:', err); }
+        });
     };
 
     // --- Original Handlers ---
 
-    const handleClearCollection = async (collection, label) => {
-        if (!window.confirm(`คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลใน "${label}"? การดำเนินการนี้ไม่สามารถย้อนกลับได้`)) {
-            return;
-        }
+    const handleClearCollection = (collection, label) => {
+        showConfirm({
+            title: 'ยืนยันการล้างข้อมูล',
+            message: `คุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูลใน "${label}"? การดำเนินการนี้ไม่สามารถย้อนกลับได้ ข้อมูลเดิมทั้งหมดจะสูญหาย`,
+            type: 'error',
+            confirmText: 'ล้างข้อมูลทันที',
+            onConfirm: async () => {
+                try {
+                    setActionLoading(collection);
+                    const res = await fetch(`${BASE_URL}/api/admin/clear-collection`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ collection })
+                    });
 
-        try {
-            setActionLoading(collection);
-            const res = await fetch(`${BASE_URL}/api/admin/clear-collection`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ collection })
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                alert(data.message);
-                fetchStats();
-                fetchMasterData();
-            } else {
-                const error = await res.json();
-                alert('เกิดข้อผิดพลาด: ' + (error.error || error.details || 'Unknown error'));
+                    if (res.ok) {
+                        const data = await res.json();
+                        showAlert({ title: 'สำเร็จ', message: data.message, type: 'success' });
+                        fetchStats();
+                        fetchMasterData();
+                    } else {
+                        const error = await res.json();
+                        showAlert({ title: 'ข้อผิดพลาด', message: error.error || error.details || 'Unknown error', type: 'error' });
+                    }
+                } catch (error) {
+                    console.error('Error clearing collection:', error);
+                    showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'error' });
+                } finally {
+                    setActionLoading(null);
+                }
             }
-        } catch (error) {
-            console.error('Error clearing collection:', error);
-            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
-        } finally {
-            setActionLoading(null);
-        }
+        });
     };
 
-    const handleResetAssessmentData = async () => {
-        if (!window.confirm('คำเตือน: คุณกำลังจะล้างข้อมูลการประเมินทั้งหมด รวมถึงองค์ประกอบและตัวบ่งชี้ ต้องการดำเนินการต่อหรือไม่?')) {
-            return;
-        }
-
-        if (!window.confirm('ยืนยันอีกครั้ง: ทุกอย่างที่เกี่ยวข้องกับเนื้อหาการประเมินจะถูกลบออกทั้งหมด!')) {
-            return;
-        }
-
-        try {
-            setActionLoading('reset_all');
-            const res = await fetch(`${BASE_URL}/api/admin/reset-assessment-data`, { method: 'POST' });
-            if (res.ok) {
-                const data = await res.json();
-                alert(data.message);
-                fetchStats();
-                fetchMasterData();
-            } else {
-                const error = await res.json();
-                alert('เกิดข้อผิดพลาด: ' + (error.error || error.details || 'Unknown error'));
+    const handleResetAssessmentData = () => {
+        showConfirm({
+            title: 'พื้นที่อันตราย!',
+            message: 'คำเตือน: คุณกำลังจะล้างข้อมูลการประเมินทั้งหมด รวมถึงองค์ประกอบและตัวบ่งชี้ ต้องการดำเนินการต่อหรือไม่? การดำเนินการนี้ล้างข้อมูลทั้งระบบ!',
+            type: 'error',
+            confirmText: 'ฉันเข้าใจ ยืนยันการรีเซ็ต',
+            onConfirm: () => {
+                showConfirm({
+                    title: 'ยืนยันครั้งสุดท้าย',
+                    message: 'ข้อมูลทั้งหมด (คะแนน, ไฟล์, ผลการดำเนินงาน) จะหายไปถาวร ยืนยันอีกครั้ง?',
+                    type: 'error',
+                    confirmText: 'ยืนยันลบข้อมูลทั้งหมด',
+                    onConfirm: async () => {
+                        try {
+                            setActionLoading('reset_all');
+                            const res = await fetch(`${BASE_URL}/api/admin/reset-assessment-data`, { method: 'POST' });
+                            if (res.ok) {
+                                const data = await res.json();
+                                showAlert({ title: 'สำเร็จ', message: data.message, type: 'success' });
+                                fetchStats();
+                                fetchMasterData();
+                            } else {
+                                const error = await res.json();
+                                showAlert({ title: 'ข้อผิดพลาด', message: error.error || error.details || 'Unknown error', type: 'error' });
+                            }
+                        } catch (error) {
+                            console.error('Error resetting data:', error);
+                            showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'error' });
+                        } finally {
+                            setActionLoading(null);
+                        }
+                    }
+                });
             }
-        } catch (error) {
-            console.error('Error resetting data:', error);
-            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
-        } finally {
-            setActionLoading(null);
-        }
+        });
     };
 
     const collectionCards = [

@@ -10,9 +10,11 @@ import {
 import { generateAssessmentPDF, downloadPDF } from '../utils/pdfGenerator';
 import { ESARGenerator } from '../utils/esarGenerator';
 import { BASE_URL } from '../config/api.js';
+import { useModal } from '../context/ModalContext';
 import ProgramSelection from '../components/ProgramSelection';
 
 export default function ReportsPage() {
+  const { showAlert } = useModal();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -157,13 +159,13 @@ export default function ReportsPage() {
         })
       });
       if (res.ok) {
-        alert('บันทึกข้อมูลเรียบร้อยแล้ว');
+        showAlert({ title: 'สำเร็จ', message: 'บันทึกข้อมูลเรียบร้อยแล้ว', type: 'success' });
       } else {
         throw new Error('Save failed');
       }
     } catch (error) {
       console.error('Save error:', error);
-      alert('บันทึกไม่สำเร็จ');
+      showAlert({ title: 'ข้อผิดพลาด', message: 'บันทึกไม่สำเร็จ', type: 'error' });
     } finally {
       setRefreshing(false);
     }
@@ -186,7 +188,7 @@ export default function ReportsPage() {
 
     } catch (error) {
       console.error('Error generating full ESAR:', error);
-      alert('เกิดข้อผิดพลาดในการสร้างรายงาน: ' + error.message);
+      showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการสร้างรายงาน: ' + error.message, type: 'error' });
     } finally {
       setRefreshing(false);
     }

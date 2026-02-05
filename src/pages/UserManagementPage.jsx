@@ -3,8 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Plus, Edit, Trash2, Search, X, Check, Shield, ArrowLeft } from 'lucide-react';
 import { BASE_URL } from '../config/api';
+import { useModal } from '../context/ModalContext';
 
 export default function UserManagementPage({ setActiveTab }) {
+    const { showAlert, showConfirm } = useModal();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -132,29 +134,38 @@ export default function UserManagementPage({ setActiveTab }) {
             if (res.ok) {
                 setShowModal(false);
                 fetchUsers();
-                alert(editUser ? 'อัปเดตผู้ใช้งานสำเร็จ' : 'สร้างผู้ใช้งานสำเร็จ');
+                showAlert({ title: 'สำเร็จ', message: editUser ? 'อัปเดตผู้ใช้งานสำเร็จ' : 'สร้างผู้ใช้งานสำเร็จ', type: 'success' });
             } else {
                 const data = await res.json();
-                alert(data.message || 'เกิดข้อผิดพลาด');
+                showAlert({ title: 'ข้อผิดพลาด', message: data.message || 'เกิดข้อผิดพลาด', type: 'error' });
             }
         } catch (error) {
             console.error('Error saving user:', error);
-            alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+            showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'error' });
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm('คุณต้องการลบผู้ใช้งานนี้ใช่หรือไม่?')) return;
-        try {
-            const res = await fetch(`${BASE_URL}/api/users/${id}`, { method: 'DELETE' });
-            if (res.ok) {
-                fetchUsers();
-            } else {
-                alert('ลบผู้ใช้งานไม่สำเร็จ');
+    const handleDelete = (id) => {
+        showConfirm({
+            title: 'ยืนยันการลบ',
+            message: 'คุณต้องการลบผู้ใช้งานนี้ใช่หรือไม่? การดำเนินการนี้ไม่สามารถย้อนกลับได้',
+            type: 'error',
+            confirmText: 'ลบผู้ใช้งาน',
+            onConfirm: async () => {
+                try {
+                    const res = await fetch(`${BASE_URL}/api/users/${id}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        fetchUsers();
+                        showAlert({ title: 'สำเร็จ', message: 'ลบผู้ใช้งานสำเร็จ', type: 'success' });
+                    } else {
+                        showAlert({ title: 'ข้อผิดพลาด', message: 'ลบผู้ใช้งานไม่สำเร็จ', type: 'error' });
+                    }
+                } catch (error) {
+                    console.error('Error deleting user:', error);
+                    showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ', type: 'error' });
+                }
             }
-        } catch (error) {
-            console.error('Error deleting user:', error);
-        }
+        });
     };
 
     const filteredUsers = users.filter(user =>

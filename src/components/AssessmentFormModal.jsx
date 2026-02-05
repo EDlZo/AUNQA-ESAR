@@ -1,10 +1,12 @@
 // src/components/AssessmentFormModal.jsx
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 import { BASE_URL } from '../config/api.js';
 
 
 export default function AssessmentFormModal({ indicator, selectedProgram, onComplete, onCancel, activeYear }) {
+  const { showAlert } = useModal();
   const [targetValue, setTargetValue] = useState('');
   const [score, setScore] = useState('');
   const [comment, setComment] = useState('');
@@ -131,11 +133,11 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
       if (res.ok) {
         onComplete();
       } else {
-        alert('บันทึกการประเมินไม่สำเร็จ');
+        showAlert({ title: 'ข้อผิดพลาด', message: 'บันทึกการประเมินไม่สำเร็จ', type: 'error' });
       }
     } catch (error) {
       console.error('Error submitting evaluation:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึก');
+      showAlert({ title: 'ข้อผิดพลาด', message: 'เกิดข้อผิดพลาดในการบันทึก', type: 'error' });
     }
 
     setLoading(false);
@@ -144,7 +146,7 @@ export default function AssessmentFormModal({ indicator, selectedProgram, onComp
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file && file.size > 10 * 1024 * 1024) {
-      alert('ขนาดไฟล์ต้องไม่เกิน 10MB');
+      showAlert({ title: 'ไฟล์มีขนาดใหญ่เกินไป', message: 'ขนาดไฟล์ต้องไม่เกิน 10MB', type: 'warning' });
       return;
     }
     setEvidenceFile(file);

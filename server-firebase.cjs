@@ -247,13 +247,16 @@ const upload = multer({
     }
   },
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB
+    fileSize: 20 * 1024 * 1024, // 20MB per file
+    fieldSize: 100 * 1024 * 1024, // 100MB for fields (essential for base64 images in HTML)
+    fields: 100 // Allow more fields
   }
 });
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(UPLOADS_DIR));
@@ -994,16 +997,27 @@ app.get('/api/bulk/session-summary', async (req, res) => {
 
     console.log(`[BULK] Fetching session summary for major: ${major_name}, session: ${session_id}, year: ${year}`);
 
-    // Determine target session IDs (year-filtered)
-    let targetSessionIds = [];
-    if (session_id) {
-      targetSessionIds = [String(session_id)];
-    } else if (year) {
+    if (year) {
       const sessionSnap = await db.collection('assessment_sessions')
         .where('major_name', '==', major_name)
-        .where('round_year', '==', year)
+        .where('round_year', '==', String(year))
         .get();
-      targetSessionIds = sessionSnap.docs.map(doc => doc.id);
+      const yearSessionIds = sessionSnap.docs.map(doc => doc.id);
+
+      if (session_id) {
+        // If session_id is provided, only include it if it's one of the sessions for this year
+        // OR if no sessions were found for this year (legacy support)
+        if (yearSessionIds.length === 0 || yearSessionIds.includes(String(session_id))) {
+          targetSessionIds = [String(session_id)];
+        } else {
+          // session_id doesn't match the year, but we have others for the year
+          targetSessionIds = yearSessionIds;
+        }
+      } else {
+        targetSessionIds = yearSessionIds;
+      }
+    } else if (session_id) {
+      targetSessionIds = [String(session_id)];
     }
 
     // Fetch Components and Indicators
@@ -1030,11 +1044,20 @@ app.get('/api/bulk/session-summary', async (req, res) => {
 
       // 1. By Year field directly
       if (year) {
-        const snap = await db.collection(collectionName)
-          .where('major_name', '==', major_name)
-          .where('year', '==', year)
-          .get();
-        snap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+        const yearStr = String(year);
+        const yearNum = parseInt(year);
+
+        const queries = [
+          db.collection(collectionName).where('major_name', '==', major_name).where('year', '==', yearStr).get()
+        ];
+        if (!isNaN(yearNum) && String(yearNum) === yearStr) {
+          queries.push(db.collection(collectionName).where('major_name', '==', major_name).where('year', '==', yearNum).get());
+        }
+
+        const snaps = await Promise.all(queries);
+        snaps.forEach(snap => {
+          if (snap) snap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+        });
       }
 
       // 2. By targetSessionIds
@@ -1048,19 +1071,8 @@ app.get('/api/bulk/session-summary', async (req, res) => {
         }
       }
 
-      // 3. Fallback: If still empty, use ALL sessions for this major (handles legacy/orphan data)
-      if (resultsMap.size === 0) {
-        const allIds = assessment_sessions.map(s => s.id);
-        if (allIds.length > 0) {
-          for (let i = 0; i < allIds.length; i += 30) {
-            const chunk = allIds.slice(i, i + 30);
-            const snap = await db.collection(collectionName)
-              .where('session_id', 'in', chunk)
-              .get();
-            snap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
-          }
-        }
-      }
+      // 3. Fallback: Removed as it was causing data leakage across years
+      // if (resultsMap.size === 0) { ... }
 
       return Array.from(resultsMap.values());
     };
@@ -1207,6 +1219,55 @@ app.get('/api/assessment-sessions/latest', async (req, res) => {
     res.status(500).json({ error: 'ดึงข้อมูลเซสชันล่าสุดไม่สำเร็จ', details: error.message });
   }
 });
+
+// Helper to extract base64 images from HTML, upload them, and return modified HTML
+async function extractAndUploadBase64Images(html, sessionId, indicatorId) {
+  if (!html || typeof html !== 'string' || !html.includes('data:image')) return html;
+
+  const base64Regex = /src="data:image\/([a-zA-Z]*);base64,([^"]*)"/g;
+  let resultHtml = html;
+  const matches = [];
+  let match;
+
+  // Collect all matches first to avoid regex state issues during async loop
+  while ((match = base64Regex.exec(html)) !== null) {
+    matches.push({
+      full: match[0],
+      type: match[1],
+      data: match[2]
+    });
+  }
+
+  for (const item of matches) {
+    try {
+      const buffer = Buffer.from(item.data, 'base64');
+      const filename = `embedded_${Date.now()}_${Math.round(Math.random() * 1000)}.${item.type || 'png'}`;
+      const destination = `evidence_actual/${sessionId}/${indicatorId}/${filename}`;
+
+      const { error } = await supabase.storage
+        .from(process.env.SUPABASE_BUCKET_NAME)
+        .upload(destination, buffer, {
+          contentType: `image/${item.type || 'png'}`,
+          upsert: true
+        });
+
+      if (!error) {
+        const { data: { publicUrl } } = supabase.storage
+          .from(process.env.SUPABASE_BUCKET_NAME)
+          .getPublicUrl(destination);
+
+        resultHtml = resultHtml.replace(item.full, `src="${publicUrl}"`);
+        console.log(`✅ Uploaded embedded image: ${filename}`);
+      } else {
+        console.error('Supabase embedded upload error:', error);
+      }
+    } catch (e) {
+      console.error('Failed to process embedded image:', e);
+    }
+  }
+
+  return resultHtml;
+}
 
 // Helper function to upload file to Supabase Storage
 async function uploadFileToFirebase(localPath, destination) {
@@ -1850,6 +1911,22 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
   try {
     const { session_id, indicator_id, operation_result, operation_score, reference_score, goal_achievement, evidence_number, evidence_name, evidence_url, comment, major_name, status, keep_existing, year } = req.body;
 
+    // Check if there is already an approved evaluation for this indicator
+    if (db) {
+      const existingApproved = await db.collection('evaluations_actual')
+        .where('session_id', '==', session_id)
+        .where('indicator_id', '==', indicator_id)
+        .where('status', '==', 'approved')
+        .get();
+
+      if (!existingApproved.empty) {
+        return res.status(403).json({
+          error: 'cannot_edit_approved',
+          message: 'รายการนี้ได้รับการอนุมัติแล้ว ไม่สามารถแก้ไขได้'
+        });
+      }
+    }
+
     let evidenceFiles = [];
     let evidenceMeta = {};
 
@@ -1886,16 +1963,21 @@ app.post('/api/evaluations-actual', upload.array('evidence_files', 10), async (r
       };
     }
 
+    // NEW: Extract and upload large base64 images from HTML to stay under Firestore 1MB limit
+    console.log('🖼️ Checking for embedded base64 images...');
+    const processedResult = await extractAndUploadBase64Images(operation_result, session_id, indicator_id);
+    const processedComment = await extractAndUploadBase64Images(comment, session_id, indicator_id);
+
     const evaluationData = {
       session_id,
       indicator_id,
-      operation_result,
+      operation_result: processedResult,
       operation_score: operation_score ? parseFloat(operation_score) : null,
       reference_score: reference_score ? parseFloat(reference_score) : null,
       goal_achievement,
       evidence_files_json: JSON.stringify(evidenceFiles),
       evidence_meta_json: JSON.stringify(evidenceMeta),
-      comment,
+      comment: processedComment,
       major_name,
       year: year || null,
       status: status || 'submitted'

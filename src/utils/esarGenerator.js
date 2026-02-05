@@ -66,18 +66,125 @@ export class ESARGenerator {
         }
     }
 
+    decodeHtmlEntities(text) {
+        if (!text) return "";
+        return text
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&rsquo;/g, "'")
+            .replace(/&lsquo;/g, "'")
+            .replace(/&rdquo;/g, '"')
+            .replace(/&ldquo;/g, '"')
+            .replace(/&copy;/g, '©')
+            .replace(/&reg;/g, '®')
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<p[^>]*>/gi, '\n')
+            .replace(/<\/p>/gi, '')
+            .replace(/<li[^>]*>/gi, '\n• ')
+            .replace(/<\/li>/gi, '');
+    }
+
+    // Optimized Helper to parse HTML into sequential blocks recursively
+    parseHtmlToBlocks(html) {
+        if (!html || typeof window === 'undefined') return [{ type: 'text', content: this.stripHtml(html) }];
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html || '', 'text/html');
+        const blocks = [];
+
+        const walk = (node) => {
+            if (node.nodeType === 3) { // Text node
+                const text = node.textContent;
+                if (text && text.trim()) {
+                    blocks.push({ type: 'text', content: this.decodeHtmlEntities(text) });
+                }
+            } else if (node.nodeName.toUpperCase() === 'IMG') {
+                const src = node.getAttribute('src');
+                if (src) blocks.push({ type: 'image', content: src });
+            } else if (node.nodeName.toUpperCase() === 'TABLE') {
+                const rows = [];
+                Array.from(node.rows).forEach(tr => {
+                    const cols = [];
+                    Array.from(tr.cells).forEach(cell => {
+                        // Recursively parse cell content
+                        const cellBlocks = this.parseHtmlToBlocks(cell.innerHTML);
+                        cols.push({ content: '', blocks: cellBlocks });
+                    });
+                    if (cols.length > 0) rows.push(cols);
+                });
+                if (rows.length > 0) blocks.push({ type: 'table', content: rows });
+            } else if (node.nodeName.toUpperCase() === 'BR') {
+                blocks.push({ type: 'text', content: '\n' });
+            } else {
+                node.childNodes.forEach(walk);
+                if (['P', 'DIV', 'H1', 'H2', 'H3', 'LI'].includes(node.nodeName.toUpperCase())) {
+                    blocks.push({ type: 'text', content: '\n' });
+                }
+            }
+        };
+
+        doc.body.childNodes.forEach(walk);
+
+        // Merge consecutive text blocks smartly
+        const merged = [];
+        blocks.forEach(b => {
+            if (b.type === 'text') {
+                if (merged.length > 0 && merged[merged.length - 1].type === 'text') {
+                    merged[merged.length - 1].content += b.content;
+                } else {
+                    merged.push({ ...b });
+                }
+            } else {
+                merged.push(b);
+            }
+        });
+
+        // Clean up text blocks
+        merged.forEach(b => {
+            if (b.type === 'text') b.content = b.content.replace(/^\s+|\s+$/g, (m) => m.includes('\n') ? '\n' : '');
+        });
+
+        const finalBlocks = merged.filter(b => b.type !== 'text' || b.content.trim() || b.content === '\n');
+        return finalBlocks.length > 0 ? finalBlocks : [{ type: 'text', content: '-' }];
+    }
+
+    // Removed old parseHtmlContent
+
+    extractImageData(html) {
+        const images = [];
+        if (!html || typeof html !== 'string') return images;
+        const imgRegex = /<img[^>]+src\s*=\s*(["'])(.*?)\1/gi;
+        let match;
+        while ((match = imgRegex.exec(html)) !== null) {
+            images.push(match[2]);
+        }
+        return images;
+    }
+
+    stripHtml(html) {
+        if (!html) return "";
+        let text = this.decodeHtmlEntities(html);
+        return text.replace(/<[^>]*>?/gm, '').trim();
+    }
+
     addTitle(text, size = 16, style = 'bold') {
+        const cleanText = this.stripHtml(text);
         this.doc.setFontSize(size);
         this.setFontSafe(style);
-        const splitText = this.doc.splitTextToSize(text, this.contentWidth);
+        const splitText = this.doc.splitTextToSize(cleanText, this.contentWidth);
         this.doc.text(splitText, this.pageWidth / 2, this.currentY, { align: 'center' });
         this.currentY += (splitText.length * (size * 0.4)) + 5;
     }
 
     addText(text, size = 12, style = 'normal', align = 'left') {
+        const cleanText = this.stripHtml(text);
         this.doc.setFontSize(size);
         this.setFontSafe(style);
-        const splitText = this.doc.splitTextToSize(text, this.contentWidth);
+        const splitText = this.doc.splitTextToSize(cleanText, this.contentWidth);
 
         if (this.currentY + (splitText.length * 5) > this.pageHeight - this.margin) {
             this.addPage();
@@ -94,24 +201,125 @@ export class ESARGenerator {
     addPage() {
         this.doc.addPage();
         this.currentY = this.margin;
-        this.addFooter();
     }
 
-    addFooter() {
-        const pageNumber = this.doc.internal.getNumberOfPages();
-        this.doc.setFontSize(10);
+    addFootersToAllPages() {
+        const totalPages = this.doc.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
+            this.doc.setPage(i);
+            this.drawSingleFooter(i, totalPages);
+        }
+    }
+
+    drawSingleFooter(pageNumber, totalPages) {
+        const footerY = this.pageHeight - 10;
+        this.doc.setFontSize(9);
         this.doc.setFont(this.fontFamily, 'normal');
+        this.doc.setTextColor(100, 100, 100);
+
         this.doc.text(
-            `หน้า ${pageNumber}`,
+            `หน้า ${pageNumber} / ${totalPages}`,
             this.pageWidth - this.margin,
-            this.pageHeight - 10,
+            footerY,
             { align: 'right' }
         );
         this.doc.text(
             `รายงาน ESAR - ${this.program.majorName || ''} (${this.year})`,
             this.margin,
-            this.pageHeight - 10
+            footerY
         );
+    }
+
+    // Shared methods for rendering complex blocks
+    estimateBlocksHeight(blocks, colWidth) {
+        let h = 2; // Minimal top padding
+        const padding = 6;
+        const width = Math.max(10, colWidth - padding);
+
+        blocks.forEach(block => {
+            if (block.type === 'text') {
+                const lines = this.doc.splitTextToSize(block.content, width);
+                h += (lines.length * 5);
+            } else if (block.type === 'table') {
+                let tableH = 2; // Table vertical margin
+                block.content.forEach(row => {
+                    let maxRowH = 0;
+                    const approxColW = width / (row.length || 1);
+                    row.forEach(cell => {
+                        const cellH = this.estimateBlocksHeight(cell.blocks || [], approxColW);
+                        if (cellH > maxRowH) maxRowH = cellH;
+                    });
+                    tableH += Math.max(7, maxRowH); // Minimum row height
+                });
+                h += tableH + 4;
+            } else if (block.type === 'image') {
+                h += Math.min(60, width * 0.6) + 6;
+            }
+        });
+        return h + 2; // Bottom padding
+    }
+
+    drawBlocks(blocks, cellX, cellY, cellWidth) {
+        let currentY = cellY + 2;
+        const padding = 6;
+        const drawWidth = Math.max(10, cellWidth - padding);
+
+        blocks.forEach(block => {
+            if (block.type === 'text') {
+                this.doc.setFontSize(10);
+                this.doc.setFont(this.fontFamily, 'normal');
+                const split = this.doc.splitTextToSize(block.content, drawWidth);
+                this.doc.text(split, cellX + 3, currentY + 3);
+                currentY += (split.length * 5);
+            } else if (block.type === 'table') {
+                autoTable(this.doc, {
+                    body: block.content,
+                    startY: currentY + 1,
+                    margin: { left: cellX + 2.5 },
+                    tableWidth: drawWidth - 1,
+                    theme: 'grid',
+                    styles: {
+                        font: this.fontFamily,
+                        fontSize: 8,
+                        cellPadding: 1,
+                        minCellHeight: 7,
+                        lineWidth: 0.1,  // Thinner lines for nested tables
+                        overflow: 'linebreak'
+                    },
+                    didParseCell: (hookData) => this.tableComplexCellHook(hookData, drawWidth),
+                    didDrawCell: (hookData) => this.tableComplexDrawHook(hookData, drawWidth)
+                });
+                currentY = this.doc.lastAutoTable.finalY + 2;
+            } else if (block.type === 'image') {
+                try {
+                    if (block.content && block.content.length > 0) {
+                        let format = 'PNG';
+                        if (block.content.startsWith('data:image')) {
+                            const typeMatch = block.content.match(/data:image\/([a-zA-Z]+);base64/);
+                            format = typeMatch ? typeMatch[1].toUpperCase() : 'PNG';
+                        }
+                        const imgHeight = Math.min(60, drawWidth * 0.6);
+                        this.doc.addImage(block.content, format, cellX + 3, currentY + 1, drawWidth, imgHeight);
+                        currentY += imgHeight + 3;
+                    }
+                } catch (e) { console.error('Image Render Error:', e); }
+            }
+        });
+    }
+
+    tableComplexCellHook(data, availableWidth) {
+        if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.blocks) {
+            const numCols = data.row.cells.length || 1;
+            const currentWidth = data.cell.width || (availableWidth / numCols);
+            const h = this.estimateBlocksHeight(data.cell.raw.blocks, currentWidth);
+            if (data.cell.styles.minCellHeight < h) data.cell.styles.minCellHeight = h;
+        }
+    }
+
+    tableComplexDrawHook(data, availableWidth) {
+        if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.blocks) {
+            this.drawBlocks(data.cell.raw.blocks, data.cell.x, data.cell.y, data.cell.width || availableWidth);
+        }
     }
 
     // --- Main Generator ---
@@ -305,20 +513,13 @@ export class ESARGenerator {
                 String(e.indicator_id) === String(ind.sequence)
             );
 
-            // Clean up HTML from rich text if any
-            const stripHtml = (html) => {
-                if (!html) return "";
-                const clean = html.replace(/<[^>]*>?/gm, ''); // Simple regex fallback for PDF
-                return clean;
-            };
-
             const resultText = evalData ? (evalData.operation_result || evalData.result || '-') : '-';
             const score = evalData ? (evalData.operation_score || evalData.score || '-') : '-';
 
             return [
                 ind.sequence || '-',
                 ind.indicator_name || '-',
-                stripHtml(resultText),
+                { content: '', blocks: this.parseHtmlToBlocks(resultText) },
                 score
             ];
         });
@@ -333,7 +534,18 @@ export class ESARGenerator {
             columnStyles: {
                 0: { halign: 'center', cellWidth: 15 },
                 1: { cellWidth: 40 },
+                2: { cellWidth: 100 },
                 3: { halign: 'center', cellWidth: 15 }
+            },
+            didParseCell: (data) => {
+                if (data.section === 'body' && data.column.index === 2) {
+                    this.tableComplexCellHook(data, 100);
+                }
+            },
+            didDrawCell: (data) => {
+                if (data.section === 'body' && data.column.index === 2) {
+                    this.tableComplexDrawHook(data, data.cell.width);
+                }
             }
         });
 
@@ -355,7 +567,11 @@ export class ESARGenerator {
 
         if (evidenceList.length > 0) {
             if (this.currentY + 20 > this.pageHeight - this.margin) this.addPage();
-            this.addText('รายการหลักฐานอ้างอิง:', 12, 'bold');
+            this.doc.setFontSize(12);
+            this.doc.setFont(this.fontFamily, 'normal');
+            this.doc.text('รายการหลักฐานอ้างอิง:', this.margin, this.currentY);
+            this.currentY += 5;
+
             autoTable(this.doc, {
                 head: [['ตัวบ่งชี้', 'ชื่อเอกสารหลักฐาน']],
                 body: evidenceList,
@@ -369,12 +585,12 @@ export class ESARGenerator {
     }
 
     save(filename = 'ESAR-Report.pdf') {
-        this.addFooter();
+        this.addFootersToAllPages();
         this.doc.save(filename);
     }
 
     getBlob() {
-        this.addFooter();
+        this.addFootersToAllPages();
         return this.doc.output('blob');
     }
 }

@@ -1,6 +1,7 @@
 // src/components/DefineComponentSection.jsx
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { useModal } from '../../context/ModalContext';
 import QualityComponentsTable from '../Quality/QualityComponentsTable';
 import AddQualityForm from './AddQualityForm';
 import EditQualityForm from './EditQualityForm'; // เพิ่ม modal แก้ไข
@@ -30,6 +31,7 @@ const normalizeSequence = (seq) => {
 
 
 export default function DefineComponentSection({ forcedMajor, forcedYear }) {
+  const { showAlert, showConfirm } = useModal();
   const [qualityName, setQualityName] = useState('');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -167,23 +169,30 @@ export default function DefineComponentSection({ forcedMajor, forcedYear }) {
 
   // ฟังก์ชันลบองค์ประกอบ
   const handleDelete = async (id) => {
-    if (!window.confirm('ยืนยันการลบองค์ประกอบนี้?')) return;
+    showConfirm({
+      title: 'ยืนยันการลบ',
+      message: 'ยืนยันการลบองค์ประกอบนี้? ข้อมูลตัวบ่งชี้ภายในจะถูกลบทั้งหมด',
+      type: 'error',
+      onConfirm: async () => {
+        const ctxParams = (() => {
+          try {
+            const sessionId = localStorage.getItem('assessment_session_id') || '';
+            const sel = localStorage.getItem('selectedProgramContext');
+            const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
+            return new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
+          } catch { return ''; }
+        })();
 
-    const ctxParams = (() => {
-      try {
-        const sessionId = localStorage.getItem('assessment_session_id') || '';
-        const sel = localStorage.getItem('selectedProgramContext');
-        const major = sel ? (JSON.parse(sel)?.majorName || JSON.parse(sel)?.major_name || '') : '';
-        return new URLSearchParams({ session_id: sessionId, major_name: major }).toString();
-      } catch { return ''; }
-    })();
-
-    const res = await fetch(`${BASE_URL}/api/quality-components/${id}?${ctxParams}`, { method: 'DELETE' });
-    if (res.ok) {
-      setItems(items.filter(item => item.id !== id));
-    } else {
-      setError('ลบข้อมูลไม่สำเร็จ');
-    }
+        const res = await fetch(`${BASE_URL}/api/quality-components/${id}?${ctxParams}`, { method: 'DELETE' });
+        if (res.ok) {
+          setItems(items.filter(item => item.id !== id));
+          showAlert({ title: 'สำเร็จ', message: 'ลบองค์ประกอบเรียบร้อยแล้ว', type: 'success' });
+        } else {
+          setError('ลบข้อมูลไม่สำเร็จ');
+          showAlert({ title: 'ข้อผิดพลาด', message: 'ลบข้อมูลไม่สำเร็จ', type: 'error' });
+        }
+      }
+    });
   };
 
   // ฟังก์ชันแก้ไของค์ประกอบ
@@ -292,7 +301,11 @@ export default function DefineComponentSection({ forcedMajor, forcedYear }) {
     })();
 
     if (!ctx.year) {
-      alert('กรุณารอข้อมูลปีการศึกษาโหลดสักครู่ หรือตรวจสอบการตั้งค่ารอบการประเมิน');
+      showAlert({
+        title: 'ข้อมูลไม่พร้อม',
+        message: 'กรุณารอข้อมูลปีการศึกษาโหลดสักครู่ หรือตรวจสอบการตั้งค่ารอบการประเมิน',
+        type: 'warning'
+      });
       return;
     }
 
@@ -358,15 +371,32 @@ export default function DefineComponentSection({ forcedMajor, forcedYear }) {
       const prefix = String(target.sequence) + '.';
       const subs = list.filter(i => String(i.sequence).startsWith(prefix));
       if (subs.length > 0) {
-        if (!window.confirm(`ยืนยันการลบตัวบ่งชี้ ${target.sequence} และข้อย่อยทั้งหมดจำนวน ${subs.length} รายการ?`)) return;
-        subs.forEach(s => idsToDelete.push(s.id));
+        showConfirm({
+          title: 'ยืนยันการลบลำดับหลัก',
+          message: `ยืนยันการลบตัวบ่งชี้ ${target.sequence} และข้อย่อยทั้งหมดจำนวน ${subs.length} รายการ?`,
+          type: 'error',
+          onConfirm: () => performDeleteIndicator(indicatorId, componentId, subs.map(s => s.id))
+        });
       } else {
-        if (!window.confirm('ยืนยันการลบตัวบ่งชี้นี้?')) return;
+        showConfirm({
+          title: 'ยืนยันการลบ',
+          message: 'ยืนยันการลบตัวบ่งชี้นี้?',
+          type: 'warning',
+          onConfirm: () => performDeleteIndicator(indicatorId, componentId, [])
+        });
       }
     } else {
-      if (!window.confirm('ยืนยันการลบตัวบ่งชี้นี้?')) return;
+      showConfirm({
+        title: 'ยืนยันการลบ',
+        message: 'ยืนยันการลบตัวบ่งชี้นี้?',
+        type: 'warning',
+        onConfirm: () => performDeleteIndicator(indicatorId, componentId, [])
+      });
     }
+  };
 
+  const performDeleteIndicator = async (indicatorId, componentId, subIds = []) => {
+    const idsToDelete = [indicatorId, ...subIds];
     try {
       const ctxParams = (() => {
         try {
@@ -386,9 +416,11 @@ export default function DefineComponentSection({ forcedMajor, forcedYear }) {
         ...prev,
         [componentId]: prev[componentId].filter(ind => !idsToDelete.includes(ind.id))
       }));
+      showAlert({ title: 'สำเร็จ', message: 'ลบตัวบ่งชี้เรียบร้อยแล้ว', type: 'success' });
     } catch (err) {
       console.error('Delete error', err);
       setError('เกิดข้อผิดพลาดในการลบตัวบ่งชี้');
+      showAlert({ title: 'ข้อผิดพลาด', message: 'ไม่สามารถลบตัวบ่งชี้ได้', type: 'error' });
     }
   };
 
