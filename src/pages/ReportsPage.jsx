@@ -10,6 +10,7 @@ import {
 import { generateAssessmentPDF, downloadPDF } from '../utils/pdfGenerator';
 import { ESARGenerator } from '../utils/esarGenerator';
 import { BASE_URL } from '../config/api.js';
+import ProgramSelection from '../components/ProgramSelection';
 
 export default function ReportsPage() {
   const navigate = useNavigate();
@@ -32,18 +33,24 @@ export default function ReportsPage() {
   const [indicators, setIndicators] = useState([]);
   const [stats, setStats] = useState({ avg: 0, completed: 0, total: 0 });
 
-  const programContext = JSON.parse(localStorage.getItem('selectedProgramContext') || '{}');
-  const majorName = programContext.majorName || 'วิศวกรรมคอมพิวเตอร์'; // Default fallback
+  const [selectedProgram, setSelectedProgram] = useState(() => {
+    try {
+      const saved = localStorage.getItem('selectedProgramContext');
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+
+  const majorName = selectedProgram?.majorName || selectedProgram?.major_name || '';
 
   useEffect(() => {
     fetchRounds();
   }, []);
 
   useEffect(() => {
-    if (selectedYear || majorName) {
+    if (selectedProgram && (selectedYear || majorName)) {
       fetchAllData();
     }
-  }, [selectedYear, majorName]);
+  }, [selectedYear, majorName, selectedProgram]);
 
   const fetchRounds = async () => {
     try {
@@ -166,7 +173,7 @@ export default function ReportsPage() {
     try {
       setRefreshing(true);
       const generator = new ESARGenerator({
-        program: { majorName, ...programContext },
+        program: { majorName, ...selectedProgram },
         year: selectedYear,
         components,
         indicators,
@@ -229,7 +236,7 @@ export default function ReportsPage() {
             <button
               onClick={() => {
                 localStorage.removeItem('selectedProgramContext');
-                window.location.reload();
+                setSelectedProgram(null);
               }}
               className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-sm"
             >
@@ -319,7 +326,7 @@ export default function ReportsPage() {
             <div key={comp.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
                 <h3 className="text-lg font-bold text-gray-800">
-                  หมวดที่ {comp.component_id || comp.id}: {comp.quality_name}
+                  องค์ประกอบที่ {comp.component_id || comp.id}: {comp.quality_name}
                 </h3>
               </div>
               <div className="overflow-x-auto">
@@ -327,8 +334,6 @@ export default function ReportsPage() {
                   <thead className="bg-gray-50/50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">ตัวบ่งชี้</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">ผลดำเนินงาน</th>
-                      <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">คะแนน</th>
                       <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">สถานะ</th>
                     </tr>
                   </thead>
@@ -345,29 +350,16 @@ export default function ReportsPage() {
                           <td className="px-6 py-4">
                             <div className="text-sm font-medium text-gray-900">{ind.indicator_id || ind.sequence}. {ind.indicator_name}</div>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-gray-600 line-clamp-2 max-w-md">
-                              {evaluation?.operation_result || <span className="text-gray-400 italic">ยังไม่มีข้อมูล</span>}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${evaluation?.operation_score
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-gray-100 text-gray-400'
-                              }`}>
-                              {evaluation?.operation_score || '-'}
-                            </span>
-                          </td>
                           <td className="px-6 py-4 text-center">
                             {evaluation ? (
-                              <span className={`px-2 py-1 text-xs font-semibold rounded-full ${evaluation.status === 'approved'
+                              <span className={`px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${evaluation.status === 'approved'
                                 ? 'bg-green-100 text-green-800'
                                 : 'bg-yellow-100 text-yellow-800'
                                 }`}>
                                 {evaluation.status === 'approved' ? 'อนุมัติแล้ว' : 'รอตรวจสอบ'}
                               </span>
                             ) : (
-                              <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-400">
+                              <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-400 whitespace-nowrap">
                                 ยังไม่ประเมิน
                               </span>
                             )}
@@ -449,7 +441,7 @@ export default function ReportsPage() {
 
   const renderSWOT = () => (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 space-y-6">
-      <h3 className="text-lg font-bold text-gray-800 border-b pb-2">บทที่ 3: การวิเคราะห์จุดแข็งและจุดอ่อน (SWOT Analysis)</h3>
+      <h3 className="text-lg font-bold text-gray-800 border-b pb-2">บทที่ 3: สรุปจุดแข็งและข้อควรพัฒนา</h3>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-green-50 p-4 rounded-xl border border-green-100">
@@ -457,7 +449,7 @@ export default function ReportsPage() {
             <CheckCircle className="w-5 h-5 mr-2" /> จุดแข็ง (Strengths)
           </label>
           <textarea
-            rows={6}
+            rows={10}
             className="w-full px-3 py-2 bg-white border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
             value={esarData.swot.s}
             onChange={e => setEsarData({ ...esarData, swot: { ...esarData.swot, s: e.target.value } })}
@@ -467,40 +459,14 @@ export default function ReportsPage() {
 
         <div className="bg-red-50 p-4 rounded-xl border border-red-100">
           <label className="flex items-center text-red-800 font-bold mb-2">
-            <AlertCircle className="w-5 h-5 mr-2" /> จุดอ่อน (Weaknesses)
+            <AlertCircle className="w-5 h-5 mr-2" /> จุดควรพัฒนา (Areas for Improvement)
           </label>
           <textarea
-            rows={6}
+            rows={10}
             className="w-full px-3 py-2 bg-white border border-red-200 rounded-lg focus:ring-2 focus:ring-red-500 outline-none"
             value={esarData.swot.w}
             onChange={e => setEsarData({ ...esarData, swot: { ...esarData.swot, w: e.target.value } })}
             placeholder="ระบุจุดที่ควรปรับปรุง..."
-          />
-        </div>
-
-        <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-          <label className="flex items-center text-blue-800 font-bold mb-2">
-            <TrendingUp className="w-5 h-5 mr-2" /> โอกาส (Opportunities)
-          </label>
-          <textarea
-            rows={6}
-            className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            value={esarData.swot.o}
-            onChange={e => setEsarData({ ...esarData, swot: { ...esarData.swot, o: e.target.value } })}
-            placeholder="ระบุโอกาสภายนอก..."
-          />
-        </div>
-
-        <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-          <label className="flex items-center text-orange-800 font-bold mb-2">
-            <AlertCircle className="w-5 h-5 mr-2" /> อุปสรรค (Threats)
-          </label>
-          <textarea
-            rows={6}
-            className="w-full px-3 py-2 bg-white border border-orange-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none"
-            value={esarData.swot.t}
-            onChange={e => setEsarData({ ...esarData, swot: { ...esarData.swot, t: e.target.value } })}
-            placeholder="ระบุอุปสรรคหรือความท้าทาย..."
           />
         </div>
       </div>
@@ -512,7 +478,7 @@ export default function ReportsPage() {
           disabled={refreshing}
         >
           <Save className="w-4 h-4 mr-2" />
-          บันทึก SWOT
+          บันทึกข้อมูล
         </button>
       </div>
     </div>
@@ -558,6 +524,26 @@ export default function ReportsPage() {
     </div>
   );
 
+  if (!selectedProgram) {
+    return (
+      <div className="max-w-4xl mx-auto py-12 font-prompt">
+        <div className="text-center mb-8">
+          <FileText className="w-16 h-16 text-blue-600 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-gray-900">รายงานการประเมินตนเอง (SAR)</h1>
+          <p className="text-gray-600 mt-2">กรุณาเลือกสาขาที่ต้องการดูรายงาน</p>
+        </div>
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+          <ProgramSelection
+            onComplete={(sel) => {
+              setSelectedProgram(sel);
+              try { localStorage.setItem('selectedProgramContext', JSON.stringify(sel)); } catch { }
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main className="container mx-auto px-4 py-8 font-prompt">
       {/* Header */}
@@ -588,7 +574,7 @@ export default function ReportsPage() {
           { id: 'dashboard', label: 'ภาพรวม', icon: LayoutDashboard },
           { id: 'profile', label: '1. โครงร่างองค์กร', icon: School },
           { id: 'results', label: '2. ผลการดำเนินงาน', icon: BookOpen },
-          { id: 'swot', label: '3. วิเคราะห์ SWOT', icon: PieChart },
+          { id: 'swot', label: '3. สรุปจุดแข็งและข้อควรพัฒนา', icon: PieChart },
           { id: 'export', label: '4. ออกรายงาน', icon: FileText },
         ].map(tab => (
           <button

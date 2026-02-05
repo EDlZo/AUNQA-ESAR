@@ -1,12 +1,9 @@
-// src/utils/esarGenerator.js
-import jsPDF from 'jspdf';
+import jsPDFSource from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// Expose jsPDF to window for font registration scripts
-if (typeof window !== 'undefined') {
-    window.jsPDF = jsPDF;
-    window.jspdf = jsPDF;
-}
+// Prioritize global jsPDF if available (it has the fonts registered from index.html)
+const jsPDF = (typeof window !== 'undefined' && (window.jsPDF || (window.jspdf && (window.jspdf.jsPDF || window.jspdf)))) || jsPDFSource;
+if (typeof window !== 'undefined') console.log('Using jsPDF instance:', jsPDF === jsPDFSource ? 'npm package' : 'global/script tag');
 
 /**
  * ESAR Report Generator
@@ -32,24 +29,40 @@ export class ESARGenerator {
         this.margin = 20;
         this.contentWidth = this.pageWidth - (this.margin * 2);
 
-        // Font setting - assume Sarabun is loaded via index.html or global scripts
-        this.fontFamily = 'THSarabun';
+        // Font setting - prioritize THSarabun then Sarabun-Regular
+        let availableFonts = {};
         try {
-            this.doc.setFont(this.fontFamily, 'normal');
+            availableFonts = this.doc.getFontList();
+            console.log('Available fonts in PDF instance:', availableFonts);
         } catch (e) {
-            console.warn('Font THSarabun not found, falling back to Sarabun');
-            this.fontFamily = 'Sarabun';
+            console.error('Could not get font list', e);
         }
+
+        this.fontFamily = 'THSarabun';
+        if (!availableFonts[this.fontFamily]) {
+            if (availableFonts['Sarabun-Regular']) {
+                this.fontFamily = 'Sarabun-Regular';
+            } else if (availableFonts['Sarabun']) {
+                this.fontFamily = 'Sarabun';
+            } else {
+                console.warn('Thai fonts not found in this instance! Fallback to helvetica.');
+                this.fontFamily = 'helvetica';
+            }
+        }
+
+        console.log('Final selected font family:', this.fontFamily);
         this.doc.setFont(this.fontFamily, 'normal');
     }
 
     // --- Helpers ---
 
     setFontSafe(style = 'normal') {
+        // Force 'normal' because we only have the normal Thai font file registered.
+        // Using 'bold' on THSarabun without a bold file will cause squares/gibberish.
         try {
-            this.doc.setFont(this.fontFamily, style);
-        } catch (e) {
             this.doc.setFont(this.fontFamily, 'normal');
+        } catch (e) {
+            console.error('Font error:', e);
         }
     }
 
@@ -162,14 +175,12 @@ export class ESARGenerator {
     }
 
     renderSWOT() {
-        this.addTitle('บทที่ 3: การวิเคราะห์จุดแข็งและจุดอ่อน (SWOT Analysis)', 16);
+        this.addTitle('บทที่ 3: สรุปจุดแข็งและข้อควรพัฒนา', 16);
         this.currentY += 10;
 
         const sections = [
             { title: 'จุดแข็ง (Strengths)', content: this.metadata.swot?.s },
-            { title: 'จุดอ่อน (Weaknesses)', content: this.metadata.swot?.w },
-            { title: 'โอกาส (Opportunities)', content: this.metadata.swot?.o },
-            { title: 'อุปสรรค (Threats)', content: this.metadata.swot?.t }
+            { title: 'จุดควรพัฒนา (Areas for Improvement)', content: this.metadata.swot?.w }
         ];
 
         sections.forEach(section => {
@@ -247,8 +258,8 @@ export class ESARGenerator {
             body: tableData,
             startY: this.currentY,
             theme: 'grid',
-            styles: { font: this.fontFamily, fontSize: 11, cellPadding: 2 },
-            headStyles: { fillColor: [51, 65, 85], textColor: 255, halign: 'center' },
+            styles: { font: this.fontFamily, fontSize: 11, cellPadding: 2, fontStyle: 'normal' },
+            headStyles: { fillColor: [51, 65, 85], textColor: 255, halign: 'center', fontStyle: 'normal' },
             columnStyles: {
                 0: { halign: 'center', cellWidth: 15 },
                 2: { halign: 'center', cellWidth: 30 }
@@ -263,7 +274,7 @@ export class ESARGenerator {
     }
 
     renderComponentSection(component) {
-        this.addTitle(`หมวดที่ ${component.quality_code || ''} ${component.quality_name}`, 16);
+        this.addTitle(`องค์ประกอบที่ ${component.quality_code || ''} ${component.quality_name}`, 16);
         this.currentY += 5;
 
         const compIndicators = this.indicators.filter(ind =>
@@ -317,8 +328,8 @@ export class ESARGenerator {
             body: body,
             startY: this.currentY,
             theme: 'grid',
-            styles: { font: this.fontFamily, fontSize: 10, cellPadding: 3, overflow: 'linebreak' },
-            headStyles: { fillColor: [71, 85, 105], textColor: 255, halign: 'center' },
+            styles: { font: this.fontFamily, fontSize: 10, cellPadding: 3, overflow: 'linebreak', fontStyle: 'normal' },
+            headStyles: { fillColor: [71, 85, 105], textColor: 255, halign: 'center', fontStyle: 'normal' },
             columnStyles: {
                 0: { halign: 'center', cellWidth: 15 },
                 1: { cellWidth: 40 },
@@ -350,8 +361,8 @@ export class ESARGenerator {
                 body: evidenceList,
                 startY: this.currentY,
                 theme: 'striped',
-                styles: { font: this.fontFamily, fontSize: 9 },
-                headStyles: { fillColor: [148, 163, 184], textColor: 255 }
+                styles: { font: this.fontFamily, fontSize: 9, fontStyle: 'normal' },
+                headStyles: { fillColor: [148, 163, 184], textColor: 255, fontStyle: 'normal' }
             });
             this.currentY = this.doc.lastAutoTable.finalY + 10;
         }

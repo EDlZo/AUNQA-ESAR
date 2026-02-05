@@ -1,22 +1,34 @@
 <!DOCTYPE html>
 <html lang="th">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ระบบประกันคุณภาพ AUN-QA | มหาวิทยาลัยเทคโนโลยีราชมงคลศรีวิชัย</title>
-    <meta name="description" content="ระบบสนับสนุนการประเมินคุณภาพ AUN-QA สำหรับคณะ/สาขา ที่มหาวิทยาลัยเทคโนโลยีราชมงคลศรีวิชัย" />
-    <meta name="keywords" content="AUN-QA, ประกันคุณภาพ, มหาวิทยาลัย, การประเมิน, QA, RMUTSV, Songkhla" />
-    <meta name="theme-color" content="#4F46E5" />
-    <meta property="og:title" content="ระบบประกันคุณภาพ AUN-QA | มทร.ศรีวิชัย สงขลา" />
-    <meta property="og:description" content="แพลตฟอร์มสนับสนุนการประเมินคุณภาพ AUN-QA สำหรับคณะ/สาขา ของมทร.ศรีวิชัย วิทยาเขตสงขลา" />
-    <meta property="og:type" content="website" />
-    <!-- Fonts for PDF Generation -->
-    <script src="/fonts/Sarabun-normal.js"></script>
-    <script src="/fonts/THSarabun-normal.js"></script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ระบบประกันคุณภาพ AUN-QA | มหาวิทยาลัยเทคโนโลยีราชมงคลศรีวิชัย</title>
+  <meta name="description"
+    content="ระบบสนับสนุนการประเมินคุณภาพ AUN-QA สำหรับคณะ/สาขา ที่มหาวิทยาลัยเทคโนโลยีราชมงคลศรีวิชัย" />
+  <meta name="keywords" content="AUN-QA, ประกันคุณภาพ, มหาวิทยาลัย, การประเมิน, QA, RMUTSV, Songkhla" />
+  <meta name="theme-color" content="#4F46E5" />
+  <meta property="og:title" content="ระบบประกันคุณภาพ AUN-QA | มทร.ศรีวิชัย สงขลา" />
+  <meta property="og:description"
+    content="แพลตฟอร์มสนับสนุนการประเมินคุณภาพ AUN-QA สำหรับคณะ/สาขา ของมทร.ศรีวิชัย วิทยาเขตสงขลา" />
+  <meta property="og:type" content="website" />
+  <!-- PDF Generation Dependencies -->
+  <script src="/js/jspdf.umd.min.js"></script>
+  <script src="/js/jspdf.plugin.autotable.min.js"></script>
+  <script>
+    if (window.jspdf && window.jspdf.jsPDF) {
+      window.jsPDF = window.jspdf.jsPDF;
+    }
+  </script>
+  <script src="/fonts/Sarabun-normal.js"></script>
+  <script src="/fonts/THSarabun-normal.js"></script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>
