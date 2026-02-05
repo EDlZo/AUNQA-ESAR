@@ -989,122 +989,93 @@ app.delete('/api/master-indicators/:id', async (req, res) => {
 // ================= BULK OPERATIONS =================
 app.get('/api/bulk/session-summary', async (req, res) => {
   try {
-    if (!db) {
-      // Use mock data when Firebase is not available
-      const { session_id, major_name } = req.query;
-      if (!major_name) return res.status(400).json({ error: 'กรุณาระบุ major_name' });
-
-      console.log(`[BULK] Fetching session summary for major: ${major_name}, session: ${session_id} (using mock data)`);
-
-      const [components, evaluations, evaluationsActual, committeeEvaluations, indicators] = await Promise.all([
-        getData('qualityComponents', { major_name }),
-        getData('evaluations', { session_id, major_name }),
-        getData('evaluationsActual', { session_id, major_name }),
-        getData('committeeEvaluations', { session_id, major_name }),
-        getData('indicators', { major_name })
-      ]);
-
-      // Sort indicators by sequence numerically
-      indicators.sort((a, b) => {
-        const seqA = String(a.sequence || '');
-        const seqB = String(b.sequence || '');
-        return seqA.localeCompare(seqB, undefined, { numeric: true, sensitivity: 'base' });
-      });
-
-      return res.json({
-        components,
-        evaluations,
-        evaluations_actual: evaluationsActual,
-        committee_evaluations: committeeEvaluations,
-        indicators
-      });
-    }
-
-    const { session_id, major_name, year } = req.query;
+    const { session_id, major_name, year, filter_approved_only } = req.query;
     if (!major_name) return res.status(400).json({ error: 'กรุณาระบุ major_name' });
 
     console.log(`[BULK] Fetching session summary for major: ${major_name}, session: ${session_id}, year: ${year}`);
 
-    // Determine target session IDs
+    // Determine target session IDs (year-filtered)
     let targetSessionIds = [];
     if (session_id) {
       targetSessionIds = [String(session_id)];
     } else if (year) {
-      // Find sessions for this year
-      // Note: For legacy data (no round_year), we might need special handling if year='legacy'
-      // But for now, let's assume standard year filtering
-      let sessionQuery = db.collection('assessment_sessions').where('major_name', '==', major_name);
-
-      if (year === 'legacy') {
-        // Hard to query for missing field efficiently without index, 
-        // but assuming small dataset or we rely on client to know legacy session ID.
-        // Actually, usually users want "Current Year".
-        // Let's simplified: 
-        // If year is passed, we filter by round_year.
-        sessionQuery = sessionQuery.where('round_year', '==', year);
-      }
-
-      const sessionSnap = await sessionQuery.get();
+      const sessionSnap = await db.collection('assessment_sessions')
+        .where('major_name', '==', major_name)
+        .where('round_year', '==', year)
+        .get();
       targetSessionIds = sessionSnap.docs.map(doc => doc.id);
     }
 
-    // Prepare queries
+    // Fetch Components and Indicators
     let compQuery = db.collection('quality_components').where('major_name', '==', major_name);
     let indQuery = db.collection('indicators').where('major_name', '==', major_name);
-
-    // Broaden evaluation queries to use year if available
-    let evalQuery = db.collection('evaluations').where('major_name', '==', major_name);
-    let evalActualQuery = db.collection('evaluations_actual').where('major_name', '==', major_name);
-    let commQuery = db.collection('committee_evaluations').where('major_name', '==', major_name);
-
     if (year) {
       compQuery = compQuery.where('year', '==', year);
       indQuery = indQuery.where('year', '==', year);
-
-      // If we have sessions, we can filter by session OR year. 
-      // But filtering by year is more direct and covers orphans.
-      // Refinement: Try to fetch by BOTH to catch records that might have missed the 'year' field
-      // during the brief interval between fixes but have a valid session_id.
-      evalQuery = evalQuery.where('year', '==', year);
-      evalActualQuery = evalActualQuery.where('year', '==', year);
-      commQuery = commQuery.where('year', '==', year);
-    } else if (targetSessionIds.length > 0) {
-      // Fallback to session_id for non-year queries
-      evalQuery = evalQuery.where('session_id', 'in', targetSessionIds);
-      evalActualQuery = evalActualQuery.where('session_id', 'in', targetSessionIds);
-      commQuery = commQuery.where('session_id', 'in', targetSessionIds);
-    } else if (session_id) {
-      evalQuery = evalQuery.where('session_id', '==', String(session_id));
-      evalActualQuery = evalActualQuery.where('session_id', '==', String(session_id));
-      commQuery = commQuery.where('session_id', '==', String(session_id));
-    } else {
-      // No criteria, return empty for evals
-      evalQuery = null;
-      evalActualQuery = null;
-      commQuery = null;
     }
-
-    const [compSnap, evalSnap, evalActualSnap, commSnap, indSnap] = await Promise.all([
-      compQuery.get(),
-      evalQuery ? evalQuery.get() : Promise.resolve({ docs: [] }),
-      evalActualQuery ? evalActualQuery.get() : Promise.resolve({ docs: [] }),
-      commQuery ? commQuery.get() : Promise.resolve({ docs: [] }),
-      indQuery.get()
-    ]);
-
+    const [compSnap, indSnap] = await Promise.all([compQuery.get(), indQuery.get()]);
     const components = compSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const evaluations = evalSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    let evaluations_actual = evalActualSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    const committee_evaluations = commSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     const indicators = indSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-    // Filter approved only if requested
-    const { filter_approved_only } = req.query;
+    // Fetch ALL sessions for this major (for absolute fallback)
+    const fetchAllMajorSessions = async () => {
+      const snap = await db.collection('assessment_sessions').where('major_name', '==', major_name).get();
+      return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    };
+    const assessment_sessions = await fetchAllMajorSessions();
+
+    // Robust Evaluation Fetcher
+    const fetchEvaluationsRobustly = async (collectionName) => {
+      let resultsMap = new Map();
+
+      // 1. By Year field directly
+      if (year) {
+        const snap = await db.collection(collectionName)
+          .where('major_name', '==', major_name)
+          .where('year', '==', year)
+          .get();
+        snap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+      }
+
+      // 2. By targetSessionIds
+      if (targetSessionIds.length > 0) {
+        for (let i = 0; i < targetSessionIds.length; i += 30) {
+          const chunk = targetSessionIds.slice(i, i + 30);
+          const snap = await db.collection(collectionName)
+            .where('session_id', 'in', chunk)
+            .get();
+          snap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+        }
+      }
+
+      // 3. Fallback: If still empty, use ALL sessions for this major (handles legacy/orphan data)
+      if (resultsMap.size === 0) {
+        const allIds = assessment_sessions.map(s => s.id);
+        if (allIds.length > 0) {
+          for (let i = 0; i < allIds.length; i += 30) {
+            const chunk = allIds.slice(i, i + 30);
+            const snap = await db.collection(collectionName)
+              .where('session_id', 'in', chunk)
+              .get();
+            snap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+          }
+        }
+      }
+
+      return Array.from(resultsMap.values());
+    };
+
+    let [evaluations, evaluations_actual, committee_evaluations] = await Promise.all([
+      fetchEvaluationsRobustly('evaluations'),
+      fetchEvaluationsRobustly('evaluations_actual'),
+      fetchEvaluationsRobustly('committee_evaluations')
+    ]);
+
+    // Filtering and Sorting
     if (filter_approved_only === 'true') {
-      evaluations_actual = evaluations_actual.filter(eval => eval.status === 'approved');
+      evaluations_actual = evaluations_actual.filter(ev => ev.status === 'approved');
     }
 
-    // Sort indicators
     indicators.sort((a, b) => {
       const seqA = String(a.sequence || '');
       const seqB = String(b.sequence || '');
@@ -1116,7 +1087,8 @@ app.get('/api/bulk/session-summary', async (req, res) => {
       evaluations,
       evaluations_actual,
       committee_evaluations,
-      indicators
+      indicators,
+      assessment_sessions
     });
   } catch (error) {
     console.error('Error in session summary batch:', error);
@@ -1994,51 +1966,67 @@ app.post('/api/evaluations-actual/:id/reject', async (req, res) => {
   }
 });
 
+
+
+
 app.get('/api/evaluations-actual/history', async (req, res) => {
   try {
     const { session_id, major_name, year, filter_approved_only } = req.query;
+    if (!major_name) return res.status(400).json({ error: 'กรุณาระบุ major_name' });
 
     let targetSessionIds = [];
     if (session_id) {
       targetSessionIds = [String(session_id)];
     } else if (year) {
-      let sessionQuery = db.collection('assessment_sessions').where('major_name', '==', major_name);
-      if (year === 'legacy') {
-        sessionQuery = sessionQuery.where('round_year', '==', year); // Or logic for missing?
-      } else {
-        sessionQuery = sessionQuery.where('round_year', '==', year);
-      }
-      const sessionSnap = await sessionQuery.get();
+      const sessionSnap = await db.collection('assessment_sessions')
+        .where('major_name', '==', major_name)
+        .where('round_year', '==', year)
+        .get();
       targetSessionIds = sessionSnap.docs.map(doc => doc.id);
-    } else {
-      // No session or year, maybe fetch all for major? Or just default empty?
-      // Existing logic seemed to allow filtering by just major_name across all time?
-      // Let's keep it safe: if major_name provided, maybe fetch all?
-      // But original code: if (session_id) filters.session_id = session_id; if (major_name) filters.major_name = major_name;
-      // So original allowed fetching by major_name (all history).
-      // If year is NOT provided, we fall back to original logic (fetch all for major).
     }
 
-    let query = db.collection('evaluations_actual');
-    if (major_name) query = query.where('major_name', '==', major_name);
+    let resultsMap = new Map();
 
-    // If we have specific session targets from year filter
-    if (year && targetSessionIds.length > 0) {
-      query = query.where('session_id', 'in', targetSessionIds);
-    } else if (year && targetSessionIds.length === 0) {
-      return res.json([]); // Year provided but no sessions found
-    }
-    // If explicit session_id filter (overrides year usually, or matches targetSessionIds)
-    else if (session_id) {
-      query = query.where('session_id', '==', session_id);
+    // Query 1: By Year
+    if (year) {
+      const snap = await db.collection('evaluations_actual')
+        .where('major_name', '==', major_name)
+        .where('year', '==', year)
+        .get();
+      snap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
     }
 
-    const snapshot = await query.get();
-    let evaluations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // Query 2: By Session IDs
+    if (targetSessionIds.length > 0) {
+      for (let i = 0; i < targetSessionIds.length; i += 30) {
+        const chunk = targetSessionIds.slice(i, i + 30);
+        const snap = await db.collection('evaluations_actual')
+          .where('major_name', '==', major_name)
+          .where('session_id', 'in', chunk)
+          .get();
+        snap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+      }
+    }
 
-    // Filter approved only if requested
-    if (filter_approved_only === 'true') {
-      evaluations = evaluations.filter(eval => eval.status === 'approved');
+    // Query 3: Explicit session_id fallback
+    if (session_id && resultsMap.size === 0) {
+      const snap = await db.collection('evaluations_actual')
+        .where('major_name', '==', major_name)
+        .where('session_id', '==', String(session_id))
+        .get();
+      snap.docs.forEach(doc => resultsMap.set(doc.id, { id: doc.id, ...doc.data() }));
+    }
+
+    let evaluations = Array.from(resultsMap.values());
+
+    // Soft Match Fallback
+    if (evaluations.length === 0 && year) {
+      const orphanSnap = await db.collection('evaluations_actual')
+        .where('major_name', '==', major_name)
+        .get();
+      evaluations = orphanSnap.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(ev => !ev.year || ev.year === '');
     }
 
     res.json(evaluations);
@@ -2404,5 +2392,66 @@ app.delete('/api/rounds/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting round:', error);
     res.status(500).json({ error: 'ลบรอบประเมินไม่สำเร็จ' });
+  }
+});
+
+// ================= ESAR METADATA =================
+console.log('Registering ESAR Metadata routes...');
+app.get('/api/esar-metadata', async (req, res) => {
+  try {
+    const { session_id, major_name, year } = req.query;
+    // Allow fetching by just major_name and year, or session_id
+    if (!session_id && (!major_name || !year)) {
+      // return res.status(400).json({ error: 'Need session_id or (major_name + year)' });
+      // Allow fetching all if admin? No, let's return empty if no filters
+      return res.json({});
+    }
+
+    const filters = {};
+    if (session_id) filters.session_id = session_id;
+    if (major_name) filters.major_name = major_name;
+    if (year) filters.year = year;
+
+    const metadata = await getData('esar_metadata', filters);
+    res.json(metadata[0] || {});
+  } catch (error) {
+    console.error('Error fetching ESAR metadata:', error);
+    res.status(500).json({ error: 'Failed to fetch metadata' });
+  }
+});
+
+app.post('/api/esar-metadata', async (req, res) => {
+  try {
+    const { session_id, major_name, year, data } = req.body;
+
+    const filters = {};
+    if (session_id) filters.session_id = session_id;
+    if (major_name) filters.major_name = major_name;
+    if (year) filters.year = year;
+
+    const existing = await getData('esar_metadata', filters);
+
+    if (existing.length > 0) {
+      const id = existing[0].id;
+      if (db) {
+        await db.collection('esar_metadata').doc(id).update({
+          ...data,
+          updated_at: admin.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      res.json({ success: true, id });
+    } else {
+      const newData = {
+        session_id,
+        major_name,
+        year,
+        ...data
+      };
+      const result = await addData('esar_metadata', newData);
+      res.json(result);
+    }
+  } catch (error) {
+    console.error('Error saving ESAR metadata:', error);
+    res.status(500).json({ error: 'Failed to save metadata' });
   }
 });

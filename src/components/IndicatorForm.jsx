@@ -5,9 +5,11 @@ export default function IndicatorForm(props) {
 
   // ตรวจสอบว่าเป็น "องค์ประกอบที่ 2" หรือไม่
   const isComponentTwo = useMemo(() => {
-    const compId = props.selectedComponent?.component_id || props.selectedComponent?.componentId || '';
+    // const compId = props.selectedComponent?.component_id || props.selectedComponent?.componentId || '';
     const name = props.selectedComponent?.quality_name || props.selectedComponent?.qualityName || '';
-    return String(compId).trim() === '2' || name.includes('องค์ประกอบที่ 2') || name.includes('องค์ประกอบ 2');
+    // ยกเลิกการเช็ค ID == 2 เพราะอาจชนกับองค์ประกอบที่สร้างเอง
+    // เช็คจากชื่อว่าต้องมีคำว่า "AUN-QA" หรือ "องค์ประกอบที่ 2" เท่านั้น
+    return name.includes('AUN-QA') || name.includes('องค์ประกอบที่ 2') || (name.includes('องค์ประกอบ 2') && name.includes('AUN'));
   }, [props.selectedComponent]);
 
   console.log('🔵 IndicatorForm VERSION 3.0 - DROPDOWN SELECTION');

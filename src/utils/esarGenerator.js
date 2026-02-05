@@ -1,6 +1,12 @@
 // src/utils/esarGenerator.js
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
+
+// Expose jsPDF to window for font registration scripts
+if (typeof window !== 'undefined') {
+    window.jsPDF = jsPDF;
+    window.jspdf = jsPDF;
+}
 
 /**
  * ESAR Report Generator
@@ -19,22 +25,37 @@ export class ESARGenerator {
         this.evaluations = options.evaluations || [];
         this.indicators = options.indicators || [];
         this.components = options.components || [];
+        this.metadata = options.metadata || {};
 
         this.pageWidth = this.doc.internal.pageSize.getWidth();
         this.pageHeight = this.doc.internal.pageSize.getHeight();
         this.margin = 20;
         this.contentWidth = this.pageWidth - (this.margin * 2);
 
-        // Font setting - assume Sarabun is loaded via index.html
-        this.fontFamily = 'THSarabun-normal';
+        // Font setting - assume Sarabun is loaded via index.html or global scripts
+        this.fontFamily = 'THSarabun';
+        try {
+            this.doc.setFont(this.fontFamily, 'normal');
+        } catch (e) {
+            console.warn('Font THSarabun not found, falling back to Sarabun');
+            this.fontFamily = 'Sarabun';
+        }
         this.doc.setFont(this.fontFamily, 'normal');
     }
 
     // --- Helpers ---
 
+    setFontSafe(style = 'normal') {
+        try {
+            this.doc.setFont(this.fontFamily, style);
+        } catch (e) {
+            this.doc.setFont(this.fontFamily, 'normal');
+        }
+    }
+
     addTitle(text, size = 16, style = 'bold') {
         this.doc.setFontSize(size);
-        this.doc.setFont(this.fontFamily, style);
+        this.setFontSafe(style);
         const splitText = this.doc.splitTextToSize(text, this.contentWidth);
         this.doc.text(splitText, this.pageWidth / 2, this.currentY, { align: 'center' });
         this.currentY += (splitText.length * (size * 0.4)) + 5;
@@ -42,7 +63,7 @@ export class ESARGenerator {
 
     addText(text, size = 12, style = 'normal', align = 'left') {
         this.doc.setFontSize(size);
-        this.doc.setFont(this.fontFamily, style);
+        this.setFontSafe(style);
         const splitText = this.doc.splitTextToSize(text, this.contentWidth);
 
         if (this.currentY + (splitText.length * 5) > this.pageHeight - this.margin) {
@@ -88,25 +109,77 @@ export class ESARGenerator {
         // 1. Cover Page
         this.renderCoverPage();
 
-        // 2. Summary Table of All Criteria
+        // 2. Organization Profile (Introduction)
+        this.addPage();
+        this.renderIntroduction();
+
+        // 3. Summary Table of All Criteria
         this.addPage();
         this.renderOverallSummary();
 
-        // 3. Detailed Sections for each Criterion (1-15)
-        for (let i = 1; i <= 15; i++) {
-            const component = this.components.find(c =>
-                c.quality_code === `AUN.${i}` ||
-                c.quality_name?.includes(`AUN.${i}`) ||
-                (c.quality_code === `AUN-${i}`)
-            );
+        // 4. SWOT Analysis
+        this.addPage();
+        this.renderSWOT();
 
+        // 5. Detailed Sections for each Criterion (AUN 1-15 or actual components)
+        this.components.forEach(component => {
             if (component) {
                 this.addPage();
                 this.renderComponentSection(component);
             }
-        }
+        });
 
         return this.doc;
+    }
+
+    renderIntroduction() {
+        this.addTitle('บทที่ 1: โครงร่างองค์กร (Organization Profile)', 16);
+        this.currentY += 10;
+
+        if (this.metadata.history) {
+            this.addTitle('ประวัติความเป็นมา (History)', 14, 'bold');
+            this.addText(this.metadata.history);
+            this.currentY += 10;
+        }
+
+        if (this.metadata.vision) {
+            this.addTitle('วิสัยทัศน์ (Vision)', 14, 'bold');
+            this.addText(this.metadata.vision);
+            this.currentY += 10;
+        }
+
+        if (this.metadata.mission) {
+            this.addTitle('พันธกิจ (Mission)', 14, 'bold');
+            this.addText(this.metadata.mission);
+            this.currentY += 10;
+        }
+
+        if (this.metadata.structure) {
+            this.addTitle('โครงสร้างการบริหาร (Organization Structure)', 14, 'bold');
+            this.addText(this.metadata.structure);
+            this.currentY += 10;
+        }
+    }
+
+    renderSWOT() {
+        this.addTitle('บทที่ 3: การวิเคราะห์จุดแข็งและจุดอ่อน (SWOT Analysis)', 16);
+        this.currentY += 10;
+
+        const sections = [
+            { title: 'จุดแข็ง (Strengths)', content: this.metadata.swot?.s },
+            { title: 'จุดอ่อน (Weaknesses)', content: this.metadata.swot?.w },
+            { title: 'โอกาส (Opportunities)', content: this.metadata.swot?.o },
+            { title: 'อุปสรรค (Threats)', content: this.metadata.swot?.t }
+        ];
+
+        sections.forEach(section => {
+            if (section.content) {
+                if (this.currentY + 60 > this.pageHeight - this.margin) this.addPage();
+                this.addTitle(section.title, 14, 'bold');
+                this.addText(section.content);
+                this.currentY += 10;
+            }
+        });
     }
 
     renderCoverPage() {
@@ -137,33 +210,39 @@ export class ESARGenerator {
         let avgTotal = 0;
         let countTotal = 0;
 
-        for (let i = 1; i <= 15; i++) {
-            const code = `AUN.${i}`;
-            const component = this.components.find(c => c.quality_code === code);
-            if (!component) continue;
+        this.components.forEach((component, idx) => {
+            const compIndicators = this.indicators.filter(ind =>
+                String(ind.quality_id) === String(component.id) ||
+                String(ind.component_id) === String(component.id) ||
+                String(ind.component_id) === String(component.component_id)
+            );
 
-            const compIndicators = this.indicators.filter(ind => String(ind.quality_id) === String(component.id));
             let compAvg = 0;
             let compCount = 0;
 
             compIndicators.forEach(ind => {
-                const evalData = this.evaluations.find(e => String(e.indicator_id) === String(ind.id));
-                if (evalData && evalData.operation_score) {
-                    compAvg += parseFloat(evalData.operation_score);
+                const evalData = this.evaluations.find(e =>
+                    String(e.indicator_id) === String(ind.id) ||
+                    String(e.indicator_id) === String(ind.indicator_id) ||
+                    String(e.indicator_id) === String(ind.sequence)
+                );
+
+                if (evalData && (evalData.operation_score || evalData.score)) {
+                    compAvg += parseFloat(evalData.operation_score || evalData.score);
                     compCount++;
                 }
             });
 
             const score = compCount > 0 ? (compAvg / compCount).toFixed(2) : '-';
-            tableData.push([i, component.quality_name, score]);
+            tableData.push([idx + 1, component.quality_name, score]);
 
             if (compCount > 0) {
                 avgTotal += parseFloat(score);
                 countTotal++;
             }
-        }
+        });
 
-        this.doc.autoTable({
+        autoTable(this.doc, {
             head: [['ลำดับ', 'หัวข้อเกณฑ์ AUN-QA', 'คะแนนประเมิน']],
             body: tableData,
             startY: this.currentY,
@@ -187,7 +266,11 @@ export class ESARGenerator {
         this.addTitle(`หมวดที่ ${component.quality_code || ''} ${component.quality_name}`, 16);
         this.currentY += 5;
 
-        const compIndicators = this.indicators.filter(ind => String(ind.quality_id) === String(component.id));
+        const compIndicators = this.indicators.filter(ind =>
+            String(ind.quality_id) === String(component.id) ||
+            String(ind.component_id) === String(component.id) ||
+            String(ind.component_id) === String(component.component_id)
+        );
 
         if (compIndicators.length === 0) {
             this.addText('ไม่พบข้อมูลตัวบ่งชี้ในหมวดนี้', 12, 'italic');
@@ -205,24 +288,31 @@ export class ESARGenerator {
         });
 
         const body = compIndicators.map(ind => {
-            const evalData = this.evaluations.find(e => String(e.indicator_id) === String(ind.id));
+            const evalData = this.evaluations.find(e =>
+                String(e.indicator_id) === String(ind.id) ||
+                String(e.indicator_id) === String(ind.indicator_id) ||
+                String(e.indicator_id) === String(ind.sequence)
+            );
 
             // Clean up HTML from rich text if any
             const stripHtml = (html) => {
-                const tmp = document.createElement("DIV");
-                tmp.innerHTML = html;
-                return tmp.textContent || tmp.innerText || "";
+                if (!html) return "";
+                const clean = html.replace(/<[^>]*>?/gm, ''); // Simple regex fallback for PDF
+                return clean;
             };
+
+            const resultText = evalData ? (evalData.operation_result || evalData.result || '-') : '-';
+            const score = evalData ? (evalData.operation_score || evalData.score || '-') : '-';
 
             return [
                 ind.sequence || '-',
                 ind.indicator_name || '-',
-                evalData ? stripHtml(evalData.operation_result || '-') : '-',
-                evalData ? (evalData.operation_score || '-') : '-'
+                stripHtml(resultText),
+                score
             ];
         });
 
-        this.doc.autoTable({
+        autoTable(this.doc, {
             head: [['ลำดับ', 'ตัวบ่งชี้', 'ผลการดำเนินงาน', 'คะแนน']],
             body: body,
             startY: this.currentY,
@@ -255,7 +345,7 @@ export class ESARGenerator {
         if (evidenceList.length > 0) {
             if (this.currentY + 20 > this.pageHeight - this.margin) this.addPage();
             this.addText('รายการหลักฐานอ้างอิง:', 12, 'bold');
-            this.doc.autoTable({
+            autoTable(this.doc, {
                 head: [['ตัวบ่งชี้', 'ชื่อเอกสารหลักฐาน']],
                 body: evidenceList,
                 startY: this.currentY,

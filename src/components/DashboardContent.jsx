@@ -106,6 +106,7 @@ export default function DashboardContent({ user }) {
       );
 
       const totalIndicatorsCount = filteredIndicators.length;
+      const mainIndicatorsCount = filteredIndicators.filter(ind => !String(ind.sequence || "").includes('.')).length;
       const activeIndicatorIds = new Set(filteredIndicators.map(ind => String(ind.id)));
       const activeIndicatorSequences = new Set(filteredIndicators.map(ind => String(ind.sequence)));
       const activeIndicatorLogicalIds = new Set(filteredIndicators.map(ind => String(ind.indicator_id || "")));
@@ -115,7 +116,22 @@ export default function DashboardContent({ user }) {
         activeIndicatorSequences.has(String(ev.indicator_id)) ||
         activeIndicatorLogicalIds.has(String(ev.indicator_id))
       );
-      const completedAssessmentsCount = filteredEvaluationsActual.length;
+
+      // Count unique indicators evaluated (to avoid duplicates or parent/child confusion)
+      const evaluatedIndicatorIds = new Set(filteredEvaluationsActual.map(ev => String(ev.indicator_id)));
+
+      // Match back to the indicators list to see how many unique indicators from the list are covered
+      const completedIndicatorsCount = filteredIndicators.filter(ind =>
+        evaluatedIndicatorIds.has(String(ind.id)) ||
+        evaluatedIndicatorIds.has(String(ind.indicator_id)) ||
+        evaluatedIndicatorIds.has(String(ind.sequence))
+      ).length;
+
+      // For a "Clean" high-level view, we might only want to show progress of main indicators
+      const completedMainIndicatorsCount = filteredIndicators.filter(ind =>
+        !String(ind.sequence || "").includes('.') &&
+        (evaluatedIndicatorIds.has(String(ind.id)) || evaluatedIndicatorIds.has(String(ind.indicator_id)) || evaluatedIndicatorIds.has(String(ind.sequence)))
+      ).length;
 
       // Calculate progress and score per component
       const componentStats = components.map(c => {
@@ -124,14 +140,25 @@ export default function DashboardContent({ user }) {
         );
         const componentIndicatorIds = new Set(componentIndicators.map(ind => String(ind.id)));
 
-        const completedInComponent = filteredEvaluationsActual.filter(ev => componentIndicatorIds.has(String(ev.indicator_id))).length;
+        const completedInComponent = componentIndicators.filter(ind =>
+          evaluatedIndicatorIds.has(String(ind.id)) ||
+          evaluatedIndicatorIds.has(String(ind.indicator_id)) ||
+          evaluatedIndicatorIds.has(String(ind.sequence))
+        ).length;
+
         const totalInComponent = componentIndicators.length;
 
         const progress = totalInComponent > 0 ? Math.round((completedInComponent / totalInComponent) * 100) : 0;
 
         // Average score for this component
         const componentScores = filteredEvaluationsActual
-          .filter(ev => componentIndicatorIds.has(String(ev.indicator_id)))
+          .filter(ev => {
+            return componentIndicators.some(ind =>
+              String(ind.id) === String(ev.indicator_id) ||
+              String(ind.indicator_id) === String(ev.indicator_id) ||
+              String(ind.sequence) === String(ev.indicator_id)
+            );
+          })
           .map(ev => parseFloat(ev.operation_score) || 0)
           .filter(s => s > 0);
 
@@ -158,7 +185,7 @@ export default function DashboardContent({ user }) {
       setStats({
         totalComponents: components.length,
         totalIndicators: totalIndicatorsCount,
-        completedAssessments: completedAssessmentsCount,
+        completedAssessments: completedIndicatorsCount, // Use unique count instead of record length
         averageScore,
         componentProgress: componentStats,
         recentEvaluations: evaluations_actual.slice(0, 5)

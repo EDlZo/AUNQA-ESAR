@@ -312,7 +312,7 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                         className="flex items-center text-gray-500 hover:text-gray-700 mb-6 transition-colors"
                     >
                         <ArrowLeft className="w-5 h-5 mr-1" />
-                        กลับหน้าสถิติฐานข้อมูล
+                        กลับ
                     </button>
 
                     <div className="mb-8 flex items-center justify-between">

@@ -1,5 +1,6 @@
 // src/components/DefineComponentSection.jsx
 import React, { useState, useEffect } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import QualityComponentsTable from '../Quality/QualityComponentsTable';
 import AddQualityForm from './AddQualityForm';
 import EditQualityForm from './EditQualityForm'; // เพิ่ม modal แก้ไข

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     Layers, School, BookOpen, Plus, Edit, Trash2,
-    Search, X, ArrowLeft, ChevronRight, Save
+    Search, X, ArrowLeft, ChevronRight, Save, AlertCircle
 } from 'lucide-react';
 import { BASE_URL } from '../../config/api.js';
 
@@ -220,10 +220,34 @@ export default function ProgramManagement({ setActiveTab }) {
                                         {activeSubTab === 'programs' && (
                                             <>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                                    {faculties.find(f => f.id === item.facultyId)?.name || item.facultyName || '-'}
+                                                    {(() => {
+                                                        const faculty = faculties.find(f => f.id === item.facultyId);
+                                                        if (faculty) return faculty.name;
+                                                        if (item.facultyId) {
+                                                            return (
+                                                                <div className="flex items-center gap-1 text-red-500" title="ลบไปแล้ว">
+                                                                    {item.facultyName || 'ไม่พบข้อมูลคณะ'}
+                                                                    <AlertCircle className="w-4 h-4" />
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return item.facultyName || '-';
+                                                    })()}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                                    {levels.find(l => l.id === item.levelId)?.name || '-'}
+                                                    {(() => {
+                                                        const level = levels.find(l => l.id === item.levelId);
+                                                        if (level) return level.name;
+                                                        if (item.levelId) {
+                                                            return (
+                                                                <div className="flex items-center gap-1 text-red-500" title="ลบไปแล้ว">
+                                                                    {item.levelName || 'ไม่พบข้อมูลระดับ'}
+                                                                    <AlertCircle className="w-4 h-4" />
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return '-';
+                                                    })()}
                                                 </td>
                                             </>
                                         )}
