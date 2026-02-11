@@ -437,7 +437,7 @@ export default function App() {
 
   return (
     <ModalProvider>
-      <div className="min-h-screen bg-slate-50 font-['Sarabun']">
+      <div className="min-h-screen flex flex-col bg-slate-50 font-['Sarabun']">
         <ConnectionStatus />
         <Header
           isMenuOpen={isMenuOpen}

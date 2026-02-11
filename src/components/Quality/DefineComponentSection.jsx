@@ -574,7 +574,7 @@ export default function DefineComponentSection({ forcedMajor, forcedYear }) {
         </button>
       </div>
 
-      <div className="max-w-6xl mx-auto">
+      <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
         <QualityComponentsTable
           items={items}
           loading={loading}

@@ -40,7 +40,7 @@ export default function SystemManagementPage({ setActiveTab }) {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-prompt">
-            <div className="flex-1 container mx-auto px-4 py-8" style={{ backgroundColor: 'white' }}>
+            <div className="flex-1 container mx-auto px-4 py-8" style={{ backgroundColor: 'gray-50' }}>
                 <div className="mb-8">
                     <div className="flex items-center gap-3 mb-2">
                         <div className="p-2 bg-blue-100 rounded-lg">

@@ -126,10 +126,8 @@ export default function DashboardContent({ user }) {
     setLoading(true);
     try {
       const { majorName } = selectedProgram;
-      const sessionId = localStorage.getItem('assessment_session_id');
       const qs = new URLSearchParams({
         major_name: majorName,
-        session_id: sessionId || '',
         year: selectedYear
       }).toString();
 

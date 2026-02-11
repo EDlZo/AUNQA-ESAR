@@ -88,7 +88,7 @@ export default function AssessmentForm() {
         currentUser={null} handleLogout={() => { }}
         setShowLogin={() => { }} rolePermissions={{}} />
 
-      <main className="flex-1 container mx-auto px-4 py-8 max-w-4xl">
+      <main className="flex-1 container mx-auto px-4 py-8 max-w-4xl" style={{ backgroundColor: 'gray-50' }}>
         {/* Header Section */}
         <div className="mb-8">
           <button

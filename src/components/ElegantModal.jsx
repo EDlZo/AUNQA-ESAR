@@ -34,7 +34,7 @@ const ElegantModal = ({
             case 'error': return <AlertCircle className={`${iconClass} text-rose-500`} strokeWidth={1.2} />;
             case 'warning': return <AlertTriangle className={`${iconClass} text-amber-500`} strokeWidth={1.2} />;
             case 'confirm': return <MessageSquare className={`${iconClass} text-blue-500`} strokeWidth={1.2} />;
-            case 'prompt': return <MessageSquare className={`${iconClass} text-indigo-500`} strokeWidth={1.2} />;
+            case 'prompt': return <MessageSquare className={`${iconClass} text-rose-500`} strokeWidth={1.2} />;
             default: return <Info className={`${iconClass} text-blue-500`} strokeWidth={1.2} />;
         }
     };
@@ -74,9 +74,9 @@ const ElegantModal = ({
             iconBg: 'bg-slate-50/50'
         },
         prompt: {
-            bar: 'bg-gradient-to-r from-indigo-400 to-indigo-600',
-            btn: 'bg-indigo-600 hover:bg-indigo-700 shadow-[0_10px_20px_-5px_rgba(79,70,229,0.4)]',
-            iconBg: 'bg-indigo-50/50'
+            bar: 'bg-gradient-to-r from-rose-400 to-rose-600',
+            btn: 'bg-rose-600 hover:bg-rose-700 shadow-[0_10px_20px_-5px_rgba(244,63,94,0.4)]',
+            iconBg: 'bg-rose-50/50'
         }
     };
 
@@ -124,7 +124,7 @@ const ElegantModal = ({
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                     placeholder={promptPlaceholder}
-                                    className="w-full px-8 py-6 bg-white/40 backdrop-blur-sm border-2 border-slate-100/50 rounded-[2.2rem] focus:ring-8 focus:ring-indigo-500/5 focus:border-indigo-400 outline-none transition-all min-h-[160px] text-slate-800 text-xl shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)]"
+                                    className="w-full px-8 py-6 bg-white/40 backdrop-blur-sm border-2 border-slate-100/50 rounded-[2.2rem] focus:ring-8 focus:ring-rose-500/5 focus:border-rose-400 outline-none transition-all min-h-[160px] text-slate-800 text-xl shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)]"
                                     autoFocus
                                 />
                             </div>

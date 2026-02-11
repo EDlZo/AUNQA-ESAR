@@ -200,13 +200,13 @@ export default function UserManagementPage({ setActiveTab }) {
             </div>
 
             {/* Search */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
+            <div className="bg-white p-4 rounded shadow mb-6">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                     <input
                         type="text"
                         placeholder="ค้นหาชื่อ หรือ อีเมล..."
-                        className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
@@ -214,118 +214,136 @@ export default function UserManagementPage({ setActiveTab }) {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="bg-gray-50 border-b">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ-นามสกุล</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อีเมล</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">บทบาท</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สาขา/หน่วยงาน</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                            {loading ? (
-                                <tr><td colSpan="5" className="text-center py-8">กำลังโหลด...</td></tr>
-                            ) : filteredUsers.length === 0 ? (
-                                <tr><td colSpan="5" className="text-center py-8 text-gray-500">ไม่พบข้อมูลผู้ใช้งาน</td></tr>
-                            ) : (
-                                filteredUsers.map(user => (
-                                    <tr key={user.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-500">{user.email}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                                {roles.find(r => r.id === user.role_id)?.name || 'Unknown'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {user.major_name || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <button onClick={() => handleOpenModal(user)} className="text-gray-500 hover:text-gray-700 mr-4">
-                                                <Edit className="w-5 h-5" />
-                                            </button>
-                                            <button onClick={() => handleDelete(user.id)} className="text-red-600 hover:text-red-900">
-                                                <Trash2 className="w-5 h-5" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อ-นามสกุล</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">อีเมล</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">บทบาท</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">สาขา/หน่วยงาน</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {loading ? (
+                            <tr><td colSpan="5" className="text-center py-4">กำลังโหลดข้อมูล...</td></tr>
+                        ) : filteredUsers.length === 0 ? (
+                            <tr><td colSpan="5" className="text-center py-4 text-gray-500">ไม่พบข้อมูลผู้ใช้งานที่ค้นหา</td></tr>
+                        ) : (
+                            filteredUsers.map(user => (
+                                <tr key={user.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {user.email}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                            {roles.find(r => r.id === user.role_id)?.name || 'Unknown'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {user.major_name || '-'}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <button
+                                            onClick={() => handleOpenModal(user)}
+                                            className="text-blue-600 hover:text-blue-900 mr-3"
+                                        >
+                                            <Edit className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(user.id)}
+                                            className="text-red-600 hover:text-red-900"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
             </div>
 
 
             {/* Modal */}
-            {
-                showModal && (
-                    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-xl max-w-md w-full p-6">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl font-bold text-gray-900">{editUser ? 'แก้ไขผู้ใช้งาน' : 'เพิ่มผู้ใช้งานใหม่'}</h2>
-                                <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                                    <X className="w-6 h-6" />
-                                </button>
+            {showModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 flex flex-col max-h-[95vh]">
+                        <div className="px-8 py-5 bg-gray-50/50 border-b border-gray-100 flex justify-between items-center flex-shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-600 rounded-xl">
+                                    <Users className="w-5 h-5 text-white" />
+                                </div>
+                                <h2 className="text-xl font-bold text-gray-900">
+                                    {editUser ? 'แก้ไขรายละเอียดผู้ใช้งาน' : 'เพิ่มผู้ใช้งานใหม่'}
+                                </h2>
                             </div>
+                            <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                                <X className="w-5 h-5 text-gray-400" />
+                            </button>
+                        </div>
 
-                            <form onSubmit={handleSubmit} className="space-y-4">
+                        <form onSubmit={handleSubmit} className="p-8 space-y-6 overflow-y-auto custom-scrollbar">
+                            <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">อีเมล</label>
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">อีเมลผู้ใช้งาน</label>
                                     <input
                                         type="email"
                                         required
-                                        className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
                                         value={formData.email}
                                         onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                        placeholder="user@example.com"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">
                                         {editUser ? 'รหัสผ่าน (เว้นว่างหากไม่ต้องการเปลี่ยน)' : 'รหัสผ่าน'}
                                     </label>
                                     <input
                                         type="password"
                                         required={!editUser}
-                                        className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
                                         value={formData.password}
                                         onChange={e => setFormData({ ...formData, password: e.target.value })}
+                                        placeholder="••••••••"
                                     />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อ</label>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">ชื่อ</label>
                                         <input
                                             type="text"
                                             required
-                                            className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
                                             value={formData.first_name}
                                             onChange={e => setFormData({ ...formData, first_name: e.target.value })}
+                                            placeholder="ชื่อจริง"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">นามสกุล</label>
+                                        <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 ml-1">นามสกุล</label>
                                         <input
                                             type="text"
                                             required
-                                            className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
                                             value={formData.last_name}
                                             onChange={e => setFormData({ ...formData, last_name: e.target.value })}
+                                            placeholder="นามสกุล"
                                         />
                                     </div>
                                 </div>
+                            </div>
+
+                            <div className="bg-blue-50/30 p-6 rounded-2xl border border-blue-100 space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">บทบาท</label>
+                                    <label className="block text-xs font-bold text-blue-400 uppercase mb-1.5 ml-1">บทบาทสิทธิ์การใช้งาน</label>
                                     <select
-                                        className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        className="w-full px-4 py-2.5 bg-white border border-blue-100 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
                                         value={formData.role_id}
                                         onChange={e => setFormData({ ...formData, role_id: parseInt(e.target.value) })}
                                     >
@@ -335,41 +353,41 @@ export default function UserManagementPage({ setActiveTab }) {
                                     </select>
                                 </div>
 
-                                {/* Show Program Selection only for relevant roles if needed, or always allow */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">สาขาวิชา (ถ้ามี)</label>
+                                    <label className="block text-xs font-bold text-blue-400 uppercase mb-1.5 ml-1">สาขาวิชา / หน่วยงานที่สังกัด</label>
                                     <select
-                                        className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                        className="w-full px-4 py-2.5 bg-white border border-blue-100 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-sm"
                                         value={formData.major_id}
                                         onChange={e => setFormData({ ...formData, major_id: e.target.value })}
                                     >
-                                        <option value="">-- ไม่ระบุ --</option>
+                                        <option value="">-- ไม่ระบุ (ส่วนกลาง) --</option>
                                         {programs.map(p => (
                                             <option key={p.majorId} value={p.majorId}>{p.majorName}</option>
                                         ))}
                                     </select>
                                 </div>
+                            </div>
 
-                                <div className="flex justify-end pt-4 gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowModal(false)}
-                                        className="px-4 py-2 border rounded-lg text-gray-600 hover:bg-gray-50"
-                                    >
-                                        ยกเลิก
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                                    >
-                                        บันทึก
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
+                            <div className="pt-6 flex gap-3 border-t border-gray-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowModal(false)}
+                                    className="flex-1 px-6 py-3 bg-white border border-gray-200 text-gray-600 rounded-2xl font-bold hover:bg-gray-50 transition-all active:scale-95 text-sm"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95 flex items-center justify-center gap-2 text-sm"
+                                >
+                                    <Check className="w-5 h-5" />
+                                    {editUser ? 'บันทึกการแก้ไข' : 'สร้างข้อมูลผู้ใช้'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
-                )
-            }
+                </div>
+            )}
 
         </>
     );

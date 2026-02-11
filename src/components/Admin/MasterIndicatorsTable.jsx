@@ -7,98 +7,54 @@ import {
 } from 'lucide-react';
 
 // Recursive Row Component for Level 2+ Accordion
-const IndicatorRow = ({ item, depth = 0, onEdit, onDelete, onAddSub }) => {
+const IndicatorRow = ({ item, depth = 0, onEdit, onDelete }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const hasChildren = item.children && item.children.length > 0;
 
-    const toggleExpand = (e) => {
-        if (hasChildren) {
-            e.stopPropagation();
-            setIsExpanded(!isExpanded);
-        }
-    };
-
     return (
-        <div className="flex flex-col">
-            <div
-                className={`flex items-center group border-b border-gray-100 transition-all hover:bg-slate-50 relative ${depth > 0 ? 'bg-gray-50/20' : 'bg-white'}`}
-                onClick={toggleExpand}
-                style={{ cursor: hasChildren ? 'pointer' : 'default' }}
-            >
-                {/* Visual Indentation Line */}
-                {depth > 0 && Array.from({ length: depth }).map((_, i) => (
-                    <div
-                        key={i}
-                        className="absolute w-[1px] bg-gray-200 h-full"
-                        style={{ left: `${(i + 1) * 1.25}rem` }}
-                    />
-                ))}
-
-                {/* ID/Seq Column */}
+        <div className="flex flex-col border-b border-gray-100 last:border-0">
+            <div className="flex items-center hover:bg-gray-50 group py-3 pr-4">
                 <div
-                    className="w-20 px-3 py-3.5 flex items-center justify-center border-r border-gray-100 relative z-10"
-                    style={{ paddingLeft: `${depth * 1.5 + 0.5}rem` }}
+                    className="flex items-center"
+                    style={{ paddingLeft: `${depth * 2}rem` }}
                 >
-                    {hasChildren && (
-                        <div className="mr-1.5 transition-transform duration-200">
-                            {isExpanded ?
-                                <ChevronDown className="w-3.5 h-3.5 text-indigo-500" /> :
-                                <ChevronRight className="w-3.5 h-3.5 text-indigo-500" />
-                            }
-                        </div>
+                    {hasChildren ? (
+                        <button
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            className="p-1 hover:bg-gray-200 rounded transition-colors mr-1"
+                        >
+                            {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                        </button>
+                    ) : (
+                        <div className="w-6 mr-1" />
                     )}
-                    <span className={`text-[11px] font-bold ${depth === 0 ? 'text-indigo-700' : 'text-gray-400'}`}>
-                        {item.sequence ? item.sequence.split('.').map(p => parseInt(p, 10)).join('.') : '-'}
+                    <span className="text-sm font-medium text-gray-400 w-16 mr-2">
+                        {item.sequence || '-'}
                     </span>
                 </div>
 
-                {/* Name/Detail Column */}
-                <div className="flex-1 px-5 py-3.5 border-r border-gray-100 relative z-10">
-                    <div className="flex items-center gap-2">
-                        <span className={`text-sm ${depth === 0 ? 'font-bold text-gray-800' : 'text-gray-600'}`}>
-                            {item.indicator_name || 'ไม่ระบุชื่อตัวบ่งชี้'}
-                        </span>
-                        {depth === 0 && item.indicator_type && (
-                            <span className="text-[9px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
-                                {item.indicator_type === 'Quantitative' ? 'QTY' : 'QLT'}
-                            </span>
-                        )}
-                    </div>
+                <div className="flex-1 text-sm text-gray-700">
+                    {item.indicator_name}
                 </div>
 
-                {/* Metadata - Only for main level to keep it clean */}
-                {depth === 0 && (
-                    <div className="w-40 px-4 py-3 border-r border-gray-100 hidden lg:block italic text-[11px] text-gray-400">
-                        {item.major_name || 'Global'}
-                    </div>
-                )}
-
-                {/* Action Column */}
-                <div className="w-36 px-4 py-3 flex items-center justify-end gap-1 relative z-10">
-                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-all">
-                        {/* Only allow adding sub-indicators if it doesn't already have children or is level 0 */}
-
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onEdit(item); }}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="แก้ไข"
-                        >
-                            <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="ลบ"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    </div>
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                        onClick={() => onEdit(item)}
+                        className="text-blue-600 hover:text-blue-900 mr-3"
+                    >
+                        <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => onDelete(item.id)}
+                        className="text-red-600 hover:text-red-900"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
                 </div>
             </div>
 
-            {/* Sub-Items (Recursion) */}
             {hasChildren && isExpanded && (
-                <div className="bg-gray-50/10">
+                <div className="bg-gray-50/50">
                     {item.children.map(child => (
                         <IndicatorRow
                             key={child.id}
@@ -106,7 +62,6 @@ const IndicatorRow = ({ item, depth = 0, onEdit, onDelete, onAddSub }) => {
                             depth={depth + 1}
                             onEdit={onEdit}
                             onDelete={onDelete}
-                            onAddSub={onAddSub}
                         />
                     ))}
                 </div>
@@ -173,95 +128,73 @@ export default function MasterIndicatorsTable({ items, components, onEdit, onDel
     };
 
     return (
-        <div className="space-y-6">
-            {/* Search Header */}
-            <div className="flex items-center justify-between bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
-                <div className="relative flex-1 max-w-lg group">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-400 group-hover:text-indigo-500 transition-colors" />
+        <div className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between mb-6 p-2">
+                <div className="relative flex-1 group w-full">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
                         type="text"
                         placeholder="ค้นหาชื่อตัวบ่งชี้หรือเลขลำดับ..."
-                        className="w-full pl-12 pr-4 py-3 bg-slate-50/50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                        className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
                 <button
                     onClick={() => onAdd()}
-                    className="ml-4 flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95 shrink-0"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md flex items-center hover:bg-blue-700 transition-colors whitespace-nowrap"
                 >
-                    <Plus className="w-5 h-5" />
+                    <Plus className="w-5 h-5 mr-1" />
                     เพิ่มตัวบ่งชี้ใหม่
                 </button>
             </div>
 
-            {/* List of Components (Accordion Level 1) */}
             <div className="space-y-4">
-                {treeData.length > 0 ? (
-                    treeData.map((comp) => {
-                        const isExpanded = expandedComponents[comp.id] !== false; // Default expanded
-
-                        return (
-                            <div key={comp.id} className="bg-white border border-gray-100 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                                {/* Component Header */}
-                                <div
-                                    className="bg-slate-50/70 py-4 px-6 flex items-center justify-between cursor-pointer group"
-                                    onClick={() => toggleComponent(comp.id)}
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 font-black shadow-sm group-hover:scale-110 transition-transform border border-indigo-50">
-                                            {comp.component_id}
-                                        </div>
-                                        <div>
-                                            <h3 className="text-base font-bold text-gray-900 leading-tight">{comp.quality_name}</h3>
-                                            <p className="text-[11px] font-semibold text-gray-400 mt-0.5 uppercase tracking-wide">
-                                                {comp.major_name || 'Global'} • {comp.nodes.length} รายการ
-                                            </p>
-                                        </div>
+                {treeData.map((comp) => {
+                    const isExpanded = expandedComponents[comp.id] !== false;
+                    return (
+                        <div key={comp.id} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                            <div
+                                className="bg-gray-50 px-6 py-4 flex items-center justify-between cursor-pointer border-b border-gray-300"
+                                onClick={() => toggleComponent(comp.id)}
+                            >
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 bg-blue-600 rounded flex items-center justify-center text-white font-bold">
+                                        {comp.component_id}
                                     </div>
-                                    <div className="p-2 hover:bg-indigo-100/50 rounded-xl transition-colors">
-                                        {isExpanded ?
-                                            <ChevronDown className="w-5 h-5 text-gray-400" /> :
-                                            <ChevronRight className="w-5 h-5 text-gray-400" />
-                                        }
+                                    <div>
+                                        <h3 className="font-bold text-gray-900">{comp.quality_name}</h3>
+                                        <div className="flex items-center gap-2 text-xs">
+                                            <span className="text-blue-600 font-medium">{comp.major_name || 'Global'}</span>
+                                            <span className="text-gray-400">•</span>
+                                            <span className="text-gray-500">{comp.tree.length} indicators</span>
+                                        </div>
                                     </div>
                                 </div>
-
-                                {/* Component Tree (Accordion Level 2+) */}
-                                {isExpanded && (
-                                    <div className="border-t border-gray-50 flex flex-col">
-                                        {comp.tree.length > 0 ? (
-                                            comp.tree.map(node => (
-                                                <IndicatorRow
-                                                    key={node.id}
-                                                    item={node}
-                                                    onEdit={onEdit}
-                                                    onDelete={onDelete}
-                                                    onAddSub={(parent) => onAdd({
-                                                        ...parent,
-                                                        parent_id: parent.id,
-                                                        parent_name: parent.indicator_name,
-                                                        id: undefined // Ensures we don't edit the parent itself
-                                                    })}
-                                                />
-                                            ))
-                                        ) : (
-                                            <div className="py-12 text-center">
-                                                <Box className="w-10 h-10 text-gray-200 mx-auto mb-2" />
-                                                <p className="text-sm text-gray-400 italic">ไม่มีข้อมูลแสดงผล</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
+                                <ChevronDown className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''} text-gray-400`} />
                             </div>
-                        );
-                    })
-                ) : (
-                    <div className="bg-white border border-gray-100 rounded-3xl p-16 text-center shadow-sm">
-                        <Activity className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-                        <p className="text-gray-400 font-medium italic">ไม่พบข้อมูลที่ตรงกับการค้นหา</p>
-                    </div>
-                )}
+
+                            {isExpanded && (
+                                <div className="p-2">
+                                    {comp.tree.length > 0 ? (
+                                        comp.tree.map(node => (
+                                            <IndicatorRow
+                                                key={node.id}
+                                                item={node}
+                                                onEdit={onEdit}
+                                                onDelete={onDelete}
+                                            />
+                                        ))
+                                    ) : (
+                                        <div className="py-8 text-center text-gray-400 italic text-sm">
+                                            ไม่มีข้อมูลแสดงผล
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

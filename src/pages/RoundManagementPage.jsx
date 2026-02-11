@@ -1,6 +1,6 @@
 // src/pages/RoundManagementPage.jsx
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Clock, Plus, Check, X, AlertCircle, Trash2, Edit2 } from 'lucide-react';
+import { ArrowLeft, Clock, Plus, Check, X, AlertCircle, Trash2, Edit2, Save } from 'lucide-react';
 import { BASE_URL } from '../config/api';
 import { useModal } from '../context/ModalContext';
 
@@ -159,8 +159,8 @@ export default function RoundManagementPage({ setActiveTab }) {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-prompt">
-            <div className="flex-1 container mx-auto px-4 py-8" style={{ backgroundColor: 'white' }}>
-                <div className="flex justify-between items-center mb-6">
+            <div className="flex-1 container mx-auto px-4 py-8" style={{ backgroundColor: 'gray-50' }}>
+                <div className="flex justify-between items-center mb-4">
                     <div>
                         <button
                             onClick={() => setActiveTab('system_management')}
@@ -169,11 +169,10 @@ export default function RoundManagementPage({ setActiveTab }) {
                             <ArrowLeft className="w-5 h-5 mr-1" />
                             กลับ
                         </button>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+                        <h1 className="text-2xl font-semibold text-gray-900 flex items-center">
                             <Clock className="w-8 h-8 mr-2 text-blue-600" />
                             จัดการรอบประเมิน
                         </h1>
-                        <p className="text-gray-600">กำหนดปีการศึกษาและจัดการสถานะรอบการประเมิน</p>
                     </div>
                     <button
                         onClick={handleOpenModal}
@@ -184,71 +183,69 @@ export default function RoundManagementPage({ setActiveTab }) {
                     </button>
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <table className="w-full">
-                        <thead className="bg-gray-50 border-b">
+                <div className="bg-white rounded-lg shadow overflow-hidden">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">ปีการศึกษา</th>
-                                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">ชื่อรอบ</th>
-                                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">ระยะเวลา</th>
-                                <th className="px-6 py-4 text-center text-sm font-medium text-gray-500">สถานะ</th>
-                                <th className="px-6 py-4 text-left text-sm font-medium text-gray-500">วันที่สร้าง</th>
-                                <th className="px-6 py-4 text-right text-sm font-medium text-gray-500">จัดการ</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ปีการศึกษา</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อรอบ</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ระยะเวลา</th>
+                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">สถานะ</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่สร้าง</th>
+                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200">
+                        <tbody className="bg-white divide-y divide-gray-200">
                             {loading ? (
-                                <tr><td colSpan="5" className="text-center py-8">กำลังโหลด...</td></tr>
+                                <tr><td colSpan="6" className="text-center py-4">กำลังโหลดข้อมูล...</td></tr>
                             ) : rounds.length === 0 ? (
-                                <tr><td colSpan="5" className="text-center py-8 text-gray-500">ยังไม่มีรอบประเมิน</td></tr>
+                                <tr><td colSpan="6" className="text-center py-4 text-gray-500">ยังไม่มีรอบประเมินในระบบ</td></tr>
                             ) : (
                                 rounds.map((round) => (
                                     <tr key={round.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 font-medium text-gray-900">{round.year}</td>
-                                        <td className="px-6 py-4 text-gray-700">{round.name}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm font-medium text-gray-900">{round.year}</div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{round.name}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {round.start_date || round.end_date ? (
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs">เริ่ม: {round.start_date ? new Date(round.start_date).toLocaleDateString('th-TH') : '-'}</span>
-                                                    <span className="text-xs">สิ้นสุด: {round.end_date ? new Date(round.end_date).toLocaleDateString('th-TH') : '-'}</span>
+                                                <div className="text-xs">
+                                                    <div>เริ่ม: {round.start_date ? new Date(round.start_date).toLocaleDateString('th-TH') : '-'}</div>
+                                                    <div>สิ้นสุด: {round.end_date ? new Date(round.end_date).toLocaleDateString('th-TH') : '-'}</div>
                                                 </div>
                                             ) : '-'}
                                         </td>
-                                        <td className="px-6 py-4 text-center">
+                                        <td className="px-6 py-4 whitespace-nowrap text-center">
                                             <select
                                                 value={round.is_active ? 'active' : 'inactive'}
                                                 onChange={(e) => handleStatusChange(round, e.target.value)}
-                                                className={`text-xs font-medium px-2.5 py-1 rounded-full border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${round.is_active
-                                                    ? 'bg-green-100 text-green-800'
-                                                    : 'bg-gray-100 text-gray-800'
+                                                className={`text-xs px-2 py-1 rounded-full border ${round.is_active
+                                                    ? 'bg-green-100 text-green-800 border-green-200'
+                                                    : 'bg-gray-100 text-gray-800 border-gray-200'
                                                     }`}
                                             >
-                                                <option value="active" className="bg-white text-gray-900">เปิดใช้งาน</option>
-                                                <option value="inactive" className="bg-white text-gray-900">ปิดใช้งาน</option>
+                                                <option value="active">เปิดใช้งาน</option>
+                                                <option value="inactive">ปิดใช้งาน</option>
                                             </select>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-500">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {round.created_at?.seconds ? new Date(round.created_at.seconds * 1000).toLocaleDateString('th-TH') : '-'}
                                         </td>
-                                        <td className="px-6 py-4 text-right flex items-center justify-end gap-3">
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <button
                                                 onClick={() => handleEdit(round)}
-                                                className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                                                title="แก้ไข"
+                                                className="text-blue-600 hover:text-blue-900 mr-3"
                                             >
-                                                <Edit2 className="w-5 h-5" />
+                                                <Edit2 className="w-4 h-4" />
                                             </button>
-                                            {
-                                                !round.is_active && (
-                                                    <button
-                                                        onClick={() => handleDelete(round)}
-                                                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                                                        title="ลบรอบประเมิน"
-                                                    >
-                                                        <Trash2 className="w-5 h-5" />
-                                                    </button>
-                                                )
-                                            }
+                                            {!round.is_active && (
+                                                <button
+                                                    onClick={() => handleDelete(round)}
+                                                    className="text-red-600 hover:text-red-900"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))
@@ -260,72 +257,94 @@ export default function RoundManagementPage({ setActiveTab }) {
 
             {/* Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold text-gray-900">{formData.id ? 'แก้ไขรอบประเมิน' : 'เพิ่มรอบประเมินใหม่'}</h2>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                            <h2 className="text-xl font-semibold text-gray-900">
+                                {formData.id ? 'แก้ไขรอบประเมิน' : 'เพิ่มรอบประเมินใหม่'}
+                            </h2>
                             <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">ปี (พ.ศ.)</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={formData.year}
-                                    onChange={e => setFormData({ ...formData, year: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อรอบการประเมิน</label>
-                                <input
-                                    type="text"
-                                    required
-                                    className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={formData.name}
-                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">วันที่เริ่มต้น</label>
-                                    <input
-                                        type="date"
-                                        className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                                        value={formData.start_date || ''}
-                                        onChange={e => setFormData({ ...formData, start_date: e.target.value })}
-                                    />
+                        <form onSubmit={handleSubmit} className="p-6">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">ปีการศึกษา</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            value={formData.year}
+                                            onChange={e => setFormData({ ...formData, year: e.target.value })}
+                                            placeholder="เช่น 2567"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อรอบ</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            value={formData.name}
+                                            onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                            placeholder="เช่น ปีการศึกษา 2567"
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
-                                    <input
-                                        type="date"
-                                        className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
-                                        value={formData.end_date || ''}
-                                        onChange={e => setFormData({ ...formData, end_date: e.target.value })}
-                                    />
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">วันที่เริ่มต้น</label>
+                                        <input
+                                            type="date"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            value={formData.start_date || ''}
+                                            onChange={e => setFormData({ ...formData, start_date: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
+                                        <input
+                                            type="date"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                            value={formData.end_date || ''}
+                                            onChange={e => setFormData({ ...formData, end_date: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                            <div className="flex items-center pt-2">
-                                <input
-                                    type="checkbox"
-                                    id="is_active"
-                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                                    checked={formData.is_active}
-                                    onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
-                                />
-                                <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
-                                    ตั้งเป็นรอบปัจจุบันทันที
-                                </label>
+
+                                <div className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        id="is_active"
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                        checked={formData.is_active}
+                                        onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
+                                    />
+                                    <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
+                                        ตั้งเป็นรอบปัจจุบัน
+                                    </label>
+                                </div>
                             </div>
 
-                            <div className="flex justify-end pt-4 gap-2">
-                                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-4 py-3 border rounded-lg text-gray-600 font-bold hover:bg-gray-50">ยกเลิก</button>
-                                <button type="submit" className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md">บันทึก</button>
+                            <div className="mt-6 flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowModal(false)}
+                                    className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 bg-blue-600 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700 flex items-center"
+                                >
+                                    <Save className="w-4 h-4 mr-1.5" />
+                                    บันทึก
+                                </button>
                             </div>
                         </form>
                     </div>

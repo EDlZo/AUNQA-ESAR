@@ -339,7 +339,7 @@ export default function DatabaseManagementPage({ setActiveTab }) {
     if (manageMode === 'criteria') {
         return (
             <div className="min-h-screen bg-gray-50 flex flex-col font-prompt">
-                <div className="flex-1 container mx-auto px-4 py-8 bg-white  overflow-hidden mb-8">
+                <div className="flex-1 container mx-auto px-4 py-8 bg-gray-50  overflow-hidden mb-8" style={{ backgroundColor: 'gray-50' }}>
                     <button
                         onClick={() => setManageMode(null)}
                         className="flex items-center text-gray-500 hover:text-gray-700 mb-6 transition-colors"
@@ -348,45 +348,46 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                         กลับ
                     </button>
 
-                    <div className="mb-8 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-3 bg-blue-600 rounded-xl shadow-lg shadow-blue-100">
-                                <Edit3 className="w-6 h-6 text-white" />
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-900">Master Criteria Templates</h1>
-                                <p className="text-gray-600">จัดการ "ข้อมูลต้นแบบ" สำหรับนำไปใช้ในการเปิดประเมินแต่ละรอบ (QA Admin จะเลือกจากรายการที่นี่)</p>
-                            </div>
-                        </div>
+                    <div className="flex justify-between items-center mb-6">
+                        <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+                            <Edit3 className="w-8 h-8 mr-2 text-blue-600" />
+                            Master Criteria Templates
+                        </h1>
                     </div>
 
                     {activeRound && (
-                        <div className="mb-6 bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3">
-                            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                        <div className="mb-6 bg-yellow-50 border border-yellow-200 p-4 rounded text-sm flex items-start">
+                            <AlertCircle className="w-5 h-5 text-yellow-600 mr-3 mt-0.5" />
                             <div>
-                                <div className="text-amber-800 font-bold">ระวัง: รอบการประเมินปี {activeRound.year} กำลังเปิดใช้งาน</div>
-                                <div className="text-amber-700 text-sm">การแก้ไขข้อมูลแม่แบบในขณะที่ยังมีการประเมินอยู่อาจทำให้ผู้ใช้งานเกิดความสับสน ควรจัดการให้เรียบร้อยก่อนเปิดรอบประเมิน</div>
+                                <strong className="block text-yellow-800">ระวัง: รอบการประเมินปี {activeRound.year} กำลังเปิดใช้งาน</strong>
+                                <span className="text-yellow-700">การแก้ไขข้อมูลแม่แบบในขณะที่ยังมีการประเมินอยู่อาจทำให้ผู้ใช้งานเกิดความสับสน</span>
                             </div>
                         </div>
                     )}
 
                     {/* Sub-Tabs */}
-                    <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl w-fit">
+                    <div className="flex border-b border-gray-200 mb-6">
                         <button
                             onClick={() => setActiveSubTab('components')}
-                            className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeSubTab === 'components' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-6 py-3 border-b-2 text-sm font-medium transition-colors ${activeSubTab === 'components'
+                                ? 'border-blue-600 text-blue-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                }`}
                         >
                             องค์ประกอบ (Components)
                         </button>
                         <button
                             onClick={() => setActiveSubTab('indicators')}
-                            className={`px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeSubTab === 'indicators' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            className={`px-6 py-3 border-b-2 text-sm font-medium transition-colors ${activeSubTab === 'indicators'
+                                ? 'border-blue-600 text-blue-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                }`}
                         >
                             ตัวบ่งชี้ (Indicators)
                         </button>
                     </div>
 
-                    <div className="border border-gray-100 rounded-2xl p-1">
+                    <div className="bg-gray-50 rounded-lg  overflow-hidden">
                         {activeSubTab === 'components' ? (
                             <MasterComponentsTable
                                 items={allComponents}
@@ -432,34 +433,30 @@ export default function DatabaseManagementPage({ setActiveTab }) {
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-prompt">
-            <div className="flex-1 container mx-auto px-4 py-8" style={{ backgroundColor: 'white' }}>
-                <div className="mb-8">
-                    <button
-                        onClick={() => setActiveTab('system_management')}
-                        className="flex items-center text-gray-500 hover:text-gray-700 mb-4 transition-colors"
-                    >
-                        <ArrowLeft className="w-5 h-5 mr-1" />
-                        กลับ
-                    </button>
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-gray-900 rounded-lg">
-                                <Database className="w-6 h-6 text-white" />
-                            </div>
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-900">จัดการฐานข้อมูล (Database Management)</h1>
-                                <p className="text-gray-600">ตรวจสอบสถิติและจัดการข้อมูลในระบบ</p>
-                            </div>
-                        </div>
+            <div className="flex-1 container mx-auto px-4 py-8" style={{ backgroundColor: 'gray-50' }}>
+                <div className="flex justify-between items-center mb-6">
+                    <div>
                         <button
-                            onClick={fetchStats}
-                            disabled={loading}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50"
+                            onClick={() => setActiveTab('system_management')}
+                            className="flex items-center text-gray-500 hover:text-gray-700 mb-2 transition-colors"
                         >
-                            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                            รีเฟรชสถิติ
+                            <ArrowLeft className="w-5 h-5 mr-1" />
+                            กลับ
                         </button>
+                        <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+                            <Database className="w-8 h-8 mr-2 text-blue-600" />
+                            จัดการฐานข้อมูล
+                        </h1>
+                        <p className="text-gray-600 text-sm">ตรวจสอบสถิติและจัดการข้อมูลระดับโครงสร้างระบบ</p>
                     </div>
+                    <button
+                        onClick={fetchStats}
+                        disabled={loading}
+                        className="bg-white  text-gray-600 px-4 py-2 rounded-md flex items-center hover:bg-gray-50 transition-colors shadow-sm"
+                    >
+                        <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                        รีเฟรชสถิติ
+                    </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -478,90 +475,89 @@ export default function DatabaseManagementPage({ setActiveTab }) {
                     )}
 
                     {statCards.map(card => (
-                        <div key={card.id} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-4">
-                            <div className="p-3 bg-gray-50 rounded-xl text-gray-400">
+                        <div key={card.id} className="bg-white p-6 rounded-lg shadow-sm border border-gray-100 flex items-center">
+                            <div className="p-3 bg-gray-50 rounded-full text-gray-400 mr-4">
                                 {card.icon}
                             </div>
                             <div>
-                                <div className="text-sm text-gray-500 mb-0.5">{card.label}</div>
-                                <div className="text-xl font-bold text-gray-900 line-clamp-1">
+                                <p className="text-sm font-medium text-gray-500">{card.label}</p>
+                                <p className="text-xl font-bold text-gray-900">
                                     {loading ? '...' : card.value}
-                                </div>
+                                </p>
                             </div>
                         </div>
                     ))}
                 </div>
 
-                <div className="mb-8">
-                    <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <Server className="w-5 h-5 text-gray-500" />
+                <div className="mb-12">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                        <Server className="w-5 h-5 mr-1 text-gray-500" />
                         การจัดการคอลเลกชัน (Collection Actions)
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {collectionCards.map((card) => (
-                            <div key={card.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-all">
-                                <div className="p-6">
+                            <div key={card.id} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col">
+                                <div className="p-6 flex-1">
                                     <div className="flex justify-between items-start mb-4">
-                                        <div className={`p-3 rounded-xl ${card.bg} ${card.color}`}>
+                                        <div className={`p-3 rounded-lg ${card.bg} ${card.color}`}>
                                             {card.icon}
                                         </div>
                                         <div className="text-right">
-                                            <div className="text-xs text-gray-400 uppercase font-semibold">จำนวนข้อมูล</div>
-                                            <div className="text-xl font-bold text-gray-900">
+                                            <p className="text-xs text-gray-400 uppercase font-medium">Record Count</p>
+                                            <p className="text-2xl font-bold text-gray-900">
                                                 {loading ? '-' : (stats[card.id] || 0)}
-                                            </div>
+                                            </p>
                                         </div>
                                     </div>
                                     <h3 className="text-lg font-bold text-gray-900 mb-1">{card.label}</h3>
-                                    <p className="text-sm text-gray-500 mb-6 line-clamp-1">{card.description}</p>
-
-                                    <div className="flex gap-2">
-                                        {(card.id === 'quality_components' || card.id === 'indicators') && (
-                                            <button
-                                                onClick={() => {
-                                                    setManageMode('criteria');
-                                                    setActiveSubTab(card.id === 'quality_components' ? 'components' : 'indicators');
-                                                }}
-                                                className="flex-1 flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
-                                            >
-                                                <Edit3 className="w-4 h-4" />
-                                                จัดการ
-                                            </button>
-                                        )}
+                                    <p className="text-sm text-gray-500 mb-6">{card.description}</p>
+                                </div>
+                                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex gap-2">
+                                    {(card.id === 'quality_components' || card.id === 'indicators') && (
                                         <button
-                                            onClick={() => handleClearCollection(card.id, card.label)}
-                                            disabled={actionLoading === card.id}
-                                            className={`${(card.id === 'quality_components' || card.id === 'indicators') ? 'flex-1' : 'w-full'} flex items-center justify-center gap-2 py-2.5 px-4 bg-white border border-red-100 text-red-600 rounded-xl text-sm font-semibold hover:bg-red-50 transition-colors disabled:opacity-50`}
+                                            onClick={() => {
+                                                setManageMode('criteria');
+                                                setActiveSubTab(card.id === 'quality_components' ? 'components' : 'indicators');
+                                            }}
+                                            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
                                         >
-                                            <Trash2 className="w-4 h-4" />
-                                            {actionLoading === card.id ? 'กำลังล้าง...' : 'ล้างข้อมูล'}
+                                            <Edit3 className="w-4 h-4" />
+                                            จัดการข้อมูล
                                         </button>
-                                    </div>
+                                    )}
+                                    <button
+                                        onClick={() => handleClearCollection(card.id, card.label)}
+                                        disabled={actionLoading === card.id}
+                                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-white border border-red-200 text-red-600 rounded-md text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                        {actionLoading === card.id ? 'กำลังล้าง...' : 'ล้างข้อมูล'}
+                                    </button>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                <div className="bg-red-50 rounded-2xl border border-red-100 p-8">
-                    <div className="flex items-center gap-3 mb-4 text-red-600">
-                        <ShieldAlert className="w-8 h-8" />
+                <div className="bg-red-50 rounded-lg border border-red-200 p-8">
+                    <div className="flex items-center gap-3 mb-4 text-red-700">
+                        <ShieldAlert className="w-6 h-6" />
                         <h2 className="text-xl font-bold">พื้นที่อันตราย (Danger Zone)</h2>
                     </div>
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div>
-                            <h3 className="text-lg font-bold text-gray-900 mb-1">รีเซ็ตข้อมูลการประเมินทั้งหมด</h3>
+                            <h3 className="text-lg font-bold text-gray-900 mb-1">รีเซ็ตข้อมูลการประเมินทั้งระบบ</h3>
                             <p className="text-gray-600 max-w-2xl text-sm">
-                                ล้างข้อมูลการประเมิน องค์ประกอบ และตัวบ่งชี้ ทั้งหมดในครั้งเดียว (ระวัง!)
+                                คำเตือน: ระบบจะทำการลบข้อมูลการประเมิน องค์ประกอบ และตัวบ่งชี้ ทั้งหมดในครั้งเดียว ข้อมูลที่ไม่ใช่ Master Templates จะหายไปถาวร
                             </p>
                         </div>
                         <button
                             onClick={handleResetAssessmentData}
                             disabled={actionLoading === 'reset_all'}
-                            className="flex-shrink-0 flex items-center gap-2 px-8 py-4 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-lg shadow-red-200 disabled:opacity-50"
+                            className="bg-red-600 text-white px-6 py-3 rounded-md font-bold hover:bg-red-700 transition-all shadow shadow-red-200 active:scale-95 flex items-center gap-2 disabled:opacity-50"
                         >
                             <RotateCcw className={`w-5 h-5 ${actionLoading === 'reset_all' ? 'animate-spin' : ''}`} />
-                            {actionLoading === 'reset_all' ? 'กำลังดำเนินการ...' : 'รีเซ็ตข้อมูลทั้งหมด'}
+                            {actionLoading === 'reset_all' ? 'กำลังดำเนินการ...' : 'รีเซ็ตระบบ'}
                         </button>
                     </div>
                 </div>

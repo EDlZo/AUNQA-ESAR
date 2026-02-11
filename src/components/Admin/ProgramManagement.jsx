@@ -137,7 +137,7 @@ export default function ProgramManagement({ setActiveTab }) {
     };
 
     return (
-        <div className="flex flex-col h-full bg-white font-prompt">
+        <div className="flex flex-col h-full bg-gray-50 font-prompt">
             {/* Header */}
             <div className="flex justify-between items-center mb-6">
                 <div>
@@ -157,242 +157,221 @@ export default function ProgramManagement({ setActiveTab }) {
 
                 <button
                     onClick={() => handleOpenModal()}
-                    className="bg-blue-600 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 hover:bg-blue-700 transition shadow-sm"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md flex items-center hover:bg-blue-700 transition-colors"
                 >
-                    <Plus className="w-5 h-5" />
+                    <Plus className="w-5 h-5 mr-1" />
                     เพิ่ม{activeSubTab === 'levels' ? 'ระดับ' : activeSubTab === 'faculties' ? 'คณะ' : 'สาขาวิชา'}
                 </button>
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-200 mb-6 bg-gray-50/50 p-1 rounded-xl">
+            <div className="flex border-b border-gray-200 mb-6 sticky top-0 bg-gray-50 z-10">
                 <button
                     onClick={() => setActiveSubTab('levels')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-bold transition-all ${activeSubTab === 'levels'
-                        ? 'bg-white text-blue-600 shadow-sm ring-1 ring-gray-200'
-                        : 'text-gray-500 hover:text-blue-600 hover:bg-white/50'
+                    className={`flex items-center px-6 py-3 border-b-2 text-sm font-medium transition-colors ${activeSubTab === 'levels'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                         }`}
                 >
-                    <Layers className="w-4 h-4" />
+                    <Layers className="w-4 h-4 mr-2" />
                     ระดับ ({levels.length})
                 </button>
                 <button
                     onClick={() => setActiveSubTab('faculties')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-bold transition-all ${activeSubTab === 'faculties'
-                        ? 'bg-white text-blue-600 shadow-sm ring-1 ring-gray-200'
-                        : 'text-gray-500 hover:text-blue-600 hover:bg-white/50'
+                    className={`flex items-center px-6 py-3 border-b-2 text-sm font-medium transition-colors ${activeSubTab === 'faculties'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                         }`}
                 >
-                    <School className="w-4 h-4" />
+                    <School className="w-4 h-4 mr-2" />
                     คณะ ({faculties.length})
                 </button>
                 <button
                     onClick={() => setActiveSubTab('programs')}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg text-sm font-bold transition-all ${activeSubTab === 'programs'
-                        ? 'bg-white text-blue-600 shadow-sm ring-1 ring-gray-200'
-                        : 'text-gray-500 hover:text-blue-600 hover:bg-white/50'
+                    className={`flex items-center px-6 py-3 border-b-2 text-sm font-medium transition-colors ${activeSubTab === 'programs'
+                        ? 'border-blue-600 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                         }`}
                 >
-                    <BookOpen className="w-4 h-4" />
-                    สาขาวิชา / หลักสูตร ({programs.length})
+                    <BookOpen className="w-4 h-4 mr-2" />
+                    สาขาวิชา ({programs.length})
                 </button>
             </div>
 
             {/* List */}
-            <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                            <tr>
-                                {activeSubTab === 'levels' && <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ชื่อระดับ</th>}
-                                {activeSubTab === 'faculties' && <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ชื่อคณะ</th>}
-                                {activeSubTab === 'programs' && (
-                                    <>
-                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ชื่อสาขา</th>
-                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">คณะ</th>
-                                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ระดับ</th>
-                                    </>
-                                )}
-                                <th className="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">จัดการ</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {loading && !showModal ? (
-                                <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-400">กำลังโหลดข้อมูล...</td></tr>
-                            ) : (
-                                (activeSubTab === 'levels' ? levels : activeSubTab === 'faculties' ? faculties : programs).map((item) => (
-                                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-bold text-gray-900">
-                                                {activeSubTab === 'programs' ? item.majorName : item.name}
-                                            </div>
-                                        </td>
-                                        {activeSubTab === 'programs' && (
-                                            <>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                                    {(() => {
-                                                        const faculty = faculties.find(f => f.id === item.facultyId);
-                                                        if (faculty) return faculty.name;
-                                                        if (item.facultyId) {
-                                                            return (
-                                                                <div className="flex items-center gap-1 text-red-500" title="ลบไปแล้ว">
-                                                                    {item.facultyName || 'ไม่พบข้อมูลคณะ'}
-                                                                    <AlertCircle className="w-4 h-4" />
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return item.facultyName || '-';
-                                                    })()}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                                    {(() => {
-                                                        const level = levels.find(l => l.id === item.levelId);
-                                                        if (level) return level.name;
-                                                        if (item.levelId) {
-                                                            return (
-                                                                <div className="flex items-center gap-1 text-red-500" title="ลบไปแล้ว">
-                                                                    {item.levelName || 'ไม่พบข้อมูลระดับ'}
-                                                                    <AlertCircle className="w-4 h-4" />
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return '-';
-                                                    })()}
-                                                </td>
-                                            </>
-                                        )}
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <div className="flex justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleOpenModal(item)}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                >
-                                                    <Edit className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(item.id)}
-                                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                        <tr>
+                            {activeSubTab === 'levels' && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อระดับ</th>}
+                            {activeSubTab === 'faculties' && <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อคณะ</th>}
+                            {activeSubTab === 'programs' && (
+                                <>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อสาขา</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">คณะ</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ระดับ</th>
+                                </>
                             )}
-                            {((activeSubTab === 'levels' ? levels : activeSubTab === 'faculties' ? faculties : programs).length === 0 && !loading) && (
-                                <tr><td colSpan="5" className="px-6 py-10 text-center text-gray-400">ไม่พบข้อมูล</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                        {loading && !showModal ? (
+                            <tr><td colSpan="5" className="px-8 py-20 text-center text-gray-400 font-medium italic">กำลังโหลดข้อมูล...</td></tr>
+                        ) : (
+                            (activeSubTab === 'levels' ? levels : activeSubTab === 'faculties' ? faculties : programs).map((item) => (
+                                <tr key={item.id} className="hover:bg-gray-50">
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="text-sm font-medium text-gray-900">
+                                            {activeSubTab === 'programs' ? item.majorName : item.name}
+                                        </div>
+                                    </td>
+                                    {activeSubTab === 'programs' && (
+                                        <>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {(() => {
+                                                    const faculty = faculties.find(f => f.id === item.facultyId);
+                                                    if (faculty) return faculty.name;
+                                                    if (item.facultyId) {
+                                                        return <span className="text-red-500" title="ลบไปแล้ว">{item.facultyName || 'ไม่พบข้อมูลคณะ'} (!)</span>;
+                                                    }
+                                                    return item.facultyName || '-';
+                                                })()}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                {(() => {
+                                                    const level = levels.find(l => l.id === item.levelId);
+                                                    if (level) return level.name;
+                                                    if (item.levelId) {
+                                                        return <span className="text-red-500" title="ลบไปแล้ว">{item.levelName || 'ไม่พบข้อมูลระดับ'} (!)</span>;
+                                                    }
+                                                    return '-';
+                                                })()}
+                                            </td>
+                                        </>
+                                    )}
+                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <button
+                                            onClick={() => handleOpenModal(item)}
+                                            className="text-blue-600 hover:text-blue-900 mr-3"
+                                        >
+                                            <Edit className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDelete(item.id)}
+                                            className="text-red-600 hover:text-red-900"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                        {((activeSubTab === 'levels' ? levels : activeSubTab === 'faculties' ? faculties : programs).length === 0 && !loading) && (
+                            <tr><td colSpan="5" className="px-8 py-20 text-center text-gray-400 font-medium italic">ไม่พบข้อมูลในหมวดหมู่นี้</td></tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
 
-            {/* Modal */}
             {showModal && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-200">
-                        <div className="flex justify-between items-center p-6 border-b border-gray-100">
-                            <h2 className="text-xl font-bold text-gray-900">
-                                {editMode ? 'แก้ไข' : 'เพิ่ม'}{activeSubTab === 'levels' ? 'ระดับ' : activeSubTab === 'faculties' ? 'คณะ' : 'สาขาวิชา'}
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                        <div className="px-6 py-4 border-b flex justify-between items-center">
+                            <h2 className="text-xl font-semibold">
+                                {editMode ? 'แก้ไขข้อมูล' : 'เพิ่ม'}
+                                {activeSubTab === 'levels' ? 'ระดับ' : activeSubTab === 'faculties' ? 'คณะ' : 'สาขาวิชา'}
                             </h2>
-                            <button onClick={() => setShowModal(false)} className="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-all">
+                            <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
-
-                        <form onSubmit={handleSave} className="p-6 space-y-5">
-                            {activeSubTab === 'levels' && (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">ชื่อระดับ</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
-                                        placeholder="เช่น ระดับหลักสูตร, ระดับคณะ"
-                                        value={levelForm.name}
-                                        onChange={e => setLevelForm({ name: e.target.value })}
-                                    />
-                                </div>
-                            )}
-
-                            {activeSubTab === 'faculties' && (
-                                <div>
-                                    <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">ชื่อคณะ</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
-                                        placeholder="เช่น คณะวิศวกรรมศาสตร์"
-                                        value={facultyForm.name}
-                                        onChange={e => setFacultyForm({ name: e.target.value })}
-                                    />
-                                </div>
-                            )}
-
-                            {activeSubTab === 'programs' && (
-                                <>
+                        <form onSubmit={handleSave}>
+                            <div className="p-6 space-y-4">
+                                {activeSubTab === 'levels' && (
                                     <div>
-                                        <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">ชื่อสาขาวิชา / หลักสูตร</label>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อระดับ</label>
                                         <input
                                             type="text"
+                                            className="w-full border rounded-md px-3 py-2"
                                             required
-                                            className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
-                                            placeholder="เช่น วิศวกรรมคอมพิวเตอร์"
-                                            value={programForm.majorName}
-                                            onChange={e => setProgramForm({ ...programForm, majorName: e.target.value })}
+                                            value={levelForm.name}
+                                            onChange={(e) => setLevelForm({ name: e.target.value })}
                                         />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                )}
+                                {activeSubTab === 'faculties' && (
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อคณะ</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border rounded-md px-3 py-2"
+                                            required
+                                            value={facultyForm.name}
+                                            onChange={(e) => setFacultyForm({ name: e.target.value })}
+                                        />
+                                    </div>
+                                )}
+                                {activeSubTab === 'programs' && (
+                                    <>
                                         <div>
-                                            <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">ระดับ</label>
-                                            <select
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อสาขาวิชา</label>
+                                            <input
+                                                type="text"
+                                                className="w-full border rounded-md px-3 py-2"
                                                 required
-                                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
+                                                value={programForm.majorName}
+                                                onChange={(e) => setProgramForm({ ...programForm, majorName: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">ระดับ</label>
+                                            <select
+                                                className="w-full border rounded-md px-3 py-2"
+                                                required
                                                 value={programForm.levelId}
-                                                onChange={e => setProgramForm({ ...programForm, levelId: e.target.value })}
+                                                onChange={(e) => setProgramForm({ ...programForm, levelId: e.target.value })}
                                             >
                                                 <option value="">-- เลือกระดับ --</option>
                                                 {levels.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-bold text-gray-700 mb-2 uppercase tracking-wider">คณะ</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">คณะ</label>
                                             <select
+                                                className="w-full border rounded-md px-3 py-2"
                                                 required
-                                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all"
                                                 value={programForm.facultyId}
-                                                onChange={e => setProgramForm({ ...programForm, facultyId: e.target.value })}
+                                                onChange={(e) => setProgramForm({ ...programForm, facultyId: e.target.value })}
                                             >
                                                 <option value="">-- เลือกคณะ --</option>
                                                 {faculties.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                             </select>
                                         </div>
-                                    </div>
-                                </>
-                            )}
-
-                            <div className="flex gap-3 pt-4">
+                                    </>
+                                )}
+                            </div>
+                            <div className="px-6 py-4 bg-gray-50 border-t flex justify-end space-x-3 rounded-b-lg">
                                 <button
                                     type="button"
                                     onClick={() => setShowModal(false)}
-                                    className="flex-1 px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-50 transition-all"
+                                    className="px-4 py-2 border rounded-md text-gray-600 hover:bg-gray-100"
                                 >
                                     ยกเลิก
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-md flex items-center justify-center gap-2"
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
                                 >
-                                    <Save className="w-4 h-4" />
-                                    {loading ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
+                                    {loading ? 'กำลังบันทึก...' : 'บันทึก'}
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 }
