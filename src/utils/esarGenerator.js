@@ -3,7 +3,6 @@ import autoTable from 'jspdf-autotable';
 
 // Prioritize global jsPDF if available (it has the fonts registered from index.html)
 const jsPDF = (typeof window !== 'undefined' && (window.jsPDF || (window.jspdf && (window.jspdf.jsPDF || window.jspdf)))) || jsPDFSource;
-if (typeof window !== 'undefined') console.log('Using jsPDF instance:', jsPDF === jsPDFSource ? 'npm package' : 'global/script tag');
 
 /**
  * ESAR Report Generator
@@ -24,48 +23,31 @@ export class ESARGenerator {
         this.components = options.components || [];
         this.metadata = options.metadata || {};
 
-        this.imageDimensions = new Map(); // Store { width, height, ratio }
+        this.imageDimensions = new Map();
 
         this.pageWidth = this.doc.internal.pageSize.getWidth();
         this.pageHeight = this.doc.internal.pageSize.getHeight();
         this.margin = 20;
+        this.footerHeight = 15;
+        this.safeBottom = this.pageHeight - this.margin - this.footerHeight;
         this.contentWidth = this.pageWidth - (this.margin * 2);
 
-        // Font setting - prioritize THSarabun then Sarabun-Regular
+        // Font setting
         let availableFonts = {};
-        try {
-            availableFonts = this.doc.getFontList();
-            console.log('Available fonts in PDF instance:', availableFonts);
-        } catch (e) {
-            console.error('Could not get font list', e);
-        }
+        try { availableFonts = this.doc.getFontList(); } catch (e) { }
 
         this.fontFamily = 'THSarabun';
         if (!availableFonts[this.fontFamily]) {
-            if (availableFonts['Sarabun-Regular']) {
-                this.fontFamily = 'Sarabun-Regular';
-            } else if (availableFonts['Sarabun']) {
-                this.fontFamily = 'Sarabun';
-            } else {
-                console.warn('Thai fonts not found in this instance! Fallback to helvetica.');
-                this.fontFamily = 'helvetica';
-            }
+            if (availableFonts['Sarabun-Regular']) this.fontFamily = 'Sarabun-Regular';
+            else if (availableFonts['Sarabun']) this.fontFamily = 'Sarabun';
+            else this.fontFamily = 'helvetica';
         }
 
-        console.log('Final selected font family:', this.fontFamily);
         this.doc.setFont(this.fontFamily, 'normal');
     }
 
-    // --- Helpers ---
-
     setFontSafe(style = 'normal') {
-        // Force 'normal' because we only have the normal Thai font file registered.
-        // Using 'bold' on THSarabun without a bold file will cause squares/gibberish.
-        try {
-            this.doc.setFont(this.fontFamily, 'normal');
-        } catch (e) {
-            console.error('Font error:', e);
-        }
+        try { this.doc.setFont(this.fontFamily, 'normal'); } catch (e) { }
     }
 
     decodeHtmlEntities(text) {
@@ -77,12 +59,6 @@ export class ESARGenerator {
             .replace(/&gt;/g, '>')
             .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'")
-            .replace(/&rsquo;/g, "'")
-            .replace(/&lsquo;/g, "'")
-            .replace(/&rdquo;/g, '"')
-            .replace(/&ldquo;/g, '"')
-            .replace(/&copy;/g, '©')
-            .replace(/&reg;/g, '®')
             .replace(/<br\s*\/?>/gi, '\n')
             .replace(/<p[^>]*>/gi, '\n')
             .replace(/<\/p>/gi, '')
@@ -90,20 +66,15 @@ export class ESARGenerator {
             .replace(/<\/li>/gi, '');
     }
 
-    // Optimized Helper to parse HTML into sequential blocks recursively
     parseHtmlToBlocks(html) {
         if (!html || typeof window === 'undefined') return [{ type: 'text', content: this.stripHtml(html) }];
-
         const parser = new DOMParser();
         const doc = parser.parseFromString(html || '', 'text/html');
         const blocks = [];
-
         const walk = (node) => {
-            if (node.nodeType === 3) { // Text node
+            if (node.nodeType === 3) {
                 const text = node.textContent;
-                if (text && text.trim()) {
-                    blocks.push({ type: 'text', content: this.decodeHtmlEntities(text) });
-                }
+                if (text && text.trim()) blocks.push({ type: 'text', content: this.decodeHtmlEntities(text) });
             } else if (node.nodeName.toUpperCase() === 'IMG') {
                 const src = node.getAttribute('src');
                 if (src) blocks.push({ type: 'image', content: src });
@@ -112,7 +83,6 @@ export class ESARGenerator {
                 Array.from(node.rows).forEach(tr => {
                     const cols = [];
                     Array.from(tr.cells).forEach(cell => {
-                        // Recursively parse cell content
                         const cellBlocks = this.parseHtmlToBlocks(cell.innerHTML);
                         cols.push({ content: '', blocks: cellBlocks });
                     });
@@ -128,83 +98,54 @@ export class ESARGenerator {
                 }
             }
         };
-
         doc.body.childNodes.forEach(walk);
-
-        // Merge consecutive text blocks smartly
         const merged = [];
         blocks.forEach(b => {
             if (b.type === 'text') {
-                if (merged.length > 0 && merged[merged.length - 1].type === 'text') {
-                    merged[merged.length - 1].content += b.content;
-                } else {
-                    merged.push({ ...b });
-                }
-            } else {
-                merged.push(b);
-            }
+                if (merged.length > 0 && merged[merged.length - 1].type === 'text') merged[merged.length - 1].content += b.content;
+                else merged.push({ ...b });
+            } else merged.push(b);
         });
-
-        // Clean up text blocks
         merged.forEach(b => {
             if (b.type === 'text') b.content = b.content.replace(/^\s+|\s+$/g, (m) => m.includes('\n') ? '\n' : '');
         });
-
         const finalBlocks = merged.filter(b => b.type !== 'text' || b.content.trim() || b.content === '\n');
         return finalBlocks.length > 0 ? finalBlocks : [{ type: 'text', content: '-' }];
     }
 
     async preloadImages() {
         if (typeof window === 'undefined') return;
-
         const imageUrls = new Set();
-
-        // Scan metadata
         ['history', 'vision', 'mission', 'structure'].forEach(key => {
             this.extractImageData(this.metadata[key]).forEach(url => imageUrls.add(url));
         });
         if (this.metadata.swot) {
-            ['s', 'w', 'o', 't'].forEach(key => {
-                this.extractImageData(this.metadata.swot[key]).forEach(url => imageUrls.add(url));
-            });
+            ['s', 'w', 'o', 't'].forEach(key => this.extractImageData(this.metadata.swot[key]).forEach(url => imageUrls.add(url)));
         }
-
-        // Scan evaluations
         this.evaluations.forEach(ev => {
             this.extractImageData(ev.operation_result || ev.result).forEach(url => imageUrls.add(url));
             this.extractImageData(ev.comment).forEach(url => imageUrls.add(url));
         });
-
         const promises = Array.from(imageUrls).map(url => {
             return new Promise((resolve) => {
                 const img = new Image();
                 img.onload = () => {
-                    this.imageDimensions.set(url, {
-                        width: img.naturalWidth,
-                        height: img.naturalHeight,
-                        ratio: img.naturalHeight / img.naturalWidth
-                    });
+                    this.imageDimensions.set(url, { width: img.naturalWidth, height: img.naturalHeight, ratio: img.naturalHeight / img.naturalWidth });
                     resolve();
                 };
                 img.onerror = () => resolve();
                 img.src = url;
             });
         });
-
         await Promise.all(promises);
-        console.log('Preloaded images:', this.imageDimensions.size);
     }
-
-    // Removed old parseHtmlContent
 
     extractImageData(html) {
         const images = [];
         if (!html || typeof html !== 'string') return images;
         const imgRegex = /<img[^>]+src\s*=\s*(["'])(.*?)\1/gi;
         let match;
-        while ((match = imgRegex.exec(html)) !== null) {
-            images.push(match[2]);
-        }
+        while ((match = imgRegex.exec(html)) !== null) images.push(match[2]);
         return images;
     }
 
@@ -228,16 +169,9 @@ export class ESARGenerator {
         this.doc.setFontSize(size);
         this.setFontSafe(style);
         const splitText = this.doc.splitTextToSize(cleanText, this.contentWidth);
-
-        if (this.currentY + (splitText.length * 5) > this.pageHeight - this.margin) {
-            this.addPage();
-        }
-
-        if (align === 'center') {
-            this.doc.text(splitText, this.pageWidth / 2, this.currentY, { align: 'center' });
-        } else {
-            this.doc.text(splitText, this.margin, this.currentY);
-        }
+        if (this.currentY + (splitText.length * 5) > this.safeBottom) this.addPage();
+        if (align === 'center') this.doc.text(splitText, this.pageWidth / 2, this.currentY, { align: 'center' });
+        else this.doc.text(splitText, this.margin, this.currentY);
         this.currentY += (splitText.length * 5) + 2;
     }
 
@@ -259,230 +193,171 @@ export class ESARGenerator {
         this.doc.setFontSize(9);
         this.doc.setFont(this.fontFamily, 'normal');
         this.doc.setTextColor(100, 100, 100);
-
-        this.doc.text(
-            `หน้า ${pageNumber} / ${totalPages}`,
-            this.pageWidth - this.margin,
-            footerY,
-            { align: 'right' }
-        );
-        this.doc.text(
-            `รายงาน ESAR - ${this.program.majorName || ''} (${this.year})`,
-            this.margin,
-            footerY
-        );
+        this.doc.text(`หน้า ${pageNumber} / ${totalPages}`, this.pageWidth - this.margin, footerY, { align: 'right' });
+        this.doc.text(`รายงาน ESAR - ${this.program.majorName || ''} (${this.year})`, this.margin, footerY);
     }
 
-    // Shared methods for rendering complex blocks
     estimateBlocksHeight(blocks, colWidth) {
-        let h = 2; // Minimal top padding
-        const padding = 16; // Increased horizontal padding (8mm each side)
-        const width = Math.max(10, colWidth - padding);
+        let h = 2;
+        const padding = 6;
+        const drawWidth = Math.max(10, colWidth - padding);
+
+        // Ensure we calculate height using the same font size as drawing (10pt)
+        try { this.doc.setFontSize(10); } catch (e) { }
 
         blocks.forEach(block => {
             if (block.type === 'text') {
-                const lines = this.doc.splitTextToSize(block.content, width);
-                h += (lines.length * 5);
+                const lines = this.doc.splitTextToSize(block.content, drawWidth);
+                h += (lines.length * 5); // v13 multiplier (compact)
             } else if (block.type === 'table') {
-                let tableH = 2; // Table vertical margin
+                let tableH = 2;
                 block.content.forEach(row => {
                     let maxRowH = 0;
-                    const approxColW = width / (row.length || 1);
+                    // Account for cell padding per cell (1mm left + 1mm right = 2mm)
+                    const approxColW = (drawWidth - 1) / (row.length || 1);
+                    const nestedCellContentW = approxColW - 2;
                     row.forEach(cell => {
-                        const cellH = this.estimateBlocksHeight(cell.blocks || [], approxColW);
+                        const cellH = this.estimateBlocksHeight(cell.blocks || [], nestedCellContentW + padding);
                         if (cellH > maxRowH) maxRowH = cellH;
                     });
-                    tableH += Math.max(7, maxRowH); // Minimum row height
+                    tableH += Math.max(7, maxRowH);
                 });
-                h += tableH + 15; // Larger vertical buffer for nested tables
+                h += tableH + 4;
             } else if (block.type === 'image') {
                 const dim = this.imageDimensions.get(block.content);
                 const ratio = dim ? dim.ratio : 0.6;
-                h += Math.min(60, width * ratio) + 8; // Added conservative buffer
+                h += Math.min(60, drawWidth * ratio) + 8;
             }
         });
-        return h + 2; // Bottom padding
+        return h + 2;
     }
 
-    drawBlocks(blocks, cellX, cellY, cellWidth) {
-        let currentY = cellY + 3; // Start lower
-        const padding = 16; // Match estimateBlocksHeight padding
+    drawBlocks(blocks, cellX, cellY, cellWidth, maxHeight = 9999) {
+        let localY = cellY + 2;
+        const padding = 6;
         const drawWidth = Math.max(10, cellWidth - padding);
 
-        blocks.forEach(block => {
+        for (const block of blocks) {
+            if (localY > this.safeBottom + 5) break;
+
             if (block.type === 'text') {
                 this.doc.setFontSize(10);
                 this.doc.setFont(this.fontFamily, 'normal');
                 const split = this.doc.splitTextToSize(block.content, drawWidth);
-                this.doc.text(split, cellX + 8, currentY + 3); // 8mm indent
-                currentY += (split.length * 5);
+                this.doc.text(split, cellX + 3, localY + 3);
+                localY += (split.length * 5);
             } else if (block.type === 'table') {
+                const tableWidth = drawWidth - 1;
+                // Calculate equal column widths to match estimation logic
+                const numCols = block.content[0] ? block.content[0].length : 1;
+                const colWidth = tableWidth / numCols;
+                const columnStyles = {};
+                for (let i = 0; i < numCols; i++) {
+                    columnStyles[i] = { cellWidth: colWidth };
+                }
+
                 autoTable(this.doc, {
                     body: block.content,
-                    startY: currentY + 5,
-                    margin: { left: cellX + 8 }, // 8mm fixed left margin
-                    tableWidth: cellWidth - 16, // Fixed 8mm margin on both sides (centered)
+                    startY: localY + 1,
+                    margin: { left: cellX + 2.5 },
+                    tableWidth: tableWidth,
                     theme: 'grid',
-                    styles: {
-                        font: this.fontFamily,
-                        fontSize: 8,
-                        cellPadding: 1,
-                        minCellHeight: 7,
-                        lineWidth: 0.1,  // Thinner lines for nested tables
-                        overflow: 'linebreak'
-                    },
-                    didParseCell: (hookData) => this.tableComplexCellHook(hookData, cellWidth - 16),
-                    didDrawCell: (hookData) => this.tableComplexDrawHook(hookData, cellWidth - 16)
+                    styles: { font: this.fontFamily, fontSize: 8, cellPadding: 1, minCellHeight: 7, lineWidth: 0.1, overflow: 'linebreak' },
+                    columnStyles: columnStyles, // Enforce equal width
+                    didParseCell: (hookData) => this.tableComplexCellHook(hookData, tableWidth),
+                    didDrawCell: (hookData) => this.tableComplexDrawHook(hookData, tableWidth)
                 });
-                currentY = this.doc.lastAutoTable.finalY + 8; // More space after table
+                localY = this.doc.lastAutoTable.finalY + 2;
             } else if (block.type === 'image') {
                 try {
-                    if (block.content && block.content.length > 0) {
+                    if (block.content) {
                         let format = 'PNG';
                         if (block.content.startsWith('data:image')) {
                             const typeMatch = block.content.match(/data:image\/([a-zA-Z]+);base64/);
                             format = typeMatch ? typeMatch[1].toUpperCase() : 'PNG';
                         }
-
                         const dim = this.imageDimensions.get(block.content);
                         const ratio = dim ? dim.ratio : 0.6;
-
                         let imgWidth = drawWidth;
                         let imgHeight = drawWidth * ratio;
-
-                        // Cap height at 60mm
-                        if (imgHeight > 60) {
-                            imgHeight = 60;
-                            imgWidth = imgHeight / ratio;
-                        }
-
-                        // Center horizontally
+                        if (imgHeight > 60) { imgHeight = 60; imgWidth = imgHeight / ratio; }
                         const offsetX = (drawWidth - imgWidth) / 2;
-
-                        // Safety check: Don't draw beyond page height
-                        if (currentY + imgHeight > this.pageHeight - this.margin) {
-                            console.warn('Image exceeds page boundary in drawBlocks');
-                        }
-
-                        // Centered within the padded area
-                        this.doc.addImage(block.content, format, cellX + 8 + offsetX, currentY + 1, imgWidth, imgHeight);
-                        currentY += imgHeight + 4;
+                        this.doc.addImage(block.content, format, cellX + 3 + offsetX, localY + 1, imgWidth, imgHeight);
+                        localY += imgHeight + 3;
                     }
-                } catch (e) { console.error('Image Render Error:', e); }
+                } catch (e) { }
             }
-        });
+        }
     }
 
     tableComplexCellHook(data, availableWidth) {
         if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.blocks) {
-            const numCols = data.row.cells.length || 1;
-            const currentWidth = data.cell.width || (availableWidth / numCols);
-            const h = this.estimateBlocksHeight(data.cell.raw.blocks, currentWidth);
-            if (data.cell.styles.minCellHeight < h) data.cell.styles.minCellHeight = h;
+            const h = this.estimateBlocksHeight(data.cell.raw.blocks, data.cell.width || availableWidth);
+            if (data.cell.styles.minCellHeight < h + 1) data.cell.styles.minCellHeight = h + 1;
         }
     }
 
     tableComplexDrawHook(data, availableWidth) {
         if (data.cell.raw && typeof data.cell.raw === 'object' && data.cell.raw.blocks) {
-            this.drawBlocks(data.cell.raw.blocks, data.cell.x, data.cell.y, data.cell.width || availableWidth);
+            this.drawBlocks(data.cell.raw.blocks, data.cell.x, data.cell.y, data.cell.width || availableWidth, data.cell.height);
         }
     }
 
-    // --- Main Generator ---
-
     async generate() {
         await this.preloadImages();
-
         this.currentY = 60;
-
-        // 1. Cover Page
         this.renderCoverPage();
-
-        // 2. Organization Profile (Introduction)
         this.addPage();
         this.renderIntroduction();
-
-        // 3. Summary Table of All Criteria
         this.addPage();
         this.renderOverallSummary();
-
-        // 4. SWOT Analysis
         this.addPage();
         this.renderSWOT();
-
-        // 5. Detailed Sections for each Criterion (AUN 1-15 or actual components)
         this.components.forEach(component => {
             if (component) {
                 this.addPage();
                 this.renderComponentSection(component);
             }
         });
-
         return this.doc;
     }
 
     renderIntroduction() {
         this.addTitle('บทที่ 1: โครงร่างองค์กร (Organization Profile)', 16);
-        this.currentY += 10;
-
-        if (this.metadata.history) {
-            this.addTitle('ประวัติความเป็นมา (History)', 14, 'bold');
-            this.addText(this.metadata.history);
-            this.currentY += 10;
-        }
-
-        if (this.metadata.vision) {
-            this.addTitle('วิสัยทัศน์ (Vision)', 14, 'bold');
-            this.addText(this.metadata.vision);
-            this.currentY += 10;
-        }
-
-        if (this.metadata.mission) {
-            this.addTitle('พันธกิจ (Mission)', 14, 'bold');
-            this.addText(this.metadata.mission);
-            this.currentY += 10;
-        }
-
-        if (this.metadata.structure) {
-            this.addTitle('โครงสร้างการบริหาร (Organization Structure)', 14, 'bold');
-            this.addText(this.metadata.structure);
-            this.currentY += 10;
-        }
+        this.currentY += 5;
+        if (this.metadata.history) { this.addTitle('ประวัติความเป็นมา (History)', 14, 'bold'); this.addText(this.metadata.history); this.currentY += 5; }
+        if (this.metadata.vision) { this.addTitle('วิสัยทัศน์ (Vision)', 14, 'bold'); this.addText(this.metadata.vision); this.currentY += 5; }
+        if (this.metadata.mission) { this.addTitle('พันธกิจ (Mission)', 14, 'bold'); this.addText(this.metadata.mission); this.currentY += 5; }
+        if (this.metadata.structure) { this.addTitle('โครงสร้างการบริหาร (Organization Structure)', 14, 'bold'); this.addText(this.metadata.structure); this.currentY += 5; }
     }
 
     renderSWOT() {
         this.addTitle('บทที่ 3: สรุปจุดแข็งและข้อควรพัฒนา', 16);
         this.currentY += 10;
-
         const sections = [
             { title: 'จุดแข็ง (Strengths)', content: this.metadata.swot?.s },
             { title: 'จุดควรพัฒนา (Areas for Improvement)', content: this.metadata.swot?.w }
         ];
-
         sections.forEach(section => {
             if (section.content) {
-                if (this.currentY + 60 > this.pageHeight - this.margin) this.addPage();
+                if (this.currentY + 60 > this.safeBottom) this.addPage();
                 this.addTitle(section.title, 14, 'bold');
                 this.addText(section.content);
-                this.currentY += 10;
+                this.currentY += 5;
             }
         });
     }
 
     renderCoverPage() {
-        // Logo (placeholder for now or use global if available)
         this.currentY = 40;
         this.addTitle('รายงานการประเมินตนเอง (Self-Assessment Report: SAR)', 22);
         this.addTitle('ตามเกณฑ์ AUN-QA (ASEAN University Network-Quality Assurance)', 16);
         this.currentY += 20;
-
         this.addTitle('ระดับหลักสูตร', 18);
         this.addTitle(this.program.degreeName || this.program.majorName || '', 20);
         this.currentY += 20;
-
         this.addTitle(`ปีการศึกษา ${this.year}`, 16);
         this.currentY += 40;
-
         this.addTitle('คณะ/หน่วยงาน', 14, 'normal');
         this.addTitle(this.program.facultyName || '-', 16, 'bold');
         this.currentY += 10;
@@ -492,176 +367,78 @@ export class ESARGenerator {
     renderOverallSummary() {
         this.addTitle('สรุปคะแนนประเมินตนเองตามเกณฑ์ AUN-QA', 16);
         this.currentY += 5;
-
         const tableData = [];
-        let avgTotal = 0;
-        let countTotal = 0;
-
+        let avgTotal = 0, countTotal = 0;
         this.components.forEach((component, idx) => {
-            const compIndicators = this.indicators.filter(ind =>
-                String(ind.quality_id) === String(component.id) ||
-                String(ind.component_id) === String(component.id) ||
-                String(ind.component_id) === String(component.component_id)
-            );
-
-            let compAvg = 0;
-            let compCount = 0;
-
+            const compIndicators = this.indicators.filter(ind => String(ind.quality_id) === String(component.id) || String(ind.component_id) === String(component.id) || String(ind.component_id) === String(component.component_id));
+            let compAvg = 0, compCount = 0;
             compIndicators.forEach(ind => {
-                const evalData = this.evaluations.find(e =>
-                    String(e.indicator_id) === String(ind.id) ||
-                    String(e.indicator_id) === String(ind.indicator_id) ||
-                    String(e.indicator_id) === String(ind.sequence)
-                );
-
-                if (evalData && (evalData.operation_score || evalData.score)) {
-                    compAvg += parseFloat(evalData.operation_score || evalData.score);
-                    compCount++;
-                }
+                const evalData = this.evaluations.find(e => String(e.indicator_id) === String(ind.id) || String(e.indicator_id) === String(ind.indicator_id) || String(e.indicator_id) === String(ind.sequence));
+                if (evalData && (evalData.operation_score || evalData.score)) { compAvg += parseFloat(evalData.operation_score || evalData.score); compCount++; }
             });
-
             const score = compCount > 0 ? (compAvg / compCount).toFixed(2) : '-';
             tableData.push([idx + 1, component.quality_name, score]);
-
-            if (compCount > 0) {
-                avgTotal += parseFloat(score);
-                countTotal++;
-            }
+            if (compCount > 0) { avgTotal += parseFloat(score); countTotal++; }
         });
-
         autoTable(this.doc, {
-            head: [['ลำดับ', 'หัวข้อเกณฑ์ AUN-QA', 'คะแนนประเมิน']],
-            body: tableData,
-            startY: this.currentY,
-            theme: 'grid',
+            head: [['ลำดับ', 'หัวข้อเกณฑ์ AUN-QA', 'คะแนนประเมิน']], body: tableData, startY: this.currentY, theme: 'grid',
             styles: { font: this.fontFamily, fontSize: 11, cellPadding: 2, fontStyle: 'normal' },
             headStyles: { fillColor: [51, 65, 85], textColor: 255, halign: 'center', fontStyle: 'normal' },
-            columnStyles: {
-                0: { halign: 'center', cellWidth: 15 },
-                2: { halign: 'center', cellWidth: 30 }
-            },
+            columnStyles: { 0: { halign: 'center', cellWidth: 15 }, 2: { halign: 'center', cellWidth: 30 } },
             rowPageBreak: 'avoid'
         });
-
         this.currentY = this.doc.lastAutoTable.finalY + 10;
-
-        if (countTotal > 0) {
-            this.addText(`คะแนนเฉลี่ยรวมทุกเกณฑ์: ${(avgTotal / countTotal).toFixed(2)}`, 14, 'bold', 'right');
-        }
+        if (countTotal > 0) this.addText(`คะแนนเฉลี่ยรวมทุกเกณฑ์: ${(avgTotal / countTotal).toFixed(2)}`, 14, 'bold', 'right');
     }
 
     renderComponentSection(component) {
-        this.addTitle(`องค์ประกอบที่ ${component.quality_code || ''} ${component.quality_name}`, 16);
+        this.addTitle(`องค์ประกอบที่ ${component.quality_code || ''} ${component.quality_name}`, 15);
         this.currentY += 5;
-
-        const compIndicators = this.indicators.filter(ind =>
-            String(ind.quality_id) === String(component.id) ||
-            String(ind.component_id) === String(component.id) ||
-            String(ind.component_id) === String(component.component_id)
-        );
-
-        if (compIndicators.length === 0) {
-            this.addText('ไม่พบข้อมูลตัวบ่งชี้ในหมวดนี้', 12, 'italic');
-            return;
-        }
-
+        const compIndicators = this.indicators.filter(ind => String(ind.quality_id) === String(component.id) || String(ind.component_id) === String(component.id) || String(ind.component_id) === String(component.component_id));
+        if (compIndicators.length === 0) { this.addText('ไม่พบข้อมูลตัวบ่งชี้ในหมวดนี้', 12, 'italic'); return; }
         compIndicators.sort((a, b) => {
             const seqA = String(a.sequence || '').split('.').map(Number);
             const seqB = String(b.sequence || '').split('.').map(Number);
-            for (let i = 0; i < Math.max(seqA.length, seqB.length); i++) {
-                if ((seqA[i] || 0) < (seqB[i] || 0)) return -1;
-                if ((seqA[i] || 0) > (seqB[i] || 0)) return 1;
-            }
+            for (let i = 0; i < Math.max(seqA.length, seqB.length); i++) { if ((seqA[i] || 0) < (seqB[i] || 0)) return -1; if ((seqA[i] || 0) > (seqB[i] || 0)) return 1; }
             return 0;
         });
-
         const body = compIndicators.map(ind => {
-            const evalData = this.evaluations.find(e =>
-                String(e.indicator_id) === String(ind.id) ||
-                String(e.indicator_id) === String(ind.indicator_id) ||
-                String(e.indicator_id) === String(ind.sequence)
-            );
-
+            const evalData = this.evaluations.find(e => String(e.indicator_id) === String(ind.id) || String(e.indicator_id) === String(ind.indicator_id) || String(e.indicator_id) === String(ind.sequence));
             const resultText = evalData ? (evalData.operation_result || evalData.result || '-') : '-';
             const score = evalData ? (evalData.operation_score || evalData.score || '-') : '-';
-
-            return [
-                ind.sequence || '-',
-                ind.indicator_name || '-',
-                { content: '', blocks: this.parseHtmlToBlocks(resultText) },
-                score
-            ];
+            return [ind.sequence || '-', ind.indicator_name || '-', { content: '', blocks: this.parseHtmlToBlocks(resultText) }, score];
         });
-
         autoTable(this.doc, {
-            head: [['ลำดับ', 'ตัวบ่งชี้', 'ผลการดำเนินงาน', 'คะแนน']],
-            body: body,
-            startY: this.currentY,
-            theme: 'grid',
+            head: [['ลำดับ', 'ตัวบ่งชี้', 'ผลการดำเนินงาน', 'คะแนน']], body: body, startY: this.currentY, theme: 'grid',
             styles: { font: this.fontFamily, fontSize: 10, cellPadding: 3, overflow: 'linebreak', fontStyle: 'normal' },
-            headStyles: { fillColor: [71, 85, 105], textColor: 255, halign: 'center', fontStyle: 'normal', fontSize: 9 }, // Reduced header font size
-            columnStyles: {
-                0: { halign: 'center', cellWidth: 15 },
-                1: { cellWidth: 40 },
-                2: { cellWidth: 85 }, // Reduced to fit wider score col
-                3: { halign: 'center', cellWidth: 30 } // Widened to 30mm for header clarity
-            },
-            didParseCell: (data) => {
-                if (data.section === 'body' && data.column.index === 2) {
-                    this.tableComplexCellHook(data, 85); // Match actual column width
-                }
-            },
-            didDrawCell: (data) => {
-                if (data.section === 'body' && data.column.index === 2) {
-                    this.tableComplexDrawHook(data, data.cell.width);
-                }
-            },
+            headStyles: { fillColor: [51, 65, 85], textColor: 255, halign: 'center', fontStyle: 'normal', fontSize: 10 },
+            columnStyles: { 0: { halign: 'center', cellWidth: 15 }, 1: { cellWidth: 40 }, 2: { cellWidth: 95 }, 3: { halign: 'center', cellWidth: 20 } },
+            didParseCell: (data) => { if (data.section === 'body' && data.column.index === 2) this.tableComplexCellHook(data, 95); },
+            didDrawCell: (data) => { if (data.section === 'body' && data.column.index === 2) this.tableComplexDrawHook(data, data.cell.width); },
             rowPageBreak: 'avoid'
         });
-
         this.currentY = this.doc.lastAutoTable.finalY + 15;
-
-        // Additional Detail: Evidence
         const evidenceList = [];
         compIndicators.forEach(ind => {
             const evalData = this.evaluations.find(e => String(e.indicator_id) === String(ind.id));
             if (evalData && evalData.evidence_meta_json) {
                 try {
                     const meta = JSON.parse(evalData.evidence_meta_json);
-                    Object.values(meta).forEach(m => {
-                        evidenceList.push([ind.sequence, m.name || m.url || '-']);
-                    });
+                    Object.values(meta).forEach(m => evidenceList.push([ind.sequence, m.name || m.url || '-']));
                 } catch (e) { }
             }
         });
-
         if (evidenceList.length > 0) {
-            if (this.currentY + 20 > this.pageHeight - this.margin) this.addPage();
-            this.doc.setFontSize(12);
-            this.doc.setFont(this.fontFamily, 'normal');
-            this.doc.text('รายการหลักฐานอ้างอิง:', this.margin, this.currentY);
-            this.currentY += 5;
-
+            if (this.currentY + 20 > this.safeBottom) this.addPage();
+            this.doc.setFontSize(12); this.setFontSafe(); this.doc.text('รายการหลักฐานอ้างอิง:', this.margin, this.currentY); this.currentY += 5;
             autoTable(this.doc, {
-                head: [['ตัวบ่งชี้', 'ชื่อเอกสารหลักฐาน']],
-                body: evidenceList,
-                startY: this.currentY,
-                theme: 'striped',
-                styles: { font: this.fontFamily, fontSize: 9, fontStyle: 'normal' },
-                headStyles: { fillColor: [148, 163, 184], textColor: 255, fontStyle: 'normal' },
-                rowPageBreak: 'avoid'
+                head: [['ตัวบ่งชี้', 'ชื่อเอกสารหลักฐาน']], body: evidenceList, startY: this.currentY, theme: 'striped',
+                styles: { font: this.fontFamily, fontSize: 9, fontStyle: 'normal' }, headStyles: { fillColor: [148, 163, 184], textColor: 255, fontStyle: 'normal' }, rowPageBreak: 'avoid'
             });
             this.currentY = this.doc.lastAutoTable.finalY + 10;
         }
     }
 
-    save(filename = 'ESAR-Report.pdf') {
-        this.addFootersToAllPages();
-        this.doc.save(filename);
-    }
-
-    getBlob() {
-        this.addFootersToAllPages();
-        return this.doc.output('blob');
-    }
+    save(filename = 'ESAR-Report.pdf') { this.addFootersToAllPages(); this.doc.save(filename); }
+    getBlob() { this.addFootersToAllPages(); return this.doc.output('blob'); }
 }
