@@ -12,7 +12,7 @@ import {
   Title as ChartTitle,
 } from 'chart.js';
 import { Doughnut, Bar, Line } from 'react-chartjs-2';
-import { LayoutDashboard, FileText, CheckCircle, GraduationCap, Clock, RefreshCcw, ChevronRight, BarChart3, Activity } from 'lucide-react';
+import { LayoutDashboard, FileText, CheckCircle, GraduationCap, Clock, RefreshCcw, ChevronRight, BarChart3, Activity, X } from 'lucide-react';
 import ProgramSelection from './ProgramSelection';
 import { BASE_URL } from '../config/api.js';
 
@@ -38,8 +38,10 @@ export default function DashboardContent({ user }) {
     completedAssessments: 0,
     averageScore: 0,
     componentProgress: [],
-    recentEvaluations: []
+    recentEvaluations: [],
+    allEvaluations: [] // Added to store all for modal
   });
+  const [showAllModal, setShowAllModal] = useState(false); // Modal state
   const [historicalStats, setHistoricalStats] = useState([]); // Array of { year, avgScore }
 
   const [rounds, setRounds] = useState([]);
@@ -219,55 +221,54 @@ export default function DashboardContent({ user }) {
         return { name: c.quality_name, progress, score };
       });
 
+      const processedEvaluations = uniqueEvaluatedActual
+        .sort((a, b) => {
+          const dateA = a.created_at?.seconds || a.created_at?._seconds || new Date(a.created_at).getTime() / 1000 || 0;
+          const dateB = b.created_at?.seconds || b.created_at?._seconds || new Date(b.created_at).getTime() / 1000 || 0;
+          return dateB - dateA;
+        })
+        .filter(ev => {
+          const ind = filteredIndicators.find(i =>
+            String(i.id) === String(ev.indicator_id) ||
+            String(i.indicator_id) === String(ev.indicator_id) ||
+            String(i.sequence) === String(ev.indicator_id)
+          );
+          return ind && String(ind.sequence || "").includes('.');
+        })
+        .map(ev => {
+          const ind = filteredIndicators.find(i =>
+            String(i.id) === String(ev.indicator_id) ||
+            String(i.indicator_id) === String(ev.indicator_id) ||
+            String(i.sequence) === String(ev.indicator_id)
+          );
+
+          let dateStr = 'ไม่ระบุวันที่';
+          if (ev.created_at) {
+            const seconds = ev.created_at.seconds || ev.created_at._seconds;
+            if (seconds) dateStr = new Date(seconds * 1000).toLocaleDateString('th-TH');
+            else {
+              const d = new Date(ev.created_at);
+              if (!isNaN(d.getTime())) dateStr = d.toLocaleDateString('th-TH');
+            }
+          }
+
+          return {
+            ...ev,
+            display_id: ind ? ind.sequence : 'ไม่พบข้อมูล',
+            display_name: ind ? ind.indicator_name : 'ไม่พบชื่อตัวบ่งชี้',
+            display_date: dateStr,
+            display_score: ev.operation_score || ev.score || '-'
+          };
+        });
+
       setStats({
         totalComponents: components.length,
         totalIndicators: totalIndicatorsCount,
         completedAssessments: evaluatedIndicatorIds.size,
         averageScore,
         componentProgress: componentStats,
-        recentEvaluations: (() => {
-          return uniqueEvaluatedActual
-            .sort((a, b) => {
-              const dateA = a.created_at?.seconds || a.created_at?._seconds || new Date(a.created_at).getTime() / 1000 || 0;
-              const dateB = b.created_at?.seconds || b.created_at?._seconds || new Date(b.created_at).getTime() / 1000 || 0;
-              return dateB - dateA;
-            })
-            .filter(ev => {
-              const ind = filteredIndicators.find(i =>
-                String(i.id) === String(ev.indicator_id) ||
-                String(i.indicator_id) === String(ev.indicator_id) ||
-                String(i.sequence) === String(ev.indicator_id)
-              );
-              // Only show sub-indicators in recent activity for better detail
-              return ind && String(ind.sequence || "").includes('.');
-            })
-            .slice(0, 5)
-            .map(ev => {
-              const ind = filteredIndicators.find(i =>
-                String(i.id) === String(ev.indicator_id) ||
-                String(i.indicator_id) === String(ev.indicator_id) ||
-                String(i.sequence) === String(ev.indicator_id)
-              );
-
-              let dateStr = 'ไม่ระบุวันที่';
-              if (ev.created_at) {
-                const seconds = ev.created_at.seconds || ev.created_at._seconds;
-                if (seconds) dateStr = new Date(seconds * 1000).toLocaleDateString('th-TH');
-                else {
-                  const d = new Date(ev.created_at);
-                  if (!isNaN(d.getTime())) dateStr = d.toLocaleDateString('th-TH');
-                }
-              }
-
-              return {
-                ...ev,
-                display_id: ind ? ind.sequence : 'ไม่พบข้อมูล',
-                display_name: ind ? ind.indicator_name : 'ไม่พบชื่อตัวบ่งชี้',
-                display_date: dateStr,
-                display_score: ev.operation_score || ev.score || '-'
-              };
-            })
-        })()
+        recentEvaluations: processedEvaluations.slice(0, 5),
+        allEvaluations: processedEvaluations
       });
 
     } catch (error) {
@@ -474,7 +475,10 @@ export default function DashboardContent({ user }) {
           <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-gray-900">กิจกรรมล่าสุด</h3>
-              <button className="text-sm text-blue-600 font-medium flex items-center gap-1 hover:underline">
+              <button
+                onClick={() => setShowAllModal(true)}
+                className="text-sm text-blue-600 font-medium flex items-center gap-1 hover:underline"
+              >
                 ดูทั้งหมด <ChevronRight size={16} />
               </button>
             </div>
@@ -554,6 +558,74 @@ export default function DashboardContent({ user }) {
           </div>
         </div>
       </div>
+      {/* All Activities Modal */}
+      {showAllModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            onClick={() => setShowAllModal(false)}
+          />
+          <div className="relative w-full max-w-2xl bg-white/90 backdrop-blur-md rounded-[2.5rem] shadow-2xl border border-white/50 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-white/50">
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900">กิจกรรมทั้งหมด</h3>
+                <p className="text-sm text-gray-500 mt-1">ประวัติการประเมินตัวบ่งชี้ทั้งหมดของ {selectedProgram.majorName}</p>
+              </div>
+              <button
+                onClick={() => setShowAllModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400 hover:text-gray-900"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="flex-grow overflow-y-auto p-8 space-y-4 custom-scrollbar">
+              {stats.allEvaluations.length > 0 ? stats.allEvaluations.map((ev, i) => (
+                <div key={i} className="flex items-center justify-between p-5 rounded-2xl bg-white/50 border border-gray-100 hover:border-blue-200 transition-all shadow-sm">
+                  <div className="flex items-center gap-5">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shadow-sm border border-blue-100/50">
+                      <FileText size={22} />
+                    </div>
+                    <div>
+                      <p className="text-base font-bold text-gray-900">ตัวบ่งชี้ที่ {ev.display_id}</p>
+                      <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{ev.display_name}</p>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                          คะแนน: {ev.display_score}
+                        </span>
+                        <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                          <Clock size={10} /> {ev.display_date}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className="px-3 py-1 bg-green-100 text-green-700 text-[10px] uppercase font-bold rounded-full border border-green-200 shadow-sm">
+                      สมบูรณ์
+                    </span>
+                  </div>
+                </div>
+              )) : (
+                <div className="text-center py-20">
+                  <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-gray-100">
+                    <Activity className="text-gray-300 w-10 h-10" />
+                  </div>
+                  <p className="text-gray-400 italic font-medium">ไม่มีประวัติกิจกรรมในรายการนี้</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 bg-gray-50/50 border-t border-gray-100 text-center">
+              <button
+                onClick={() => setShowAllModal(false)}
+                className="px-8 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-600 hover:bg-gray-100 transition-all shadow-sm active:scale-95"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

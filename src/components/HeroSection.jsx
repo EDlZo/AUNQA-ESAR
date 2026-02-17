@@ -2,13 +2,27 @@
 import React from 'react';
 import { FileText, ChevronRight, Award, Users, Target, TrendingUp } from 'lucide-react';
 
-export default function HeroSection({ onGoResults, onGoProcess }) {
+export default function HeroSection({ onGoResults, onGoProcess, publicStats }) {
   const stats = [
     { icon: <Award className="w-6 h-6" />, label: "มาตรฐานสากล", value: "AUN-QA" },
-    { icon: <Users className="w-6 h-6" />, label: "ผู้ประเมิน", value: "150+" },
-    { icon: <Target className="w-6 h-6" />, label: "ตัวบ่งชี้", value: "60+" },
-    { icon: <TrendingUp className="w-6 h-6" />, label: "คะแนนเฉลี่ย", value: "4.8/5" }
+    { icon: <Users className="w-6 h-6" />, label: "ผู้ประเมิน", value: `${publicStats?.userCount || 0}` },
+    { icon: <Target className="w-6 h-6" />, label: "ตัวบ่งชี้", value: `${publicStats?.indicatorCount || 0}` },
+    { icon: <TrendingUp className="w-6 h-6" />, label: "คะแนนเฉลี่ย", value: `${publicStats?.averageScore || "0.0"}/5` }
   ];
+
+  // Helper for dynamic component bars
+  const defaultComponents = [
+    { name: "การบริหารจัดการเชิงกลยุทธ์", progress: 85, color: "bg-green-500" },
+    { name: "การเรียนการสอน", progress: 92, color: "bg-blue-500" },
+    { name: "การวิจัยและนวัตกรรม", progress: 78, color: "bg-purple-500" }
+  ];
+
+  const displayComponents = publicStats?.topComponents?.length > 0
+    ? publicStats.topComponents.map((c, i) => ({
+      ...c,
+      color: i === 0 ? "bg-green-500" : i === 1 ? "bg-blue-500" : "bg-purple-500"
+    }))
+    : defaultComponents;
 
   return (
     <section className="relative bg-gradient-to-br from-blue-50 via-white to-indigo-50 overflow-hidden">
@@ -87,42 +101,23 @@ export default function HeroSection({ onGoResults, onGoProcess }) {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm text-gray-600">การบริหารจัดการเชิงกลยุทธ์</span>
-                    <div className="flex items-center">
-                      <div className="w-24 bg-gray-200 rounded-full h-2 mr-2">
-                        <div className="bg-green-500 h-2 rounded-full" style={{ width: '85%' }}></div>
+                  {displayComponents.map((comp, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <span className="text-sm text-gray-600 truncate max-w-[150px]" title={comp.name}>{comp.name}</span>
+                      <div className="flex items-center">
+                        <div className="w-24 bg-gray-200 rounded-full h-2 mr-2">
+                          <div className={`${comp.color} h-2 rounded-full transition-all duration-1000`} style={{ width: `${comp.progress}%` }}></div>
+                        </div>
+                        <span className="text-sm font-medium">{comp.progress}%</span>
                       </div>
-                      <span className="text-sm font-medium">85%</span>
                     </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm text-gray-600">การเรียนการสอน</span>
-                    <div className="flex items-center">
-                      <div className="w-24 bg-gray-200 rounded-full h-2 mr-2">
-                        <div className="bg-blue-500 h-2 rounded-full" style={{ width: '92%' }}></div>
-                      </div>
-                      <span className="text-sm font-medium">92%</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm text-gray-600">การวิจัยและนวัตกรรม</span>
-                    <div className="flex items-center">
-                      <div className="w-24 bg-gray-200 rounded-full h-2 mr-2">
-                        <div className="bg-purple-500 h-2 rounded-full" style={{ width: '78%' }}></div>
-                      </div>
-                      <span className="text-sm font-medium">78%</span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
 
             {/* Floating Elements */}
             <div className="absolute -top-4 -right-4 w-20 h-20 bg-blue-100 rounded-full opacity-50 blur-xl"></div>
-            <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-indigo-100 rounded-full opacity-50 blur-xl"></div>
           </div>
         </div>
       </div>

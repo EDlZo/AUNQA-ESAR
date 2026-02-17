@@ -40,6 +40,7 @@ export default function App() {
   const [selectedProgram, setSelectedProgram] = useState(null);
   const [activeRound, setActiveRound] = useState(null);
   const [loadingRound, setLoadingRound] = useState(true);
+  const [publicStats, setPublicStats] = useState(null);
 
   // Restore session from localStorage
   useEffect(() => {
@@ -82,6 +83,22 @@ export default function App() {
     // but it ensures they don't get stuck in a state if someone else opens a round.
     // Let's add it to run occasionally or just on mount for now.
   }, [activeTab]); // Refresh round status when tab changes to ensure up-to-date access
+
+  // Fetch Public Stats for Hero Section
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${BASE_URL}/api/public-stats`);
+        if (res.ok) {
+          const data = await res.json();
+          setPublicStats(data);
+        }
+      } catch (error) {
+        console.error('Error fetching public stats:', error);
+      }
+    };
+    fetchStats();
+  }, []);
 
   // ไม่ใช้ mock users แล้ว ใช้ API จริง
 
@@ -452,8 +469,9 @@ export default function App() {
 
         {activeTab === 'about' && (
           <HeroSection
-            onGoResults={() => setActiveTab('results')}
+            onGoResults={() => setActiveTab('summary')}
             onGoProcess={() => setActiveTab('process')}
+            publicStats={publicStats}
           />
         )}
 

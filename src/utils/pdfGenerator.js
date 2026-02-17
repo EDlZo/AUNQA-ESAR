@@ -16,6 +16,7 @@ export class PDFGenerator {
     this.margin = 20;
     this.contentWidth = this.pageWidth - (this.margin * 2);
     this.currentY = this.margin;
+    this.imageDimensions = new Map(); // Store { width, height, ratio }
   }
 
   // เพิ่มฟอนต์ภาษาไทย (ต้องมีไฟล์ฟอนต์)
@@ -105,9 +106,56 @@ export class PDFGenerator {
     return finalBlocks.length > 0 ? finalBlocks : [{ type: 'text', content: '-' }];
   }
 
+  async preloadImages(indicators = []) {
+    if (typeof window === 'undefined') return;
+    const imageUrls = new Set();
+
+    indicators.forEach(ind => {
+      const result = ind.result || ind.operation_result || '';
+      const comment = ind.comment || '';
+      this.extractImageData(result).forEach(url => imageUrls.add(url));
+      this.extractImageData(comment).forEach(url => imageUrls.add(url));
+    });
+
+    const promises = Array.from(imageUrls).map(url => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          this.imageDimensions.set(url, {
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+            ratio: img.naturalHeight / img.naturalWidth
+          });
+          resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = url;
+      });
+    });
+
+    await Promise.all(promises);
+  }
+
+  extractImageData(html) {
+    const images = [];
+    if (!html || typeof html !== 'string') return images;
+    const imgRegex = /<img[^>]+src\s*=\s*(["'])(.*?)\1/gi;
+    let match;
+    while ((match = imgRegex.exec(html)) !== null) {
+      images.push(match[2]);
+    }
+    return images;
+  }
+
+  stripHtml(html) {
+    if (!html) return "";
+    let text = this.decodeHtmlEntities(html);
+    return text.replace(/<[^>]*>?/gm, '').trim();
+  }
+
   estimateBlocksHeight(blocks, colWidth) {
     let h = 2; // Start padding
-    const padding = 6;
+    const padding = 16; // Increased horizontal padding (8mm each side)
     const width = Math.max(10, colWidth - padding);
 
     blocks.forEach(block => {
@@ -125,31 +173,33 @@ export class PDFGenerator {
           });
           tableH += Math.max(7, maxRowH);
         });
-        h += tableH + 4;
+        h += tableH + 15; // Increased vertical buffer for nested tables
       } else if (block.type === 'image') {
-        h += Math.min(60, width * 0.6) + 6;
+        const dim = this.imageDimensions.get(block.content);
+        const ratio = dim ? dim.ratio : 0.6;
+        h += Math.min(60, width * ratio) + 8; // Conservative buffer
       }
     });
     return h + 2;
   }
 
   drawBlocks(blocks, cellX, cellY, cellWidth) {
-    let currentY = cellY + 2;
-    const padding = 6;
+    let currentY = cellY + 3; // Start lower
+    const padding = 16; // Match estimateBlocksHeight padding
     const drawWidth = Math.max(10, cellWidth - padding);
 
     blocks.forEach(block => {
       if (block.type === 'text') {
         this.doc.setFontSize(10);
         const split = this.doc.splitTextToSize(block.content, drawWidth);
-        this.doc.text(split, cellX + 2, currentY + 3);
+        this.doc.text(split, cellX + 8, currentY + 3); // 8mm indent
         currentY += (split.length * 5);
       } else if (block.type === 'table') {
         this.doc.autoTable({
           body: block.content,
-          startY: currentY + 1,
-          margin: { left: cellX + 2.5 },
-          tableWidth: drawWidth - 1,
+          startY: currentY + 5,
+          margin: { left: cellX + 8 }, // 8mm fixed left margin
+          tableWidth: cellWidth - 16, // Fixed 8mm margin on both sides (centered)
           theme: 'grid',
           styles: {
             font: 'helvetica',
@@ -159,10 +209,10 @@ export class PDFGenerator {
             lineWidth: 0.1, // Thinner lines for nested tables
             overflow: 'linebreak'
           },
-          didParseCell: (hookData) => this.tableComplexCellHook(hookData, drawWidth),
-          didDrawCell: (hookData) => this.tableComplexDrawHook(hookData, drawWidth)
+          didParseCell: (hookData) => this.tableComplexCellHook(hookData, cellWidth - 16),
+          didDrawCell: (hookData) => this.tableComplexDrawHook(hookData, cellWidth - 16)
         });
-        currentY = this.doc.lastAutoTable.finalY + 2;
+        currentY = this.doc.lastAutoTable.finalY + 8;
       } else if (block.type === 'image') {
         try {
           if (block.content && block.content.length > 0) {
@@ -171,9 +221,27 @@ export class PDFGenerator {
               const typeMatch = block.content.match(/data:image\/([a-zA-Z]+);base64/);
               format = typeMatch ? typeMatch[1].toUpperCase() : 'PNG';
             }
-            const imgHeight = Math.min(60, drawWidth * 0.6);
-            this.doc.addImage(block.content, format, cellX + 2, currentY + 1, drawWidth, imgHeight);
-            currentY += imgHeight + 3;
+
+            const dim = this.imageDimensions.get(block.content);
+            const ratio = dim ? dim.ratio : 0.6;
+
+            let imgWidth = drawWidth;
+            let imgHeight = drawWidth * ratio;
+
+            if (imgHeight > 60) {
+              imgHeight = 60;
+              imgWidth = imgHeight / ratio;
+            }
+
+            const offsetX = (drawWidth - imgWidth) / 2;
+
+            if (currentY + imgHeight > this.pageHeight - this.margin) {
+              console.warn('Image exceeds page boundary in drawBlocks');
+            }
+
+            // Centered within the padded area
+            this.doc.addImage(block.content, format, cellX + 8 + offsetX, currentY + 1, imgWidth, imgHeight);
+            currentY += imgHeight + 4;
           }
         } catch (e) { console.error('Image Error:', e); }
       }
@@ -233,7 +301,8 @@ export class PDFGenerator {
         if (data.section === 'body' && data.cell.raw && data.cell.raw.blocks) {
           this.tableComplexDrawHook(data, data.cell.width);
         }
-      }
+      },
+      rowPageBreak: 'avoid'
     });
 
     this.currentY = this.doc.lastAutoTable.finalY + 10;
@@ -313,7 +382,8 @@ export class PDFGenerator {
   }
 
   // สร้างรายงานการประเมินแบบสมบูรณ์
-  generateAssessmentReport(reportData, indicators = []) {
+  async generateAssessmentReport(reportData, indicators = []) {
+    await this.preloadImages(indicators);
     this.addHeader(reportData.title, 'รายงานการประเมินคุณภาพ AUN-QA');
     this.addInfoSection(reportData);
 
@@ -339,7 +409,7 @@ export class PDFGenerator {
   }
 
   // สร้างรายงานสรุปแบบกราฟ
-  generateSummaryReport(summaryData) {
+  async generateSummaryReport(summaryData) {
     this.addHeader('รายงานสรุปการประเมิน', 'ภาพรวมผลการประเมินคุณภาพ');
 
     // เพิ่มข้อมูลสรุป
@@ -422,20 +492,20 @@ export class PDFGenerator {
 }
 
 // ฟังก์ชันสำหรับใช้งานง่ายๆ
-export const generateAssessmentPDF = (reportData, indicators = [], filename = 'assessment-report.pdf') => {
+export const generateAssessmentPDF = async (reportData, indicators = [], filename = 'assessment-report.pdf') => {
   const pdf = new PDFGenerator();
-  pdf.generateAssessmentReport(reportData, indicators);
+  await pdf.generateAssessmentReport(reportData, indicators);
   pdf.save(filename);
 };
 
-export const generateSummaryPDF = (summaryData, filename = 'summary-report.pdf') => {
+export const generateSummaryPDF = async (summaryData, filename = 'summary-report.pdf') => {
   const pdf = new PDFGenerator();
-  pdf.generateSummaryReport(summaryData);
+  await pdf.generateSummaryReport(summaryData);
   pdf.save(filename);
 };
 
 export const downloadPDF = async (reportData, indicators = []) => {
   const pdf = new PDFGenerator();
-  pdf.generateAssessmentReport(reportData, indicators);
+  await pdf.generateAssessmentReport(reportData, indicators);
   return pdf.getBlob();
 };

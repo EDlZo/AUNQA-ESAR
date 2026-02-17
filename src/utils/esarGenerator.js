@@ -24,6 +24,8 @@ export class ESARGenerator {
         this.components = options.components || [];
         this.metadata = options.metadata || {};
 
+        this.imageDimensions = new Map(); // Store { width, height, ratio }
+
         this.pageWidth = this.doc.internal.pageSize.getWidth();
         this.pageHeight = this.doc.internal.pageSize.getHeight();
         this.margin = 20;
@@ -152,6 +154,47 @@ export class ESARGenerator {
         return finalBlocks.length > 0 ? finalBlocks : [{ type: 'text', content: '-' }];
     }
 
+    async preloadImages() {
+        if (typeof window === 'undefined') return;
+
+        const imageUrls = new Set();
+
+        // Scan metadata
+        ['history', 'vision', 'mission', 'structure'].forEach(key => {
+            this.extractImageData(this.metadata[key]).forEach(url => imageUrls.add(url));
+        });
+        if (this.metadata.swot) {
+            ['s', 'w', 'o', 't'].forEach(key => {
+                this.extractImageData(this.metadata.swot[key]).forEach(url => imageUrls.add(url));
+            });
+        }
+
+        // Scan evaluations
+        this.evaluations.forEach(ev => {
+            this.extractImageData(ev.operation_result || ev.result).forEach(url => imageUrls.add(url));
+            this.extractImageData(ev.comment).forEach(url => imageUrls.add(url));
+        });
+
+        const promises = Array.from(imageUrls).map(url => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => {
+                    this.imageDimensions.set(url, {
+                        width: img.naturalWidth,
+                        height: img.naturalHeight,
+                        ratio: img.naturalHeight / img.naturalWidth
+                    });
+                    resolve();
+                };
+                img.onerror = () => resolve();
+                img.src = url;
+            });
+        });
+
+        await Promise.all(promises);
+        console.log('Preloaded images:', this.imageDimensions.size);
+    }
+
     // Removed old parseHtmlContent
 
     extractImageData(html) {
@@ -233,7 +276,7 @@ export class ESARGenerator {
     // Shared methods for rendering complex blocks
     estimateBlocksHeight(blocks, colWidth) {
         let h = 2; // Minimal top padding
-        const padding = 6;
+        const padding = 16; // Increased horizontal padding (8mm each side)
         const width = Math.max(10, colWidth - padding);
 
         blocks.forEach(block => {
@@ -251,17 +294,19 @@ export class ESARGenerator {
                     });
                     tableH += Math.max(7, maxRowH); // Minimum row height
                 });
-                h += tableH + 4;
+                h += tableH + 15; // Larger vertical buffer for nested tables
             } else if (block.type === 'image') {
-                h += Math.min(60, width * 0.6) + 6;
+                const dim = this.imageDimensions.get(block.content);
+                const ratio = dim ? dim.ratio : 0.6;
+                h += Math.min(60, width * ratio) + 8; // Added conservative buffer
             }
         });
         return h + 2; // Bottom padding
     }
 
     drawBlocks(blocks, cellX, cellY, cellWidth) {
-        let currentY = cellY + 2;
-        const padding = 6;
+        let currentY = cellY + 3; // Start lower
+        const padding = 16; // Match estimateBlocksHeight padding
         const drawWidth = Math.max(10, cellWidth - padding);
 
         blocks.forEach(block => {
@@ -269,14 +314,14 @@ export class ESARGenerator {
                 this.doc.setFontSize(10);
                 this.doc.setFont(this.fontFamily, 'normal');
                 const split = this.doc.splitTextToSize(block.content, drawWidth);
-                this.doc.text(split, cellX + 3, currentY + 3);
+                this.doc.text(split, cellX + 8, currentY + 3); // 8mm indent
                 currentY += (split.length * 5);
             } else if (block.type === 'table') {
                 autoTable(this.doc, {
                     body: block.content,
-                    startY: currentY + 1,
-                    margin: { left: cellX + 2.5 },
-                    tableWidth: drawWidth - 1,
+                    startY: currentY + 5,
+                    margin: { left: cellX + 8 }, // 8mm fixed left margin
+                    tableWidth: cellWidth - 16, // Fixed 8mm margin on both sides (centered)
                     theme: 'grid',
                     styles: {
                         font: this.fontFamily,
@@ -286,10 +331,10 @@ export class ESARGenerator {
                         lineWidth: 0.1,  // Thinner lines for nested tables
                         overflow: 'linebreak'
                     },
-                    didParseCell: (hookData) => this.tableComplexCellHook(hookData, drawWidth),
-                    didDrawCell: (hookData) => this.tableComplexDrawHook(hookData, drawWidth)
+                    didParseCell: (hookData) => this.tableComplexCellHook(hookData, cellWidth - 16),
+                    didDrawCell: (hookData) => this.tableComplexDrawHook(hookData, cellWidth - 16)
                 });
-                currentY = this.doc.lastAutoTable.finalY + 2;
+                currentY = this.doc.lastAutoTable.finalY + 8; // More space after table
             } else if (block.type === 'image') {
                 try {
                     if (block.content && block.content.length > 0) {
@@ -298,9 +343,30 @@ export class ESARGenerator {
                             const typeMatch = block.content.match(/data:image\/([a-zA-Z]+);base64/);
                             format = typeMatch ? typeMatch[1].toUpperCase() : 'PNG';
                         }
-                        const imgHeight = Math.min(60, drawWidth * 0.6);
-                        this.doc.addImage(block.content, format, cellX + 3, currentY + 1, drawWidth, imgHeight);
-                        currentY += imgHeight + 3;
+
+                        const dim = this.imageDimensions.get(block.content);
+                        const ratio = dim ? dim.ratio : 0.6;
+
+                        let imgWidth = drawWidth;
+                        let imgHeight = drawWidth * ratio;
+
+                        // Cap height at 60mm
+                        if (imgHeight > 60) {
+                            imgHeight = 60;
+                            imgWidth = imgHeight / ratio;
+                        }
+
+                        // Center horizontally
+                        const offsetX = (drawWidth - imgWidth) / 2;
+
+                        // Safety check: Don't draw beyond page height
+                        if (currentY + imgHeight > this.pageHeight - this.margin) {
+                            console.warn('Image exceeds page boundary in drawBlocks');
+                        }
+
+                        // Centered within the padded area
+                        this.doc.addImage(block.content, format, cellX + 8 + offsetX, currentY + 1, imgWidth, imgHeight);
+                        currentY += imgHeight + 4;
                     }
                 } catch (e) { console.error('Image Render Error:', e); }
             }
@@ -325,6 +391,8 @@ export class ESARGenerator {
     // --- Main Generator ---
 
     async generate() {
+        await this.preloadImages();
+
         this.currentY = 60;
 
         // 1. Cover Page
@@ -471,7 +539,8 @@ export class ESARGenerator {
             columnStyles: {
                 0: { halign: 'center', cellWidth: 15 },
                 2: { halign: 'center', cellWidth: 30 }
-            }
+            },
+            rowPageBreak: 'avoid'
         });
 
         this.currentY = this.doc.lastAutoTable.finalY + 10;
@@ -530,23 +599,24 @@ export class ESARGenerator {
             startY: this.currentY,
             theme: 'grid',
             styles: { font: this.fontFamily, fontSize: 10, cellPadding: 3, overflow: 'linebreak', fontStyle: 'normal' },
-            headStyles: { fillColor: [71, 85, 105], textColor: 255, halign: 'center', fontStyle: 'normal' },
+            headStyles: { fillColor: [71, 85, 105], textColor: 255, halign: 'center', fontStyle: 'normal', fontSize: 9 }, // Reduced header font size
             columnStyles: {
                 0: { halign: 'center', cellWidth: 15 },
                 1: { cellWidth: 40 },
-                2: { cellWidth: 100 },
-                3: { halign: 'center', cellWidth: 15 }
+                2: { cellWidth: 85 }, // Reduced to fit wider score col
+                3: { halign: 'center', cellWidth: 30 } // Widened to 30mm for header clarity
             },
             didParseCell: (data) => {
                 if (data.section === 'body' && data.column.index === 2) {
-                    this.tableComplexCellHook(data, 100);
+                    this.tableComplexCellHook(data, 85); // Match actual column width
                 }
             },
             didDrawCell: (data) => {
                 if (data.section === 'body' && data.column.index === 2) {
                     this.tableComplexDrawHook(data, data.cell.width);
                 }
-            }
+            },
+            rowPageBreak: 'avoid'
         });
 
         this.currentY = this.doc.lastAutoTable.finalY + 15;
@@ -578,7 +648,8 @@ export class ESARGenerator {
                 startY: this.currentY,
                 theme: 'striped',
                 styles: { font: this.fontFamily, fontSize: 9, fontStyle: 'normal' },
-                headStyles: { fillColor: [148, 163, 184], textColor: 255, fontStyle: 'normal' }
+                headStyles: { fillColor: [148, 163, 184], textColor: 255, fontStyle: 'normal' },
+                rowPageBreak: 'avoid'
             });
             this.currentY = this.doc.lastAutoTable.finalY + 10;
         }

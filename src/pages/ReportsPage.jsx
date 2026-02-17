@@ -510,19 +510,7 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      <div className="mt-8 border-t pt-8">
-        <h4 className="text-md font-bold text-gray-700 mb-4">เอกสารประกอบอื่น ๆ</h4>
-        <div className="flex justify-center gap-4">
-          <button className="flex items-center text-gray-600 hover:text-green-600 transition">
-            <FileSpreadsheet className="w-5 h-5 mr-2" />
-            ส่งออกตารางคะแนน (Excel)
-          </button>
-          <button className="flex items-center text-gray-600 hover:text-purple-600 transition">
-            <Printer className="w-5 h-5 mr-2" />
-            พิมพ์หน้าสรุป
-          </button>
-        </div>
-      </div>
+
     </div>
   );
 

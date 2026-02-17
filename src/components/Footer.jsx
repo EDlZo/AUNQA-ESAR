@@ -44,8 +44,8 @@ export default function Footer() {
               <div className="p-2 bg-gray-700 rounded-lg flex-shrink-0">
                 <Mail className="w-4 h-4 text-blue-400" />
               </div>
-              <a href="mailto:info@rmutsv.ac.th" className="text-xs text-gray-300 hover:text-blue-400 transition-colors">
-                info@rmutsv.ac.th
+              <a href="mailto:saraban@rmutsv.ac.th" className="text-xs text-gray-300 hover:text-blue-400 transition-colors">
+                saraban@rmutsv.ac.th
               </a>
             </div>
 

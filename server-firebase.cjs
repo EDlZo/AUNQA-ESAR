@@ -2362,6 +2362,125 @@ app.post('/api/admin/reset-assessment-data', async (req, res) => {
   }
 });
 
+// ================= PUBLIC STATISTICS =================
+app.get('/api/public-stats', async (req, res) => {
+  try {
+    if (!db) {
+      return res.json({
+        userCount: 0,
+        indicatorCount: 0,
+        averageScore: "0.0",
+        topComponents: []
+      });
+    }
+
+    // 0. Get Active Year
+    const roundSnap = await db.collection('rounds').where('is_active', '==', true).limit(1).get();
+    let currentYear = null;
+    if (!roundSnap.empty) {
+      currentYear = roundSnap.docs[0].data().year;
+    }
+
+    // 1. Basic Counts
+    const userSnap = await db.collection('users').count().get();
+    let indicatorCount = 0;
+    if (currentYear) {
+      const indCountSnap = await db.collection('indicators').where('year', '==', String(currentYear)).count().get();
+      indicatorCount = indCountSnap.data().count;
+    } else {
+      const indCountSnap = await db.collection('indicators').count().get();
+      indicatorCount = indCountSnap.data().count;
+    }
+
+    // 2. Average Score (Committee) - Filtered by Year
+    let commQuery = db.collection('committee_evaluations');
+    if (currentYear) commQuery = commQuery.where('year', '==', String(currentYear));
+    const commSnap = await commQuery.get();
+
+    let totalScoreAll = 0;
+    let scoreCountAll = 0;
+    commSnap.docs.forEach(doc => {
+      const s = parseFloat(doc.data().committee_score);
+      if (!isNaN(s) && s > 0) {
+        totalScoreAll += s;
+        scoreCountAll++;
+      }
+    });
+    const avgScore = scoreCountAll > 0 ? (totalScoreAll / scoreCountAll).toFixed(1) : "0.0";
+
+    // 3. Completion Progress per Component - Filtered by Year
+    let actualQuery = db.collection('evaluations_actual');
+    if (currentYear) actualQuery = actualQuery.where('year', '==', String(currentYear));
+    const actualSnap = await actualQuery.get();
+
+    const evaluatedIndicatorIds = new Set();
+    actualSnap.docs.forEach(doc => {
+      const id = doc.data().indicator_id;
+      if (id) evaluatedIndicatorIds.add(String(id));
+    });
+
+    let indQuery = db.collection('indicators');
+    if (currentYear) indQuery = indQuery.where('year', '==', String(currentYear));
+    const indSnap = await indQuery.get();
+
+    const compSnap = await db.collection('quality_components').get();
+    const compIdToName = new Map();
+    compSnap.docs.forEach(doc => {
+      const d = doc.data();
+      if (d.component_id && d.quality_name) {
+        compIdToName.set(String(d.component_id), d.quality_name);
+      }
+    });
+
+    const nameToProgress = new Map();
+
+    indSnap.docs.forEach(doc => {
+      const d = doc.data();
+      const compId = d.component_id ? String(d.component_id) : null;
+      const name = compId ? compIdToName.get(compId) : null;
+
+      if (name) {
+        if (!nameToProgress.has(name)) nameToProgress.set(name, { total: 0, done: 0 });
+        const stats = nameToProgress.get(name);
+        stats.total++;
+        if (evaluatedIndicatorIds.has(String(doc.id)) || (d.indicator_id && evaluatedIndicatorIds.has(String(d.indicator_id)))) {
+          stats.done++;
+        }
+      }
+    });
+
+    let topComponents = Array.from(nameToProgress.entries())
+      .map(([name, stats]) => ({
+        name,
+        progress: stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0
+      }))
+      .sort((a, b) => b.progress - a.progress)
+      .slice(0, 3);
+
+    // 4. Fallback/Fill with unique names if < 3
+    if (topComponents.length < 3) {
+      const usedNames = new Set(topComponents.map(c => c.name));
+      const allUniqueNames = Array.from(new Set(Array.from(compIdToName.values())));
+
+      const availableNames = allUniqueNames.filter(name => !usedNames.has(name));
+      availableNames.slice(0, 3 - topComponents.length).forEach(name => {
+        topComponents.push({ name, progress: 0 });
+      });
+    }
+
+    res.json({
+      userCount: userSnap.data().count,
+      indicatorCount: indicatorCount,
+      averageScore: avgScore,
+      topComponents,
+      currentYear: currentYear
+    });
+  } catch (error) {
+    console.error('Error in /api/public-stats:', error);
+    res.status(500).json({ error: 'Failed to fetch public statistics' });
+  }
+});
+
 // ================= START SERVER =================
 const PORT = process.env.PORT || 3002;
 if (require.main === module) {
@@ -2474,6 +2593,102 @@ app.delete('/api/rounds/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting round:', error);
     res.status(500).json({ error: 'ลบรอบประเมินไม่สำเร็จ' });
+  }
+});
+
+// ================= PUBLIC STATISTICS =================
+app.get('/api/public-stats', async (req, res) => {
+  try {
+    if (!db) {
+      return res.json({
+        userCount: 0,
+        indicatorCount: 0,
+        averageScore: "0.0",
+        topComponents: []
+      });
+    }
+
+    // 1. Basic Counts
+    const userSnap = await db.collection('users').count().get();
+    const indicatorSnap = await db.collection('indicators').count().get();
+
+    // 2. Average Score (Committee)
+    // We need to fetch committee evaluations to calculate average score
+    const commSnap = await db.collection('committee_evaluations').get();
+    let totalScore = 0;
+    let scoreCount = 0;
+    commSnap.docs.forEach(doc => {
+      const s = parseFloat(doc.data().committee_score);
+      if (!isNaN(s) && s > 0) { // Only consider valid, positive scores
+        totalScore += s;
+        scoreCount++;
+      }
+    });
+    const avgScore = scoreCount > 0 ? (totalScore / scoreCount).toFixed(1) : "0.0";
+
+    // 3. Top Components for Hero Card
+    // Get all quality components to map indicator IDs to component names
+    const compSnap = await db.collection('quality_components').limit(10).get(); // Limit to a reasonable number
+    const indicatorsData = await db.collection('indicators').get(); // Get all indicators to map to components
+
+    const indToComp = new Map(); // Map indicator_id to quality_name
+    indicatorsData.docs.forEach(doc => {
+      const data = doc.data();
+      // Use doc.id as the primary key for indicators
+      if (data.quality_name) {
+        indToComp.set(doc.id, data.quality_name);
+      }
+    });
+
+    const componentsMap = new Map(); // quality_name -> { sum: totalScore, count: numberOfScores }
+    commSnap.docs.forEach(doc => {
+      const data = doc.data();
+      // Ensure indicator_id exists and is a string/number that can be used as a key
+      const indicatorId = data.indicator_id;
+      const qName = indToComp.get(indicatorId); // Get component name using indicator_id
+      const score = parseFloat(data.committee_score);
+
+      if (qName && !isNaN(score) && score > 0) {
+        if (!componentsMap.has(qName)) {
+          componentsMap.set(qName, { sum: 0, count: 0 });
+        }
+        const entry = componentsMap.get(qName);
+        entry.sum += score;
+        entry.count++;
+      }
+    });
+
+    // Calculate average score for each component and sort
+    let topComponents = Array.from(componentsMap.entries())
+      .map(([name, stats]) => ({
+        name,
+        // Assuming max score is 5 for progress calculation
+        progress: Math.round((stats.sum / (stats.count * 5)) * 100)
+      }))
+      .sort((a, b) => b.progress - a.progress) // Sort by progress descending
+      .slice(0, 3); // Take top 3
+
+    // Fallback if not enough data-mapped components or no evaluations
+    if (topComponents.length < 3) {
+      const usedNames = new Set(topComponents.map(c => c.name));
+      compSnap.docs.forEach(doc => {
+        const name = doc.data().quality_name;
+        if (name && !usedNames.has(name) && topComponents.length < 3) {
+          topComponents.push({ name, progress: 0 }); // Add with 0% progress
+          usedNames.add(name);
+        }
+      });
+    }
+
+    res.json({
+      userCount: userSnap.data().count,
+      indicatorCount: indicatorSnap.data().count,
+      averageScore: avgScore,
+      topComponents
+    });
+  } catch (error) {
+    console.error('Error fetching public stats:', error);
+    res.status(500).json({ error: 'Failed to fetch public statistics', details: error.message });
   }
 });
 
